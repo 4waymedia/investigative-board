@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Speech Bubble in Canvas</title>
+    <style>
+      canvas {
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="800" height="600"></canvas>
+    <script>
+      const canvas = document.getElementById("myCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Bubble object
+      let bubble = {
+        x: 200,
+        y: 150,
+        width: 300,
+        height: 150,
+        radiusX: 150, // For ellipse (width/2)
+        radiusY: 75, // For ellipse (height/2)
+        text: "Hello! This is an interactive speech bubble.",
+        tailAngle: 45, // Degrees
+        tailLength: 50,
+        tailWidth: 15, // Half-width
+        colors: {
+          background: "#ffffff",
+          stroke: "#000000",
+          shadow: "rgba(0,0,0,0.3)",
+          text: "#333333",
+        },
+      };
+
+      // State for dragging
+      let isDraggingBubble = false;
+      let isDraggingTail = false;
+      let prevMouseX = 0;
+      let prevMouseY = 0;
+
+      /**
+       * Draws the speech bubble.
+       * @param {CanvasRenderingContext2D} ctx - Context.
+       * @param {Object} bub - Bubble object.
+       * @returns {Object} Tail end point {x, y}.
+       */
+      function drawSpeechBubble(ctx, bub) {
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const rad = (bub.tailAngle * Math.PI) / 180;
+
+        // Calculate attachment point on ellipse perimeter
+        let attachX = cx + bub.radiusX * Math.cos(rad);
+        let attachY = cy + bub.radiusY * Math.sin(rad);
+
+        // Tail end point
+        const tailEndX = attachX + Math.cos(rad) * bub.tailLength;
+        const tailEndY = attachY + Math.sin(rad) * bub.tailLength;
+
+        // For tail base: approximate two points on the perimeter near the attachment angle
+        // Use small angular offset for base points
+        const deltaAngle = Math.asin(bub.tailWidth / bub.tailLength); // Approximate delta for chord ~2*tailWidth, but simplified
+        const rad1 = rad - deltaAngle;
+        const rad2 = rad + deltaAngle;
+        const base1X = cx + bub.radiusX * Math.cos(rad1);
+        const base1Y = cy + bub.radiusY * Math.sin(rad1);
+        const base2X = cx + bub.radiusX * Math.cos(rad2);
+        const base2Y = cy + bub.radiusY * Math.sin(rad2);
+
+        ctx.save();
+
+        // Shadow
+        if (bub.colors.shadow) {
+          ctx.shadowColor = bub.colors.shadow;
+          ctx.shadowBlur = 5;
+          ctx.shadowOffsetX = 2;
+          ctx.shadowOffsetY = 2;
+        }
+
+        // Draw the bubble as an ellipse (egg-like symmetric for now)
+        // To make "egg-shaped with one side taller", we adjust radiusY dynamically or use Bezier for asymmetry
+        // Here, we make it slightly asymmetric by scaling control, but ellipse is base.
+        // For true egg, use Bezier below.
+
+        // Use Bezier for egg shape: pointed at top, round at bottom
+        ctx.beginPath();
+        const k = 0.5522848;
+        const ox = (bub.width / 2) * k;
+        const oyTop = (bub.height / 3) * k; // Smaller top for pointed
+        const oyBottom = ((bub.height * 2) / 3) * k; // Larger bottom for round
+        const xm = bub.x + bub.width / 2;
+        const ym = bub.y + bub.height / 2;
+        const xe = bub.x + bub.width;
+        const ye = bub.y + bub.height;
+
+        ctx.moveTo(bub.x, ym);
+        ctx.bezierCurveTo(bub.x, ym - oyTop, xm - ox / 2, bub.y, xm, bub.y); // Left top, pointed
+        ctx.bezierCurveTo(xm + ox / 2, bub.y, xe, ym - oyTop, xe, ym); // Right top
+        ctx.bezierCurveTo(xe, ym + oyBottom, xm + ox, ye, xm, ye); // Right bottom, rounder
+        ctx.bezierCurveTo(xm - ox, ye, bub.x, ym + oyBottom, bub.x, ym); // Left bottom
+        ctx.closePath();
+
+        ctx.fillStyle = bub.colors.background || "#fff";
+        ctx.fill();
+        ctx.strokeStyle = bub.colors.stroke || "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw the tail triangle using base points on approx perimeter
+        ctx.beginPath();
+        ctx.moveTo(base1X, base1Y);
+        ctx.lineTo(tailEndX, tailEndY);
+        ctx.lineTo(base2X, base2Y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Text
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = bub.colors.text || "#000";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(bub.text, cx, cy);
+
+        ctx.restore();
+
+        return { x: tailEndX, y: tailEndY };
+      }
+
+      // Redraw function
+      function redraw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawSpeechBubble(ctx, bubble);
+      }
+
+      // Check if point is inside bubble (approx using ellipse for hit test)
+      function isPointInBubble(mx, my, bub) {
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const dx = (mx - cx) / (bub.width / 2);
+        const dy = (my - cy) / (bub.height / 2);
+        return dx * dx + dy * dy <= 1;
+      }
+
+      // Check if near tail tip
+      function isNearTailTip(mx, my, bub) {
+        const rad = (bub.tailAngle * Math.PI) / 180;
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const attachX = cx + (bub.width / 2) * Math.cos(rad);
+        const attachY = cy + (bub.height / 2) * Math.sin(rad);
+        const tailEndX = attachX + Math.cos(rad) * bub.tailLength;
+        const tailEndY = attachY + Math.sin(rad) * bub.tailLength;
+        const dx = mx - tailEndX;
+        const dy = my - tailEndY;
+        return Math.sqrt(dx * dx + dy * dy) < 15; // Click radius
+      }
+
+      // Event listeners
+      canvas.addEventListener("mousedown", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        prevMouseX = e.clientX - rect.left;
+        prevMouseY = e.clientY - rect.top;
+
+        if (isPointInBubble(prevMouseX, prevMouseY, bubble)) {
+          isDraggingBubble = true;
+        } else if (isNearTailTip(prevMouseX, prevMouseY, bubble)) {
+          isDraggingTail = true;
+        }
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
+        if (!isDraggingBubble && !isDraggingTail) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dx = mx - prevMouseX;
+        const dy = my - prevMouseY;
+
+        if (isDraggingBubble) {
+          bubble.x += dx;
+          bubble.y += dy;
+        } else if (isDraggingTail) {
+          // Update tail end, then compute new angle and length from center
+          const cx = bubble.x + bubble.width / 2;
+          const cy = bubble.y + bubble.height / 2;
+          const currentTailEnd = getTailEnd(bubble);
+          const newTailEndX = currentTailEnd.x + dx;
+          const newTailEndY = currentTailEnd.y + dy;
+          const tailDx = newTailEndX - cx;
+          const tailDy = newTailEndY - cy;
+          bubble.tailAngle = (Math.atan2(tailDy, tailDx) * 180) / Math.PI;
+          bubble.tailLength = Math.sqrt(tailDx * tailDx + tailDy * tailDy);
+        }
+
+        prevMouseX = mx;
+        prevMouseY = my;
+        redraw();
+      });
+
+      canvas.addEventListener("mouseup", () => {
+        isDraggingBubble = false;
+        isDraggingTail = false;
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        isDraggingBubble = false;
+        isDraggingTail = false;
+      });
+
+      // Helper to get current tail end
+      function getTailEnd(bub) {
+        const rad = (bub.tailAngle * Math.PI) / 180;
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const attachX = cx + (bub.width / 2) * Math.cos(rad);
+        const attachY = cy + (bub.height / 2) * Math.sin(rad);
+        return {
+          x: attachX + Math.cos(rad) * bub.tailLength,
+          y: attachY + Math.sin(rad) * bub.tailLength,
+        };
+      }
+
+      // Initial draw
+      redraw();
+    </script>
+  </body>
+</html>

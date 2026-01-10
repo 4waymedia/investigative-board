@@ -530,6 +530,65 @@ function drawTitleText(content, textEl, bounds, padding) {
 }
 
 // ============================================================================
+// COLOR UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Lighten a hex color by a percentage
+ * @param {string} hex - Hex color string (e.g., "#ff0000")
+ * @param {number} percent - Percentage to lighten (0-100)
+ * @returns {string} Lightened hex color
+ */
+function lightenColor(hex, percent) {
+  const num = parseInt(hex.slice(1), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = (num >> 16) + amt;
+  const G = ((num >> 8) & 0x00ff) + amt;
+  const B = (num & 0x0000ff) + amt;
+  return (
+    "#" +
+    (
+      0x1000000 +
+      (R < 255 ? R : 255) * 0x10000 +
+      (G < 255 ? G : 255) * 0x100 +
+      (B < 255 ? B : 255)
+    )
+      .toString(16)
+      .slice(1)
+  );
+}
+
+/**
+ * Darken a hex color by a percentage
+ * @param {string} hex - Hex color string (e.g., "#ff0000")
+ * @param {number} percent - Percentage to darken (0-100)
+ * @returns {string} Darkened hex color
+ */
+function darkenColor(hex, percent) {
+  const num = parseInt(hex.slice(1), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.max(0, Math.min(255, (num >> 16) - amt));
+  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) - amt));
+  const B = Math.max(0, Math.min(255, (num & 0x0000ff) - amt));
+  return (
+    "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)
+  );
+}
+
+/**
+ * Generate light, contrast, and dark variants of a color
+ * @param {string} hex - Base hex color
+ * @returns {Object} Object with light, contrast, and dark variants
+ */
+function generateColorVariants(hex) {
+  return {
+    light: lightenColor(hex, 40), // Light variant (40% lighter)
+    contrast: hex, // Original color as contrast/medium
+    dark: darkenColor(hex, 30), // Dark variant (30% darker)
+  };
+}
+
+// ============================================================================
 // TEXT RENDERING MANAGEMENT
 // ============================================================================
 
@@ -638,3 +697,331 @@ function getTextBounds(type, textWidth, textHeight, padding, textEl) {
   }
   return { x: -w / 2, y: -h / 2, w: w, h: h };
 }
+    function draw(now) {
+        if (now == null) now = performance.now();
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Timeline
+        if (timelineActive && timelineLeft !== null && timelineRight !== null) {
+            const leftScr = worldToScreen(timelineLeft, timelineY);
+            const rightScr = worldToScreen(timelineRight, timelineY);
+
+            ctx.strokeStyle = '#ffffff88';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(leftScr.x, leftScr.y);
+            ctx.lineTo(rightScr.x, rightScr.y);
+            ctx.stroke();
+
+            timelinePins.forEach(tp => {
+                const baseScr = worldToScreen(tp.pin.x, timelineY);
+                const pinScr = worldToScreen(tp.pin.x, tp.pin.y);
+
+                ctx.strokeStyle = '#ffffff44';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(baseScr.x, baseScr.y);
+                ctx.lineTo(pinScr.x, pinScr.y);
+                ctx.stroke();
+
+                ctx.font = '12px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#ffffff88';
+                const above = pinScr.y < baseScr.y;
+                ctx.fillText(tp.dateStr, pinScr.x, baseScr.y + (above ? -10 : 25));
+            });
+        }
+
+        // Connections (snap + wiggle)
+        const nowTs = now;
+        connections.forEach(c => {
+            drawConnection(c, nowTs);
+        });
+
+        // Temporary connection line (when creating connections)
+        if (connectStartIndex !== null) {
+            const startPin = pins[connectStartIndex];
+            if (startPin) {
+                const startScr = worldToScreen(startPin.x, startPin.y);
+                ctx.strokeStyle = '#ffffff88';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(startScr.x, startScr.y);
+                ctx.lineTo(mouseScreenX, mouseScreenY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        // Area creation preview (when dragging to create area)
+        if (isDraggingArea && areaDragStart && areaDragCurrent) {
+            const startScr = worldToScreen(areaDragStart.x, areaDragStart.y);
+            const currentScr = worldToScreen(areaDragCurrent.x, areaDragCurrent.y);
+
+            const width = Math.abs(currentScr.x - startScr.x);
+            const height = Math.abs(currentScr.y - startScr.y);
+            const x = Math.min(startScr.x, currentScr.x);
+            const y = Math.min(startScr.y, currentScr.y);
+
+            ctx.strokeStyle = selectedColor;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(x, y, width, height);
+            ctx.setLineDash([]);
+        }
+
+        // Marquee selection rectangle (when dragging to select multiple pins)
+        if (marqueeStart && marqueeEnd) {
+            ctx.beginPath();
+            const startScreen = worldToScreen(marqueeStart.x, marqueeStart.y);
+            const endScreen = worldToScreen(marqueeEnd.x, marqueeEnd.y);
+
+            const x = startScreen.x;
+            const y = startScreen.y;
+            const w = endScreen.x - startScreen.x;
+            const h = endScreen.y - startScreen.y;
+
+            ctx.rect(x, y, w, h);
+            ctx.fillStyle = "rgba(255, 153, 0, 0.1)";
+            ctx.fill();
+            ctx.strokeStyle = "#f90";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash state
+        }
+
+        // Draw timeline (if active)
+        if (timelineActive && timelineLeft !== null && timelineRight !== null) {
+            const leftScr = worldToScreen(timelineLeft, timelineY);
+            const rightScr = worldToScreen(timelineRight, timelineY);
+
+            // Draw timeline line
+            ctx.strokeStyle = '#666666';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(leftScr.x, leftScr.y);
+            ctx.lineTo(rightScr.x, rightScr.y);
+            ctx.stroke();
+
+            // Draw timeline pins with connecting lines
+            timelinePins.forEach(tp => {
+                const baseScr = worldToScreen(tp.pin.x, timelineY);
+                const pinScr = worldToScreen(tp.pin.x, tp.pin.y);
+
+                // Line from timeline to pin
+                ctx.strokeStyle = '#999999';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(baseScr.x, baseScr.y);
+                ctx.lineTo(pinScr.x, pinScr.y);
+                ctx.stroke();
+
+                // Date label on timeline
+                ctx.fillStyle = '#333333';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(tp.dateStr, baseScr.x, baseScr.y + 20);
+            });
+        }
+
+        // Pins
+        pins.forEach((pin, i) => {
+		    const scr = worldToScreen(pin.x, pin.y);
+		    const m = getPinMetrics(i);
+		
+		    if (m.shape === 'card') {
+		        const w = m.width;
+		        const h = m.height;
+		        const x = scr.x - w / 2;
+		        const y = scr.y - h / 2;
+		
+		        // Shadow
+		        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+		        roundRectPath(ctx, x + 3, y + 3, w, h, 6);
+		        ctx.fill();
+		
+		        // Main card
+		        ctx.fillStyle = pin.color;
+		        roundRectPath(ctx, x, y, w, h, 6);
+		        ctx.fill();
+		
+		        // Scribble lines
+		        const innerX = x + 0.15 * w;
+		        const innerW = w - 0.3 * w;
+		        ctx.lineWidth = 2;
+		        ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+		        for (let row = 0; row < 3; row++) {
+		            const ly = y + 0.25 * h + row * (h * 0.22);
+		            ctx.beginPath();
+		            ctx.moveTo(innerX, ly);
+		            ctx.lineTo(innerX + innerW, ly);
+		            ctx.stroke();
+		        }
+		
+		        // Selection ring
+		        if (i === selectedPinIndex) {
+		            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+		            ctx.lineWidth = 2;
+		            roundRectPath(ctx, x - 3, y - 3, w + 6, h + 6, 8);
+		            ctx.stroke();
+		        }
+		
+		        // Label
+		        if (pin.label) {
+		            ctx.font = 'bold 15px system-ui';
+		            ctx.textAlign = 'center';
+		            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+		            ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 21);
+		            ctx.fillStyle = 'white';
+		            ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 19);
+		        }
+		    } else {
+		        const r = m.radius;
+		
+		        // Shadow
+		        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+		        ctx.beginPath();
+		        ctx.arc(scr.x + 3, scr.y + 3, r, 0, Math.PI * 2);
+		        ctx.fill();
+		
+		        // Main pin
+		        ctx.fillStyle = pin.color;
+		        ctx.beginPath();
+		        ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
+		        ctx.fill();
+		
+		        // Highlight dot
+		        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+		        ctx.beginPath();
+		        ctx.arc(scr.x - 2, scr.y - 2, Math.max(4, r * 0.45), 0, Math.PI * 2);
+		        ctx.fill();
+		
+		        // Selection ring
+		        if (i === selectedPinIndex) {
+		            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+		            ctx.lineWidth = 2;
+		            ctx.beginPath();
+		            ctx.arc(scr.x, scr.y, r + 4, 0, Math.PI * 2);
+		            ctx.stroke();
+		        }
+		
+		        // Label
+		        if (pin.label) {
+		            ctx.font = 'bold 15px system-ui';
+		            ctx.textAlign = 'center';
+		            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+		            ctx.fillText(pin.label, scr.x, scr.y + r + 23);
+		            ctx.fillStyle = 'white';
+		            ctx.fillText(pin.label, scr.x, scr.y + r + 21);
+		        }
+		    }
+		});
+
+
+        // Temporary string from last pin to mouse (wobbly)
+        if (tempStartIndex !== null) {
+            const start = pins[tempStartIndex];
+            const startScr = worldToScreen(start.x, start.y);
+            const bright = lightenColor(start.color, 40);
+            drawLine(startScr.x, startScr.y, mouseScreenX, mouseScreenY, bright, true);
+
+            ctx.fillStyle = bright;
+            ctx.beginPath();
+            ctx.arc(mouseScreenX, mouseScreenY, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.beginPath();
+            ctx.arc(mouseScreenX - 2, mouseScreenY - 2, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // ============================================================================
+    // CONNECTION ANIMATION CONSTANTS
+    // ============================================================================
+
+    const SNAP_DURATION_MS = 220;        // snap-to target
+    const WIGGLE_DURATION_MS = 420;      // damped wiggle tail
+    const WIGGLE_FREQ = 12;              // wiggles per second
+    const WIGGLE_DECAY = 3.0;            // higher = quicker decay
+    const WIGGLE_AMPLITUDE = 12;         // px max initial bend
+
+    // ============================================================================
+    // CONNECTION ANIMATION HELPERS
+    // ============================================================================
+
+    const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+
+    function easeOutBack(x) {
+        const c1 = 1.70158, c3 = c1 + 1;
+        return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+    }
+
+    function lerpPoint(a, b, t) {
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+
+    function perpUnit(a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        return { x: -dy / len, y: dx / len };
+    }
+
+    // ============================================================================
+    // CONNECTION RENDERING
+    // ============================================================================
+
+    // Permanent connection with snap + wiggle
+    function drawConnection(c, now) {
+        const a = pins[c.startIndex];
+        const b = pins[c.endIndex];
+        if (!a || !b) return;
+
+        const sa = worldToScreen(a.x, a.y);
+        const sb = worldToScreen(b.x, b.y);
+
+        // SNAP endpoint along AB with overshoot
+        let end = { x: sb.x, y: sb.y };
+        if (typeof c.animStart === 'number') {
+            const tSnap = clamp((now - c.animStart) / SNAP_DURATION_MS, 0, 1);
+            const s = easeOutBack(tSnap);
+            end = lerpPoint(sa, sb, s);
+        }
+
+        // WIGGLE as a curved midpoint
+        let useCurve = false;
+        let ctrl = null;
+        if (typeof c.animStart === 'number' && now < c.animWiggleEnd) {
+            const tSec = (now - c.animStart) / 1000;
+            const decay = Math.exp(-WIGGLE_DECAY * tSec);
+            const amp = WIGGLE_AMPLITUDE * decay * Math.sin(2 * Math.PI * WIGGLE_FREQ * tSec);
+
+            const mid = lerpPoint(sa, end, 0.5);
+            const n = perpUnit(sa, end);
+
+            ctrl = { x: mid.x + n.x * amp, y: mid.y + n.y * amp };
+            useCurve = Math.abs(amp) > 0.3;
+        }
+
+        ctx.strokeStyle = b.color || '#ffffffaa';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sa.x, sa.y);
+        if (useCurve && ctrl) {
+            ctx.quadraticCurveTo(ctrl.x, ctrl.y, end.x, end.y);
+        } else {
+            ctx.lineTo(end.x, end.y);
+        }
+        ctx.stroke();
+
+        // Clean up animation when done
+        if (typeof c.animStart === 'number' && now >= c.animWiggleEnd) {
+            delete c.animStart;
+            delete c.animSnapEnd;
+            delete c.animWiggleEnd;
+        }
+    }

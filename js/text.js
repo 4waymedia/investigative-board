@@ -196,6 +196,31 @@ function renderTextColorPickers() {
 // ============================================================================
 
 /**
+ * Create a text element with specific size at the given position
+ * @param {number} centerX - Center X coordinate
+ * @param {number} centerY - Center Y coordinate
+ * @param {number} width - Bubble width
+ * @param {number} height - Bubble height
+ */
+function createTextWithSize(centerX, centerY, width, height) {
+  const newText = {
+    x: centerX,
+    y: centerY,
+    content: "Double click to Change",
+    type: getCurrentTextType(),
+    bubbleColor: "#ffffff",
+    textColor: getSelectedColor(),
+    shadowColor: "rgba(0,0,0,0.3)",
+    bubbleWidth: width,
+    bubbleHeight: height,
+  };
+
+  textElements.push(newText);
+  saveState();
+  draw();
+}
+
+/**
  * Sets up text modal event handlers
  */
 function setupTextModalHandlers() {

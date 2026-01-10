@@ -20,6 +20,7 @@ canvas {
   display: block;
   cursor: crosshair;
   background: transparent; /* Canvas is transparent, background is on container */
+  pointer-events: auto;
 }
 #menu {
   position: fixed;
