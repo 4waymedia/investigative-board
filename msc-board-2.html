@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Investigative Board</title>
+    <style>
+      /* --- STYLES (UNCHANGED) --- */
+      body {
+        margin: 0;
+        background: #0d1117;
+        font-family: system-ui, sans-serif;
+        color: #e6edf3;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        cursor: crosshair;
+      }
+      #menu {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: rgba(20, 20, 30, 0.97);
+        backdrop-filter: blur(12px);
+        padding: 10px 20px;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        z-index: 100;
+        border-bottom: 1px solid #333;
+      }
+
+      #toolset {
+        display: flex;
+        gap: 8px;
+        margin-right: 16px;
+      }
+      .tool-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 13px;
+        background: #151821;
+        border: 1px solid #30363d;
+        cursor: pointer;
+        opacity: 0.9;
+        transition: all 0.15s;
+        user-select: none;
+        white-space: nowrap;
+      }
+      .tool-btn span.icon {
+        font-size: 16px;
+      }
+      .tool-btn:hover {
+        background: #1f2430;
+        opacity: 1;
+      }
+      .tool-btn.active {
+        background: #2383e0;
+        border-color: #46a1ff;
+        color: white;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+      }
+
+      .type-bar {
+        display: flex;
+        gap: 10px;
+        margin-right: 20px;
+      }
+      .type-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+      .type-option {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        background: #151821;
+        border: 1px solid #30363d;
+        cursor: pointer;
+        opacity: 0.9;
+        transition: all 0.15s;
+        user-select: none;
+        white-space: nowrap;
+      }
+      .type-option-icon {
+        font-size: 16px;
+      }
+      .type-option .label {
+        font-size: 13px;
+      }
+      .type-option:hover {
+        background: #1f2430;
+        opacity: 1;
+      }
+      .type-option.active {
+        background: #2383e0;
+        border-color: #46a1ff;
+        color: #fff;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+      }
+      .type-caret {
+        border: none;
+        background: transparent;
+        color: #aaa;
+        font-size: 11px;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+      .type-caret:hover {
+        color: #fff;
+        transform: translateY(1px);
+      }
+
+      .type-menu {
+        position: fixed;
+        min-width: 190px;
+        background: #161b22;
+        border-radius: 10px;
+        border: 1px solid #30363d;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+        padding: 6px 4px;
+        z-index: 1000;
+      }
+      .type-menu-item {
+        width: 100%;
+        padding: 5px 10px;
+        border: none;
+        background: transparent;
+        color: #e6edf3;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        border-radius: 8px;
+      }
+      .type-menu-item .icon {
+        font-size: 14px;
+      }
+      .type-menu-item:hover {
+        background: #1f2430;
+      }
+      .type-menu-item.active {
+        background: #2383e0;
+      }
+
+      .color-option {
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.15s;
+        position: relative;
+      }
+      .color-option:hover {
+        transform: scale(1.15);
+      }
+      .color-option.active {
+        transform: scale(1.3);
+      }
+      .label {
+        font-size: 12px;
+        margin-bottom: 6px;
+        opacity: 0.9;
+      }
+      .swatch {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 3px solid #444;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      }
+      .add-btn {
+        width: 38px;
+        height: 38px;
+        background: #333;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 30px;
+        color: #aaa;
+        border: 3px solid #444;
+      }
+
+      #pin-info {
+        position: fixed;
+        left: 20px;
+        bottom: 210px;
+        width: 320px;
+        max-width: 40vw;
+        background: #161b22;
+        border-radius: 14px;
+        border: 1px solid #30363d;
+        padding: 14px 16px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        z-index: 150;
+        display: none;
+        box-sizing: border-box;
+      }
+      #pin-info-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+      #pin-info-title {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      #pin-info-sub {
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      #pin-info-note {
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+        opacity: 0.9;
+        white-space: pre-wrap;
+      }
+      .pin-color-pill {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        border: 1px solid #555;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+      }
+      .pin-info-meta {
+        font-size: 11px;
+        opacity: 0.7;
+        margin-top: 4px;
+      }
+
+      #tray {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 200px;
+        background: rgba(13, 17, 23, 0.98);
+        border-top: 1px solid #333;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        padding: 20px 80px 20px 20px;
+        box-sizing: border-box;
+        z-index: 90;
+      }
+      #card-list {
+        display: inline-flex;
+        gap: 18px;
+      }
+      .card {
+        width: 180px;
+        height: 160px;
+        text-wrap: auto;
+        background: #161b22;
+        border-radius: 16px;
+        border-left: 6px solid #58a6ff;
+        padding: 16px;
+        box-sizing: border-box;
+        position: relative;
+        cursor: grab;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        transition: all 0.2s;
+        user-select: none;
+      }
+      .card.used {
+        opacity: 0.5;
+        transform: scale(0.95);
+      }
+      .card.used::after {
+        content: "✓";
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        font-size: 20px;
+        color: #56d364;
+      }
+      .card:active {
+        cursor: grabbing;
+        transform: scale(0.97);
+      }
+      .card-icon {
+        position: absolute;
+        top: 6px;
+        right: 10px;
+        font-size: 24px;
+        opacity: 0.7;
+      }
+      .card-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 8px 0 4px;
+      }
+      .card-subtitle {
+        font-size: 14px;
+        opacity: 0.8;
+        line-height: 1.4;
+      }
+      .card-date {
+        position: absolute;
+        bottom: 12px;
+        right: 16px;
+        font-size: 12px;
+        opacity: 0.7;
+      }
+
+      #controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        z-index: 200;
+      }
+      .ctrl-btn {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #2383e0;
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 24px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .ctrl-btn:hover {
+        transform: scale(1.1);
+        background: #3694f0;
+      }
+      .ctrl-btn.magic {
+        background: #d299ff;
+      }
+      .ctrl-btn.magic:hover {
+        background: #e0b0ff;
+      }
+      .ctrl-btn.magic.active {
+        background: #ff6ec4;
+      } /* NEW: Active state for simulation */
+      .ctrl-btn.radial {
+        background: #ff6ec4;
+      }
+      .ctrl-btn.radial:hover {
+        background: #ff8ade;
+      }
+      .ctrl-btn.clusters {
+        background: #82d9ff;
+      }
+      .ctrl-btn.clusters:hover {
+        background: #a0e4ff;
+      }
+      .ctrl-btn.timeline {
+        background: #ffcc00;
+      }
+      .ctrl-btn.timeline:hover {
+        background: #ffd633;
+      }
+
+      #pin-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(6px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 999;
+      }
+      #pin-modal {
+        width: 360px;
+        max-width: 90vw;
+        background: #161b22;
+        border-radius: 16px;
+        border: 1px solid #30363d;
+        padding: 18px 18px 14px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
+        box-sizing: border-box;
+      }
+      #pin-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      #pin-modal-title {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      #pin-modal-close {
+        cursor: pointer;
+        font-size: 18px;
+        opacity: 0.7;
+      }
+      #pin-modal-close:hover {
+        opacity: 1;
+      }
+      .modal-field {
+        margin-bottom: 10px;
+      }
+      .modal-label {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 4px;
+      }
+      .modal-input,
+      .modal-textarea {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        background: #0d1117;
+        color: #e6edf3;
+        font-size: 13px;
+        padding: 7px 9px;
+        box-sizing: border-box;
+        outline: none;
+      }
+      .modal-input:focus,
+      .modal-textarea:focus {
+        border-color: #58a6ff;
+        box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.4);
+      }
+      .modal-textarea {
+        min-height: 70px;
+        resize: vertical;
+      }
+      #pin-modal-footer {
+        margin-top: 6px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .btn {
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid #30363d;
+        background: #161b22;
+        color: #e6edf3;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .btn:hover {
+        background: #1f2430;
+      }
+      .btn.primary {
+        background: #2383e0;
+        border-color: #46a1ff;
+        color: white;
+      }
+      .btn.primary:hover {
+        background: #3694f0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="menu">
+      <div id="toolset"></div>
+    </div>
+
+    <canvas id="board"></canvas>
+
+    <div id="pin-info">
+      <div id="pin-info-header">
+        <div>
+          <div id="pin-info-title"></div>
+          <div id="pin-info-sub"></div>
+        </div>
+        <div class="pin-color-pill" id="pin-info-color"></div>
+      </div>
+      <div id="pin-info-note"></div>
+      <div class="pin-info-meta" id="pin-info-meta"></div>
+    </div>
+
+    <div id="pin-modal-backdrop">
+      <div id="pin-modal">
+        <div id="pin-modal-header">
+          <div id="pin-modal-title">Edit Pin</div>
+          <div id="pin-modal-close">✕</div>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Title</div>
+          <input
+            id="pm-title"
+            class="modal-input"
+            type="text"
+            placeholder="Pin title"
+          />
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Color (hex)</div>
+          <input
+            id="pm-color"
+            class="modal-input"
+            type="text"
+            placeholder="#58a6ff"
+          />
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Description / Notes</div>
+          <textarea
+            id="pm-description"
+            class="modal-textarea"
+            placeholder="What does this pin represent?"
+          ></textarea>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Date</div>
+          <input
+            id="pm-date"
+            class="modal-input"
+            type="text"
+            placeholder="e.g. 1958, Jul 1947, 1963-11-22"
+          />
+        </div>
+        <div id="pin-modal-footer">
+          <button class="btn" id="pm-cancel">Cancel</button>
+          <button class="btn primary" id="pm-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tray"><div id="card-list"></div></div>
+    <div id="controls">
+      <div class="ctrl-btn" id="reset" title="Reset board">↻</div>
+      <div class="ctrl-btn magic" id="magic" title="Toggle Force Layout">★</div>
+      <div class="ctrl-btn radial" id="radial" title="Radial Mind Map">🌸</div>
+      <div class="ctrl-btn clusters" id="clusters" title="Affinity Clusters">
+        ☁️
+      </div>
+      <div class="ctrl-btn timeline" id="timeline" title="Auto Timeline">
+        ⏳
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("board");
+      const ctx = canvas.getContext("2d");
+      const menu = document.getElementById("menu");
+      const toolset = document.getElementById("toolset");
+      const cardList = document.getElementById("card-list");
+
+      const pinInfo = document.getElementById("pin-info");
+      const pinInfoTitle = document.getElementById("pin-info-title");
+      const pinInfoSub = document.getElementById("pin-info-sub");
+      const pinInfoNote = document.getElementById("pin-info-note");
+      const pinInfoMeta = document.getElementById("pin-info-meta");
+      const pinInfoColor = document.getElementById("pin-info-color");
+
+      const pinModalBackdrop = document.getElementById("pin-modal-backdrop");
+      const pinModalClose = document.getElementById("pin-modal-close");
+      const pmTitle = document.getElementById("pm-title");
+      const pmColor = document.getElementById("pm-color");
+      const pmDescription = document.getElementById("pm-description");
+      const pmDate = document.getElementById("pm-date");
+      const pmCancel = document.getElementById("pm-cancel");
+      const pmSave = document.getElementById("pm-save");
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight - 200;
+
+      let scale = 1;
+      let offsetX = 0;
+      let offsetY = 0;
+      const MIN_SCALE = 0.25;
+      const MAX_SCALE = 3;
+
+      let history = [];
+      const MAX_HISTORY = 100;
+
+      let pins = [];
+      let connections = [];
+      let cards = [];
+      let tempStartIndex = null;
+      let connectStartIndex = null;
+      let selectedPinIndex = null;
+
+      let mouseScreenX = 0,
+        mouseScreenY = 0,
+        prevScreenX = 0,
+        prevScreenY = 0,
+        speed = 0;
+      let time = 0,
+        animId = null;
+      let didDrag = false;
+
+      let timelineActive = false;
+      let timelinePins = [];
+      let timelineY = 0;
+      let timelineLeft = 0;
+      let timelineRight = 0;
+
+      const NODE_TYPES = [
+        {
+          id: "pin:circle",
+          label: "Circle Pin",
+          icon: "●",
+          family: "pin",
+          variant: "circle",
+        },
+        {
+          id: "pin:square",
+          label: "Square Pin",
+          icon: "■",
+          family: "pin",
+          variant: "square",
+        },
+        {
+          id: "pin:pill",
+          label: "Pill Pin",
+          icon: "▭",
+          family: "pin",
+          variant: "pill",
+        },
+        {
+          id: "card:card",
+          label: "Note Card",
+          icon: "▤",
+          family: "card",
+          variant: "card",
+        },
+        {
+          id: "card:doc",
+          label: "Doc Card",
+          icon: "📄",
+          family: "card",
+          variant: "document",
+        },
+        {
+          id: "card:folder",
+          label: "Folder Card",
+          icon: "📁",
+          family: "card",
+          variant: "folder",
+        },
+      ];
+
+      function getNodeType(id) {
+        return NODE_TYPES.find((t) => t.id === id) || NODE_TYPES[0];
+      }
+
+      let selectedTypeByFamily = { pin: "pin:circle", card: "card:card" };
+      let currentFamily = "pin";
+      let currentTypeId = selectedTypeByFamily.pin;
+
+      const PIN_BASES = {
+        "pin:circle": { shape: "circle", baseRadius: 9 },
+        "pin:square": {
+          shape: "rect",
+          baseRadius: 9,
+          baseWidth: 22,
+          baseHeight: 22,
+        },
+        "pin:pill": {
+          shape: "pill",
+          baseRadius: 9,
+          baseWidth: 40,
+          baseHeight: 22,
+        },
+        "card:card": {
+          shape: "card",
+          baseRadius: 9,
+          baseWidth: 46,
+          baseHeight: 30,
+        },
+        "card:doc": {
+          shape: "card",
+          baseRadius: 9,
+          baseWidth: 32,
+          baseHeight: 46,
+        },
+        "card:folder": {
+          shape: "card",
+          baseRadius: 4,
+          baseWidth: 50,
+          baseHeight: 36,
+        },
+      };
+
+      function getConnectionCount(index) {
+        let count = 0;
+        for (const c of connections)
+          if (c.startIndex === index || c.endIndex === index) count++;
+        return count;
+      }
+
+      function getPinMetrics(index) {
+        const pin = pins[index];
+        const fam = pin.visualFamily || "pin";
+        const variant = pin.variant || "circle";
+        let typeId = `${fam}:${variant}`;
+        if (fam === "card") {
+          if (variant === "card") typeId = "card:card";
+          else if (variant === "document") typeId = "card:doc";
+          else if (variant === "folder") typeId = "card:folder";
+        }
+        const def = PIN_BASES[typeId] || PIN_BASES["pin:circle"];
+        const baseR = def.baseRadius || 9;
+        const n = getConnectionCount(index);
+        let extra = 0;
+        if (n >= 3) extra += 2;
+        if (n >= 6) extra += 2;
+        if (n >= 9) extra += 2;
+        if (n >= 12) extra += 2;
+        const radius = baseR + extra;
+        const factor = radius / baseR;
+        return {
+          shape: def.shape || "circle",
+          radius,
+          width: def.baseWidth ? def.baseWidth * factor : null,
+          height: def.baseHeight ? def.baseHeight * factor : null,
+        };
+      }
+
+      function worldToScreen(x, y) {
+        return { x: x * scale + offsetX, y: y * scale + offsetY };
+      }
+      function screenToWorld(sx, sy) {
+        return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
+      }
+
+      function saveHistory() {
+        // Stop simulation before saving a snapshot
+        if (isLayoutSimulating) toggleForceLayout();
+
+        const snapshot = {
+          pins: JSON.parse(JSON.stringify(pins)),
+          connections: JSON.parse(JSON.stringify(connections)),
+          cards: JSON.parse(JSON.stringify(cards)),
+          tempStartIndex,
+          connectStartIndex,
+          selectedPinIndex,
+          timelineActive,
+          timelinePins: JSON.parse(JSON.stringify(timelinePins)),
+          timelineY,
+          timelineLeft,
+          timelineRight,
+          scale,
+          offsetX,
+          offsetY,
+        };
+        history.push(snapshot);
+        if (history.length > MAX_HISTORY) history.shift();
+      }
+
+      function undo() {
+        if (!history.length) return;
+        // Stop simulation when restoring state
+        if (isLayoutSimulating) toggleForceLayout();
+
+        const snapshot = history.pop();
+        pins = snapshot.pins;
+        connections = snapshot.connections;
+        cards = snapshot.cards;
+        tempStartIndex = snapshot.tempStartIndex;
+        connectStartIndex = snapshot.connectStartIndex;
+        selectedPinIndex = snapshot.selectedPinIndex;
+        timelineActive = snapshot.timelineActive;
+        timelinePins = snapshot.timelinePins;
+        timelineY = snapshot.timelineY;
+        timelineLeft = snapshot.timelineLeft;
+        timelineRight = snapshot.timelineRight;
+        scale = snapshot.scale;
+        offsetX = snapshot.offsetX;
+        offsetY = snapshot.offsetY;
+        renderCards();
+        renderSelectedPinInfo();
+        draw();
+      }
+
+      // ===========================================
+      // === NEW: Web Worker Initialization & Logic ===
+      // ===========================================
+
+      // Check if the browser supports Web Workers
+      if (window.Worker) {
+        var layoutWorker = new Worker("layoutWorker.js");
+        var isLayoutSimulating = false;
+      } else {
+        // Fallback for browsers that don't support workers (will be synchronous/janky)
+        var layoutWorker = null;
+        var isLayoutSimulating = false;
+        console.warn(
+          "Web Workers not supported. Force layout will run synchronously on the main thread and may cause jank."
+        );
+      }
+
+      // Process messages coming back from the worker
+      if (layoutWorker) {
+        layoutWorker.onmessage = (e) => {
+          if (e.data.command === "LAYOUT_UPDATE") {
+            const positions = e.data.positions;
+
+            // Apply the new calculated positions to the pins array
+            positions.forEach((pos) => {
+              // Safety check to ensure pin exists
+              if (pins[pos.index]) {
+                pins[pos.index].x = pos.x;
+                pins[pos.index].y = pos.y;
+                // Also update worker state (vx, vy, fx, fy) if present
+                if (pos.vx !== undefined) pins[pos.index].vx = pos.vx;
+                if (pos.vy !== undefined) pins[pos.index].vy = pos.vy;
+                if (pos.fx !== undefined) pins[pos.index].fx = pos.fx;
+                if (pos.fy !== undefined) pins[pos.index].fy = pos.fy;
+              }
+            });
+
+            // If still simulating, trigger the next iteration
+            if (isLayoutSimulating) {
+              // Use a simple timer to control the update rate (e.g., every 50ms)
+              setTimeout(triggerForceLayout, 50);
+            }
+
+            // Redraw the canvas with the new, smooth positions
+            draw();
+          }
+        };
+      }
+
+      function triggerForceLayout() {
+        if (!isLayoutSimulating || !layoutWorker) return;
+
+        // Ensure pins have simulation properties before sending
+        pins.forEach((p) => {
+          p.vx = p.vx || 0;
+          p.vy = p.vy || 0;
+          p.fx = p.fx || 0;
+          p.fy = p.fy || 0;
+        });
+
+        // Send a copy of the current state to the worker
+        layoutWorker.postMessage({
+          command: "START_FORCE_LAYOUT",
+          pins: JSON.parse(JSON.stringify(pins)),
+          connections: connections,
+        });
+      }
+
+      function toggleForceLayout() {
+        if (pins.length === 0) return;
+
+        isLayoutSimulating = !isLayoutSimulating;
+
+        if (isLayoutSimulating) {
+          saveHistory(); // Snapshot before starting
+          document.getElementById("magic").classList.add("active");
+
+          // Initialize forces and velocities on pins before first run
+          pins.forEach((p) => {
+            p.vx = p.vy = p.fx = p.fy = 0;
+          });
+          // Start the worker loop
+          triggerForceLayout();
+        } else {
+          document.getElementById("magic").classList.remove("active");
+        }
+      }
+      // ===========================================
+      // === END: Web Worker Logic ===
+      // ===========================================
+
+      let currentTool = "pin";
+
+      function setTool(id) {
+        currentTool = id;
+        renderTools();
+      }
+
+      function renderTools() {
+        toolset.innerHTML = "";
+        const tools = [
+          { id: "pan", label: "Move", icon: "🖐" },
+          { id: "pin", label: "Pin", icon: "📍" },
+        ];
+        tools.forEach((t) => {
+          const btn = document.createElement("div");
+          btn.className = "tool-btn" + (currentTool === t.id ? " active" : "");
+          btn.innerHTML = `<span class="icon">${t.icon}</span><span>${t.label}</span>`;
+          btn.onclick = () => setTool(t.id);
+          toolset.appendChild(btn);
+        });
+      }
+
+      let typeMenuEl = null;
+
+      function closeTypeMenu() {
+        if (typeMenuEl) typeMenuEl.remove();
+        typeMenuEl = null;
+      }
+
+      function openTypeMenuForFamily(family, anchorEl) {
+        closeTypeMenu();
+        const rect = anchorEl.getBoundingClientRect();
+        const menuEl = document.createElement("div");
+        menuEl.className = "type-menu";
+
+        const currentId =
+          selectedTypeByFamily[family] ||
+          NODE_TYPES.find((t) => t.family === family).id;
+
+        NODE_TYPES.filter((t) => t.family === family).forEach((t) => {
+          const item = document.createElement("button");
+          item.className =
+            "type-menu-item" + (t.id === currentId ? " active" : "");
+          item.innerHTML = `<span class="icon">${t.icon}</span><span>${t.label}</span>`;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            selectedTypeByFamily[family] = t.id;
+            if (currentFamily === family) currentTypeId = t.id;
+            closeTypeMenu();
+            renderMenu();
+            draw();
+          };
+          menuEl.appendChild(item);
+        });
+
+        document.body.appendChild(menuEl);
+        menuEl.style.left = rect.left + "px";
+        menuEl.style.top = rect.bottom + 4 + "px";
+        typeMenuEl = menuEl;
+      }
+
+      function setCurrentFamily(family) {
+        currentFamily = family;
+        currentTypeId =
+          selectedTypeByFamily[family] ||
+          NODE_TYPES.find((t) => t.family === family).id;
+        renderMenu();
+        draw();
+      }
+
+      window.addEventListener("click", closeTypeMenu);
+
+      function renderTypeBar() {
+        const bar = document.createElement("div");
+        bar.className = "type-bar";
+
+        const families = [
+          { id: "pin", label: "Pin", iconDefault: "●" },
+          { id: "card", label: "Card", iconDefault: "▤" },
+        ];
+
+        families.forEach((f) => {
+          const group = document.createElement("div");
+          group.className = "type-group";
+
+          const activeType = getNodeType(
+            selectedTypeByFamily[f.id] ||
+              NODE_TYPES.find((t) => t.family === f.id).id
+          );
+
+          const option = document.createElement("div");
+          option.className =
+            "type-option" + (currentFamily === f.id ? " active" : "");
+          option.innerHTML = `<div class="type-option-icon">${
+            activeType.icon || f.iconDefault
+          }</div><div class="label">${f.label}</div>`;
+          option.onclick = (e) => {
+            e.stopPropagation();
+            setCurrentFamily(f.id);
+          };
+
+          const caret = document.createElement("button");
+          caret.className = "type-caret";
+          caret.textContent = "▾";
+          caret.onclick = (e) => {
+            e.stopPropagation();
+            openTypeMenuForFamily(f.id, caret);
+          };
+
+          group.appendChild(option);
+          group.appendChild(caret);
+          bar.appendChild(group);
+        });
+
+        return bar;
+      }
+
+      const defaultColors = [
+        { name: "Red", value: "#f85149" },
+        { name: "Blue", value: "#58a6ff" },
+        { name: "Green", value: "#3fb950" },
+        { name: "Yellow", value: "#f1c40f" },
+        { name: "Purple", value: "#a471f7" },
+      ];
+      let palette = [...defaultColors];
+      let selectedColor = palette[0].value;
+
+      function renderMenu() {
+        menu.innerHTML = "";
+        menu.appendChild(toolset);
+        renderTools();
+
+        menu.appendChild(renderTypeBar());
+
+        palette.forEach((col) => {
+          const el = document.createElement("div");
+          el.className =
+            "color-option" + (col.value === selectedColor ? " active" : "");
+          el.innerHTML = `<div class="label">${col.name}</div><div class="swatch" style="background:${col.value}"></div>`;
+          el.onclick = () => {
+            selectedColor = col.value;
+            renderMenu();
+            draw();
+          };
+          menu.appendChild(el);
+        });
+
+        const add = document.createElement("div");
+        add.className = "color-option";
+        add.innerHTML = `<div class="add-btn">+</div>`;
+        add.onclick = () => {
+          const hex = prompt("Hex color:", "#ff9500");
+          if (hex && /^#[0-9A-F]{6}$/i.test(hex)) {
+            const name = prompt("Name:", "Custom") || "Custom";
+            palette.push({ name, value: hex.toLowerCase() });
+            selectedColor = hex.toLowerCase();
+            renderMenu();
+          }
+        };
+        menu.appendChild(add);
+      }
+      renderMenu();
+
+      cards = [
+        {
+          id: 0,
+          title: "Project Orion",
+          subtitle: "Classified propulsion research 1958–1965",
+          date: "1958",
+          icon: "★",
+          color: "#f85149",
+          category: "event",
+          used: false,
+        },
+        {
+          id: 1,
+          title: "MKUltra",
+          subtitle: "CIA mind control program using LSD",
+          date: "1953–1973",
+          icon: "⚙️",
+          color: "#a471f7",
+          category: "program",
+          used: false,
+        },
+        {
+          id: 2,
+          title: "Roswell Incident",
+          subtitle: "Alleged UFO crash retrieval",
+          date: "Jul 1947",
+          icon: "🔔",
+          color: "#58a6ff",
+          category: "incident",
+          used: false,
+        },
+        {
+          id: 3,
+          title: "Operation Paperclip",
+          subtitle: "US recruitment of Nazi scientists",
+          date: "1945–1959",
+          icon: "✈️",
+          color: "#f1c40f",
+          category: "operation",
+          used: false,
+        },
+        {
+          id: 4,
+          title: "Area 51",
+          subtitle: "Highly classified USAF facility",
+          date: "1955–",
+          icon: "🔒",
+          color: "#3fb950",
+          category: "facility",
+          used: false,
+        },
+      ];
+      let nextId = 5;
+
+      function getConnectedComponent(startIdx) {
+        const visited = new Set();
+        const stack = [startIdx];
+        while (stack.length) {
+          const i = stack.pop();
+          if (visited.has(i)) continue;
+          visited.add(i);
+          for (const c of connections) {
+            if (c.startIndex === i && !visited.has(c.endIndex))
+              stack.push(c.endIndex);
+            if (c.endIndex === i && !visited.has(c.startIndex))
+              stack.push(c.startIndex);
+          }
+        }
+        return Array.from(visited);
+      }
+
+      function getTargetPins() {
+        if (selectedPinIndex !== null && pins[selectedPinIndex]) {
+          return getConnectedComponent(selectedPinIndex).map((i) => pins[i]);
+        }
+        return [...pins];
+      }
+
+      function setSelectedPin(index) {
+        selectedPinIndex = index;
+        renderSelectedPinInfo();
+        draw();
+      }
+
+      function renderSelectedPinInfo() {
+        if (selectedPinIndex === null || !pins[selectedPinIndex]) {
+          pinInfo.style.display = "none";
+          return;
+        }
+        const pin = pins[selectedPinIndex];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+        const title = pin.label || (card ? card.title : "Untitled Pin");
+        const subtitle = card
+          ? card.subtitle || ""
+          : pin.cardId == null
+          ? "Free pin (no source card)"
+          : "";
+        const note = pin.note || "";
+        const dateStr = pin.date || (card ? card.date : "");
+        const metaBits = [];
+        if (dateStr) metaBits.push(`Date: ${dateStr}`);
+        if (card) metaBits.push(`Source: ${card.category || "card"}`);
+        if (pin.cardId == null) metaBits.push("Detached from tray cards");
+
+        pinInfoTitle.textContent = title;
+        pinInfoSub.textContent = subtitle;
+        pinInfoNote.textContent =
+          note || "Double-click this pin to add a note.";
+        pinInfoMeta.textContent = metaBits.join(" • ");
+        pinInfoColor.style.background = pin.color || "#555";
+
+        pinInfo.style.display = "block";
+      }
+
+      let modalPinIndex = null;
+
+      function openPinModal(index) {
+        const pin = pins[index];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+        pmTitle.value = pin.label || (card ? card.title : "");
+        pmColor.value = pin.color || selectedColor;
+        pmDescription.value = pin.note || "";
+        pmDate.value = pin.date || (card ? card.date : "");
+
+        modalPinIndex = index;
+        pinModalBackdrop.style.display = "flex";
+        pmTitle.focus();
+        pmTitle.select();
+      }
+
+      function closePinModal() {
+        modalPinIndex = null;
+        pinModalBackdrop.style.display = "none";
+      }
+
+      pinModalClose.onclick = closePinModal;
+      pmCancel.onclick = closePinModal;
+      pinModalBackdrop.addEventListener("click", (e) => {
+        if (e.target === pinModalBackdrop) closePinModal();
+      });
+
+      pmSave.onclick = () => {
+        if (modalPinIndex === null) return;
+
+        saveHistory();
+
+        const pin = pins[modalPinIndex];
+
+        const title = pmTitle.value.trim();
+        const color = pmColor.value.trim();
+        const note = pmDescription.value.trim();
+        const date = pmDate.value.trim();
+
+        if (title) pin.label = title;
+        if (color && /^#[0-9A-F]{6}$/i.test(color)) pin.color = color;
+        pin.note = note;
+        pin.date = date || "";
+
+        setSelectedPin(modalPinIndex);
+        closePinModal();
+      };
+
+      function deleteSelectedPin() {
+        if (selectedPinIndex === null || !pins[selectedPinIndex]) return;
+
+        saveHistory();
+
+        const removedIndex = selectedPinIndex;
+        const removedPin = pins[removedIndex];
+
+        if (removedPin.cardId != null) {
+          const card = cards.find((c) => c.id === removedPin.cardId);
+          if (card) card.used = false;
+          renderCards();
+        }
+
+        pins.splice(removedIndex, 1);
+
+        connections = connections
+          .filter(
+            (c) => c.startIndex !== removedIndex && c.endIndex !== removedIndex
+          )
+          .map((c) => {
+            const nc = { ...c };
+            if (nc.startIndex > removedIndex) nc.startIndex--;
+            if (nc.endIndex > removedIndex) nc.endIndex--;
+            return nc;
+          });
+
+        function adjustIndex(idx) {
+          if (idx === null || idx === undefined) return null;
+          if (idx === removedIndex) return null;
+          if (idx > removedIndex) return idx - 1;
+          return idx;
+        }
+
+        tempStartIndex = adjustIndex(tempStartIndex);
+        connectStartIndex = adjustIndex(connectStartIndex);
+        selectedPinIndex = null;
+        pinInfo.style.display = "none";
+
+        draw();
+      }
+
+      function parseDate(dateStr) {
+        if (!dateStr) return null;
+        const yearMatch = dateStr.match(/\d{4}/);
+        if (yearMatch) return new Date(yearMatch[0], 0, 1).getTime();
+        const parsed = Date.parse(dateStr);
+        return isNaN(parsed) ? null : parsed;
+      }
+
+      // === LAYOUT FUNCTIONS ===
+
+      function layoutRadial() {
+        // Stop any running simulation
+        if (isLayoutSimulating) toggleForceLayout();
+
+        const targets = getTargetPins();
+        if (targets.length < 1) return;
+
+        saveHistory();
+
+        let cx = 0,
+          cy = 0;
+        targets.forEach((p) => {
+          cx += p.x;
+          cy += p.y;
+        });
+        cx /= targets.length;
+        cy /= targets.length;
+
+        const centralIndex =
+          targets.length === 1 ? 0 : Math.floor(targets.length / 2);
+        const centralPin = targets[centralIndex];
+        centralPin.x = cx;
+        centralPin.y = cy;
+
+        const radiusStep = 180;
+        let ring = 0;
+        let countInRing = 0;
+
+        targets.forEach((pin, i) => {
+          if (i === centralIndex) return;
+
+          if (countInRing === 0) {
+            const maxInRing = 6 + ring * 3;
+            countInRing = maxInRing;
+          }
+
+          const angle = (i % countInRing) * ((Math.PI * 2) / countInRing);
+          const radius = 120 + ring * radiusStep;
+
+          pin.x = cx + Math.cos(angle) * radius;
+          pin.y = cy + Math.sin(angle) * radius;
+
+          countInRing--;
+          if (countInRing === 0) ring++;
+        });
+
+        draw();
+      }
+
+      function layoutAffinity() {
+        // Stop any running simulation
+        if (isLayoutSimulating) toggleForceLayout();
+
+        const targets = getTargetPins();
+        if (targets.length < 2) return;
+
+        saveHistory();
+
+        const groups = {};
+        targets.forEach((pin) => {
+          const key = pin.color || "#888888";
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(pin);
+        });
+
+        if (Object.keys(groups).length <= 1) {
+          const shuffled = [...targets];
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
+          const groupCount = Math.min(
+            5,
+            Math.max(3, Math.floor(targets.length / 4))
+          );
+          for (let i = 0; i < shuffled.length; i++) {
+            const key = "group_" + (i % groupCount);
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(shuffled[i]);
+          }
+        }
+
+        let gx = -400;
+        Object.values(groups).forEach((group) => {
+          if (group.length === 1) {
+            group[0].x += gx;
+            group[0].y += (Math.random() - 0.5) * 200;
+            gx += 800;
+            return;
+          }
+
+          const cx = group.reduce((s, p) => s + p.x, 0) / group.length + gx;
+          const cy = group.reduce((s, p) => s + p.y, 0) / group.length;
+
+          group.forEach((pin, i) => {
+            const angle =
+              (i / group.length) * Math.PI * 2 + Math.random() * 0.6;
+            const radius = 100 + group.length * 15 + Math.random() * 60;
+            pin.x = cx + Math.cos(angle) * radius;
+            pin.y = cy + Math.sin(angle) * radius;
+          });
+
+          gx += 800;
+        });
+
+        draw();
+      }
+
+      function layoutTimeline() {
+        // Stop any running simulation
+        if (isLayoutSimulating) toggleForceLayout();
+
+        const timedPins = pins
+          .map((pin) => {
+            const card =
+              pin.cardId != null
+                ? cards.find((c) => c.id === pin.cardId)
+                : null;
+            const dateStr = pin.date || (card ? card.date : "");
+            return { pin, dateStr };
+          })
+          .filter((tp) => tp.dateStr);
+
+        if (timedPins.length < 2) {
+          alert("Need at least 2 pins with dates on the board!");
+          return;
+        }
+
+        saveHistory();
+
+        timedPins.forEach((tp) => (tp.timestamp = parseDate(tp.dateStr)));
+        timedPins.sort((a, b) => a.timestamp - b.timestamp);
+        timelinePins = timedPins;
+
+        const minTime = timedPins[0].timestamp;
+        const maxTime = timedPins[timedPins.length - 1].timestamp;
+
+        const lowestY = pins.length ? Math.max(...pins.map((p) => p.y)) : 0;
+        const footerMarginWorld = 200 / scale;
+        timelineY = lowestY + footerMarginWorld;
+
+        const allXs = pins.map((p) => p.x);
+        const minX = allXs.length ? Math.min(...allXs) : 0;
+        const maxX = allXs.length ? Math.max(...allXs) : 1000;
+        const horizontalPaddingWorld = 150 / scale;
+        timelineLeft = minX - horizontalPaddingWorld;
+        timelineRight = maxX + horizontalPaddingWorld;
+        const worldSpan = timelineRight - timelineLeft || 1;
+
+        const offsetWorld = 120 / scale;
+
+        timelineActive = true;
+
+        timedPins.forEach((tp, i) => {
+          const t = (tp.timestamp - minTime) / (maxTime - minTime || 1);
+          tp.pin.x = timelineLeft + t * worldSpan;
+          tp.pin.y = timelineY + (i % 2 === 0 ? -offsetWorld : offsetWorld);
+        });
+
+        const footerScreenY = timelineY * scale + offsetY;
+        if (footerScreenY > canvas.height - 80) {
+          offsetY -= footerScreenY - (canvas.height - 80);
+        }
+
+        draw();
+      }
+
+      function renderCards() {
+        cardList.innerHTML = "";
+        cards.forEach((c) => {
+          const div = document.createElement("div");
+          div.className = "card" + (c.used ? " used" : "");
+          div.draggable = true;
+          div.style.borderLeftColor = c.color;
+          div.innerHTML = `
+                <div class="card-icon">${c.icon}</div>
+                <div class="card-title">${c.title}</div>
+                <div class="card-subtitle">${c.subtitle}</div>
+                <div class="card-date">${c.date}</div>
+            `;
+          div.ondragstart = (e) => e.dataTransfer.setData("cardId", c.id);
+          div.ondragend = () => (div.style.opacity = "1");
+          div.ondblclick = () => {
+            const pinIdx = pins.findIndex((p) => p.cardId === c.id);
+            if (pinIdx !== -1) setSelectedPin(pinIdx);
+            div.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          };
+          cardList.appendChild(div);
+        });
+        const add = document.createElement("div");
+        add.className = "card";
+        add.style.borderLeftColor = "#666";
+        add.innerHTML =
+          '<div style="font-size:48px;color:#666;display:grid;place-items:center;height:100%">+</div>';
+        add.onclick = () => {
+          const title = prompt("New card title:") || "Untitled";
+          const subtitle = prompt("Subtitle:") || "";
+          const date = prompt("Date:") || "";
+          const icon = prompt("Icon (emoji):") || "📝";
+          const color = prompt("Color (hex):") || "#666";
+
+          if (title) {
+            cards.push({
+              id: nextId++,
+              title,
+              subtitle,
+              date,
+              icon,
+              color,
+              category: "custom",
+              used: false,
+            });
+            renderCards();
+            saveHistory();
+          }
+        };
+        cardList.appendChild(add);
+      }
+      renderCards();
+
+      // --- DRAWING FUNCTIONS ---
+
+      function drawPinShape(pin, metrics) {
+        ctx.beginPath();
+        const screen = worldToScreen(pin.x, pin.y);
+        const r = metrics.radius * scale;
+        const w = metrics.width * scale;
+        const h = metrics.height * scale;
+
+        ctx.fillStyle = pin.color;
+
+        switch (metrics.shape) {
+          case "circle":
+            ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
+            break;
+          case "rect":
+          case "card":
+          case "document":
+          case "folder":
+            const halfW = w / 2;
+            const halfH = h / 2;
+            const rectR = metrics.shape === "rect" ? r / 2 : 4 * scale;
+
+            ctx.moveTo(screen.x + halfW - rectR, screen.y - halfH);
+            ctx.arcTo(
+              screen.x + halfW,
+              screen.y - halfH,
+              screen.x + halfW,
+              screen.y - halfH + rectR,
+              rectR
+            );
+            ctx.arcTo(
+              screen.x + halfW,
+              screen.y + halfH,
+              screen.x + halfW - rectR,
+              screen.y + halfH,
+              rectR
+            );
+            ctx.arcTo(
+              screen.x - halfW,
+              screen.y + halfH,
+              screen.x - halfW,
+              screen.y + halfH - rectR,
+              rectR
+            );
+            ctx.arcTo(
+              screen.x - halfW,
+              screen.y - halfH,
+              screen.x + halfW - rectR,
+              screen.y - halfH,
+              rectR
+            );
+            break;
+          case "pill":
+            const rx = w / 2 - r;
+            ctx.arc(
+              screen.x - rx,
+              screen.y,
+              r,
+              Math.PI * 0.5,
+              Math.PI * 1.5,
+              false
+            );
+            ctx.arc(
+              screen.x + rx,
+              screen.y,
+              r,
+              Math.PI * 1.5,
+              Math.PI * 0.5,
+              false
+            );
+            ctx.closePath();
+            break;
+        }
+        ctx.fill();
+
+        // Pin border
+        ctx.strokeStyle = "#e6edf3";
+        ctx.lineWidth =
+          ((selectedPinIndex === pins.indexOf(pin) ? 4 : 2) * scale) /
+          Math.sqrt(scale);
+        if (isLayoutSimulating) {
+          // NEW: highlight pins moving rapidly
+          const speedSq = pin.vx * pin.vx + pin.vy * pin.vy || 0;
+          const alpha = Math.min(1, speedSq / 30); // Max speed of 5.5
+          ctx.strokeStyle = `rgba(255, 255, 0, ${alpha})`;
+        }
+        ctx.stroke();
+
+        if (pin.label) {
+          ctx.fillStyle = "#e6edf3";
+          ctx.font = `${Math.max(
+            10,
+            (18 * scale) / Math.sqrt(scale)
+          )}px system-ui`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(
+            pin.label,
+            screen.x,
+            screen.y + (h || r) * scale + (10 * scale) / Math.sqrt(scale)
+          );
+        }
+
+        const type = getNodeType(pin.typeId);
+        if (type.icon) {
+          ctx.fillStyle = "#161b22";
+          ctx.font = `${r * 1.25}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(type.icon, screen.x, screen.y);
+        }
+      }
+
+      function drawTimeline() {
+        if (!timelineActive || timelinePins.length < 2) return;
+
+        // Timeline Line
+        ctx.strokeStyle = "#58a6ff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const start = worldToScreen(timelineLeft, timelineY);
+        const end = worldToScreen(timelineRight, timelineY);
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+
+        // Pin Connectors
+        ctx.strokeStyle = "#58a6ff";
+        ctx.lineWidth = 1.5;
+        timelinePins.forEach((tp) => {
+          const pinScreen = worldToScreen(tp.pin.x, tp.pin.y);
+          const timelineScreen = worldToScreen(tp.pin.x, timelineY);
+          ctx.beginPath();
+          ctx.moveTo(pinScreen.x, pinScreen.y);
+          ctx.lineTo(timelineScreen.x, timelineScreen.y);
+          ctx.stroke();
+
+          // Date Labels
+          ctx.fillStyle = "#e6edf3";
+          ctx.font = `${(14 * scale) / Math.sqrt(scale)}px system-ui`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillText(tp.dateStr, timelineScreen.x, timelineScreen.y + 10);
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw connections
+        ctx.lineWidth = 2;
+        connections.forEach((c) => {
+          const p1 = pins[c.startIndex];
+          const p2 = pins[c.endIndex];
+          if (!p1 || !p2) return;
+
+          const s1 = worldToScreen(p1.x, p1.y);
+          const s2 = worldToScreen(p2.x, p2.y);
+
+          ctx.strokeStyle = c.color || "#999";
+          ctx.beginPath();
+          ctx.moveTo(s1.x, s1.y);
+          ctx.lineTo(s2.x, s2.y);
+          ctx.stroke();
+        });
+
+        // Draw temporary connection line
+        if (connectStartIndex !== null) {
+          const p1 = pins[connectStartIndex];
+          const s1 = worldToScreen(p1.x, p1.y);
+          ctx.strokeStyle = "#fff";
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(s1.x, s1.y);
+          ctx.lineTo(mouseScreenX, mouseScreenY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Draw pins
+        pins.forEach((pin, index) => {
+          const metrics = getPinMetrics(index);
+          drawPinShape(pin, metrics);
+        });
+
+        // Draw timeline (if active)
+        drawTimeline();
+
+        // Request next frame only if needed (not fully optimized yet)
+        animId = requestAnimationFrame(draw);
+      }
+      // Initial draw request moved to the bottom of the script.
+
+      // === EVENT HANDLERS ===
+
+      let isPanning = false;
+      let dragPinIndex = null;
+      let lastPinchDist = 0;
+
+      canvas.onmousedown = (e) => {
+        e.preventDefault();
+        const { x, y } = screenToWorld(e.clientX, e.clientY);
+        prevScreenX = e.clientX;
+        prevScreenY = e.clientY;
+        didDrag = false;
+
+        if (e.button === 0) {
+          // Left click
+          let hit = false;
+          for (let i = pins.length - 1; i >= 0; i--) {
+            const pin = pins[i];
+            const metrics = getPinMetrics(i);
+            const r = metrics.radius;
+            const sx = pin.x;
+            const sy = pin.y;
+
+            if (Math.hypot(x - sx, y - sy) < r) {
+              dragPinIndex = i;
+              hit = true;
+              // Start connection on drag start if a connection is already in progress
+              if (connectStartIndex !== null) {
+                finalizeConnection(i);
+                return;
+              }
+              setSelectedPin(i);
+              break;
+            }
+          }
+          if (!hit && currentTool === "pan") {
+            isPanning = true;
+            setSelectedPin(null);
+          } else if (!hit && currentTool === "pin") {
+            // Pin creation on empty space
+            const newPin = {
+              x,
+              y,
+              color: selectedColor,
+              label: "",
+              note: "",
+              date: "",
+              typeId: currentTypeId,
+            };
+            pins.push(newPin);
+            setSelectedPin(pins.length - 1);
+            dragPinIndex = pins.length - 1;
+            saveHistory();
+          }
+        }
+      };
+
+      canvas.onmousemove = (e) => {
+        mouseScreenX = e.clientX;
+        mouseScreenY = e.clientY;
+
+        if (isLayoutSimulating) return; // Prevent user drag interfering with simulation
+
+        if (dragPinIndex !== null) {
+          didDrag = true;
+          const { x, y } = screenToWorld(e.clientX, e.clientY);
+          pins[dragPinIndex].x = x;
+          pins[dragPinIndex].y = y;
+          draw();
+        } else if (isPanning) {
+          didDrag = true;
+          offsetX += e.clientX - prevScreenX;
+          offsetY += e.clientY - prevScreenY;
+          prevScreenX = e.clientX;
+          prevScreenY = e.clientY;
+          draw();
+        } else {
+          // Hover logic can be implemented here
+        }
+      };
+
+      canvas.onmouseup = (e) => {
+        isPanning = false;
+
+        if (dragPinIndex !== null) {
+          if (!didDrag) {
+            // If it was just a click (no drag) and a pin was selected
+            // This is where you would trigger the Radial Menu (Feature #6)
+          } else {
+            saveHistory(); // Save position after drag
+          }
+        }
+        dragPinIndex = null;
+      };
+
+      canvas.ondblclick = (e) => {
+        e.preventDefault();
+        if (dragPinIndex !== null) {
+          openPinModal(dragPinIndex);
+          dragPinIndex = null;
+        }
+      };
+
+      canvas.oncontextmenu = (e) => {
+        e.preventDefault();
+        let hitPinIndex = null;
+        const { x, y } = screenToWorld(e.clientX, e.clientY);
+
+        for (let i = pins.length - 1; i >= 0; i--) {
+          const pin = pins[i];
+          const metrics = getPinMetrics(i);
+          const r = metrics.radius;
+          if (Math.hypot(x - pin.x, y - pin.y) < r) {
+            hitPinIndex = i;
+            break;
+          }
+        }
+
+        if (hitPinIndex !== null) {
+          if (connectStartIndex === null) {
+            // Start connection
+            connectStartIndex = hitPinIndex;
+            setSelectedPin(hitPinIndex);
+          } else if (connectStartIndex === hitPinIndex) {
+            // Cancel connection
+            connectStartIndex = null;
+          } else {
+            // Complete connection
+            finalizeConnection(hitPinIndex);
+          }
+        } else {
+          // Cancel connection if clicking empty space
+          connectStartIndex = null;
+          setSelectedPin(null);
+        }
+        draw();
+      };
+
+      function finalizeConnection(endIndex) {
+        if (connectStartIndex === endIndex) return;
+
+        // Check for duplicate connection (order doesn't matter)
+        const exists = connections.some(
+          (c) =>
+            (c.startIndex === connectStartIndex && c.endIndex === endIndex) ||
+            (c.startIndex === endIndex && c.endIndex === connectStartIndex)
+        );
+
+        if (!exists) {
+          saveHistory();
+          connections.push({
+            startIndex: connectStartIndex,
+            endIndex: endIndex,
+            color: selectedColor,
+          });
+          // Update pin metrics (size) for both pins
+          getPinMetrics(connectStartIndex);
+          getPinMetrics(endIndex);
+        }
+        connectStartIndex = null;
+        draw();
+      }
+
+      canvas.onwheel = (e) => {
+        e.preventDefault();
+        const zoomSpeed = 1.05;
+        const delta = e.deltaY > 0 ? 1 / zoomSpeed : zoomSpeed;
+        const oldScale = scale;
+
+        scale *= delta;
+        scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+
+        // Calculate world point under cursor
+        const { x: wx, y: wy } = screenToWorld(e.clientX, e.clientY);
+
+        // Adjust offsets to keep the world point fixed under the cursor
+        offsetX = e.clientX - wx * scale;
+        offsetY = e.clientY - wy * scale;
+
+        draw();
+      };
+
+      // --- DRAG AND DROP (Cards) ---
+      canvas.ondragover = (e) => e.preventDefault();
+      canvas.ondrop = (e) => {
+        e.preventDefault();
+        const cardId = parseInt(e.dataTransfer.getData("cardId"));
+        const card = cards.find((c) => c.id === cardId);
+
+        if (card && !card.used) {
+          saveHistory();
+          const { x, y } = screenToWorld(e.clientX, e.clientY);
+
+          // Create new pin from card
+          const newPin = {
+            x,
+            y,
+            color: card.color || selectedColor,
+            label: card.title,
+            note: "", // Notes are added by the user, not imported
+            date: card.date,
+            cardId: card.id,
+            typeId: selectedTypeByFamily.pin,
+          };
+
+          pins.push(newPin);
+          card.used = true;
+          renderCards();
+          setSelectedPin(pins.length - 1);
+          draw();
+        }
+      };
+
+      // --- GLOBAL EVENT LISTENERS ---
+
+      window.onresize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - 200;
+        draw();
+      };
+
+      document.getElementById("reset").onclick = () => {
+        if (
+          confirm(
+            "Are you sure you want to reset the entire board? This cannot be undone."
+          )
+        ) {
+          pins = [];
+          connections = [];
+          cards.forEach((c) => (c.used = false));
+          renderCards();
+          history = [];
+          scale = 1;
+          offsetX = 0;
+          offsetY = 0;
+          setSelectedPin(null);
+          draw();
+        }
+      };
+
+      // NEW: Use the Web Worker Toggle for the Magic button
+      document.getElementById("magic").onclick = toggleForceLayout;
+
+      document.getElementById("radial").onclick = layoutRadial;
+      document.getElementById("clusters").onclick = layoutAffinity;
+      document.getElementById("timeline").onclick = layoutTimeline;
+
+      // NEW: Keyboard Shortcuts (QoL Feature)
+      window.addEventListener("keydown", (e) => {
+        // Undo (Ctrl/Cmd + Z)
+        if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+          e.preventDefault();
+          undo();
+        }
+        // Delete selected pin (Delete/Backspace)
+        if (
+          selectedPinIndex !== null &&
+          (e.key === "Delete" || e.key === "Backspace") &&
+          !pinModalBackdrop.style.display
+        ) {
+          e.preventDefault();
+          deleteSelectedPin();
+        }
+        // Escape cancels connection mode
+        if (e.key === "Escape") {
+          connectStartIndex = null;
+          draw();
+        }
+      });
+
+      // Final initial draw
+      draw();
+    </script>
+  </body>
+</html>

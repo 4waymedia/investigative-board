@@ -1,0 +1,2412 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Investigative Board</title>
+    <link rel="stylesheet" href="css/board-styles.css" />
+    <script src="js/layoutWorker.js"></script>
+  </head>
+  <body>
+    <div id="menu">
+      <div id="toolset"></div>
+    </div>
+
+    <canvas id="board"></canvas>
+
+    <div id="pin-info">
+      <div id="pin-info-header">
+        <div>
+          <div id="pin-info-title"></div>
+          <div id="pin-info-sub"></div>
+        </div>
+        <div class="pin-color-pill" id="pin-info-color"></div>
+      </div>
+      <div id="pin-info-note"></div>
+      <div class="pin-info-meta" id="pin-info-meta"></div>
+    </div>
+
+    <div id="pin-modal-backdrop">
+      <div id="pin-modal">
+        <div id="pin-modal-header">
+          <div id="pin-modal-title">Edit Pin</div>
+          <div id="pin-modal-close">✕</div>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Title</div>
+          <input
+            id="pm-title"
+            class="modal-input"
+            type="text"
+            placeholder="Pin title"
+          />
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Color (hex)</div>
+          <input
+            id="pm-color"
+            class="modal-input"
+            type="text"
+            placeholder="#58a6ff"
+          />
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Description / Notes</div>
+          <textarea
+            id="pm-description"
+            class="modal-textarea"
+            placeholder="What does this pin represent?"
+          ></textarea>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Date</div>
+          <input
+            id="pm-date"
+            class="modal-input"
+            type="text"
+            placeholder="e.g. 1958, Jul 1947, 1963-11-22"
+          />
+        </div>
+        <div id="pin-modal-footer">
+          <button class="btn" id="pm-cancel">Cancel</button>
+          <button class="btn primary" id="pm-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="radial-menu"></div>
+
+    <div id="tray"><div id="card-list"></div></div>
+    <div id="controls">
+      <div class="ctrl-btn" id="reset" title="Reset board">↻</div>
+      <div class="ctrl-btn magic" id="magic" title="Toggle Force Layout">★</div>
+      <div class="ctrl-btn radial" id="radial" title="Radial Mind Map">🌸</div>
+      <div class="ctrl-btn clusters" id="clusters" title="Affinity Clusters">
+        ☁️
+      </div>
+      <div class="ctrl-btn timeline" id="timeline" title="Auto Timeline">
+        ⏳
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("board");
+      const ctx = canvas.getContext("2d");
+      const menu = document.getElementById("menu");
+      const toolset = document.getElementById("toolset");
+      const cardList = document.getElementById("card-list");
+
+      const pinInfo = document.getElementById("pin-info");
+      const pinInfoTitle = document.getElementById("pin-info-title");
+      const pinInfoSub = document.getElementById("pin-info-sub");
+      const pinInfoNote = document.getElementById("pin-info-note");
+      const pinInfoMeta = document.getElementById("pin-info-meta");
+      const pinInfoColor = document.getElementById("pin-info-color");
+
+      const pinModalBackdrop = document.getElementById("pin-modal-backdrop");
+      const pinModalClose = document.getElementById("pin-modal-close");
+      const pmTitle = document.getElementById("pm-title");
+      const pmColor = document.getElementById("pm-color");
+      const pmDescription = document.getElementById("pm-description");
+      const pmDate = document.getElementById("pm-date");
+      const pmCancel = document.getElementById("pm-cancel");
+      const pmSave = document.getElementById("pm-save");
+
+      // Prevent constant drawing when not in use
+      // index.html - Global Variables for Canvas State and Throttling
+
+      let translateX = 0; // The canvas X offset
+      let translateY = 0; // The canvas Y offset
+      let scale = 1;
+      const MIN_SCALE = 0.1; // Reduced min scale for better zoom-out
+      const MAX_SCALE = 5; // Increased max scale
+
+      // Variables for the new throttling logic
+      let animId = null; // Stores the requestAnimationFrame ID
+      let isUserInteracting = false; // True when dragging, panning, or marquee selecting
+      let framesSinceActivity = 0; // Counts frames since last interaction or change
+      const IDLE_FRAME_LIMIT = 60; // Stop drawing after 60 idle frames (approx 2 seconds)
+
+      // NEW: Radial Menu Element
+      const radialMenuEl = document.getElementById("radial-menu");
+
+      // --- Global Constants for Layout ---
+      const MENU_HEIGHT = 50; // Based on CSS #menu padding/height
+      const TRAY_HEIGHT = 200; // Height reserved for the #tray
+
+      // Set initial canvas dimensions
+      canvas.width = window.innerWidth;
+      // Calculate height: Total - Menu Height - Tray Height
+      canvas.height = window.innerHeight - MENU_HEIGHT - TRAY_HEIGHT;
+      canvas.style.marginTop = MENU_HEIGHT + "px"; // Push canvas down below the menu
+
+      // Replace it with this to include the correct calculation:
+      window.onresize = () => {
+        canvas.width = window.innerWidth;
+        // Recalculate height based on constants
+        canvas.height = window.innerHeight - MENU_HEIGHT - TRAY_HEIGHT;
+        draw();
+      };
+
+      let history = [];
+      const MAX_HISTORY = 100;
+
+      let pins = [];
+      let connections = [];
+      let cards = [];
+      let tempStartIndex = null;
+      let connectStartIndex = null;
+      let selectedPinIndex = null;
+
+      // --- NEW: MARQUEE STATE VARIABLES ---
+      let selectedPins = []; // Array of pin indices currently selected by marquee
+      let marqueeStart = null; // {x, y} for the start of the selection box (world coords)
+      let marqueeEnd = null; // {x, y} for the current end of the selection box (world coords)
+      // ------------------------------------
+
+      let mouseScreenX = 0,
+        mouseScreenY = 0,
+        prevScreenX = 0,
+        prevScreenY = 0,
+        speed = 0,
+        time = 0;
+      let didDrag = false;
+
+      let timelineActive = false;
+      let timelinePins = [];
+      let timelineY = 0;
+      let timelineLeft = 0;
+      let timelineRight = 0;
+
+      const NODE_TYPES = [
+        {
+          id: "pin:circle",
+          label: "Circle Pin",
+          icon: "●",
+          family: "pin",
+          variant: "circle",
+        },
+        {
+          id: "pin:square",
+          label: "Square Pin",
+          icon: "■",
+          family: "pin",
+          variant: "square",
+        },
+        {
+          id: "pin:pill",
+          label: "Pill Pin",
+          icon: "▭",
+          family: "pin",
+          variant: "pill",
+        },
+        {
+          id: "card:card",
+          label: "Note Card",
+          icon: "▤",
+          family: "card",
+          variant: "card",
+        },
+        {
+          id: "card:doc",
+          label: "Doc Card",
+          icon: "📄",
+          family: "card",
+          variant: "document",
+        },
+        {
+          id: "card:folder",
+          label: "Folder Card",
+          icon: "📁",
+          family: "card",
+          variant: "folder",
+        },
+      ];
+
+      function getNodeType(id) {
+        return NODE_TYPES.find((t) => t.id === id) || NODE_TYPES[0];
+      }
+
+      let selectedTypeByFamily = { pin: "pin:circle", card: "card:card" };
+      let currentFamily = "pin";
+      let currentTypeId = selectedTypeByFamily.pin;
+
+      const PIN_BASES = {
+        "pin:circle": { shape: "circle", baseRadius: 9 },
+        "pin:square": {
+          shape: "rect",
+          baseRadius: 9,
+          baseWidth: 22,
+          baseHeight: 22,
+        },
+        "pin:pill": {
+          shape: "pill",
+          baseRadius: 9,
+          baseWidth: 40,
+          baseHeight: 22,
+        },
+        "card:card": {
+          shape: "card",
+          baseRadius: 9,
+          baseWidth: 46,
+          baseHeight: 30,
+        },
+        "card:doc": {
+          shape: "card",
+          baseRadius: 9,
+          baseWidth: 32,
+          baseHeight: 46,
+        },
+        "card:folder": {
+          shape: "card",
+          baseRadius: 4,
+          baseWidth: 50,
+          baseHeight: 36,
+        },
+      };
+
+      function getConnectionCount(index) {
+        let count = 0;
+        for (const c of connections)
+          if (c.startIndex === index || c.endIndex === index) count++;
+        return count;
+      }
+
+      function getPinMetrics(index) {
+        const pin = pins[index];
+        const typeId = pin.typeId || "pin:circle"; // Use default if missing
+
+        // 1. Get the base dimensions (from PIN_BASES)
+        const base = PIN_BASES[typeId];
+
+        // 2. Get the full type details (from NODE_TYPES)
+        const typeDetail = getNodeType(typeId);
+
+        // 3. Define the core metrics object
+        const metrics = {
+          shape: base.shape,
+          baseRadius: base.baseRadius,
+          variant: typeDetail.variant, // <--- CRITICAL FIX: Attach the variant
+          // Use pin.radius/width/height if they exist (for dynamic sizing), otherwise use base
+          radius: pin.radius || base.baseRadius,
+          width: pin.width || base.baseWidth,
+          height: pin.height || base.baseHeight,
+        };
+
+        // If the pin has been resized by the user, we ensure the metrics reflect that
+        if (pin.width && pin.height) {
+          metrics.width = pin.width;
+          metrics.height = pin.height;
+        }
+
+        return metrics;
+      }
+
+      function worldToScreen(x, y) {
+        return {
+          x: x * scale + (canvas.width / 2 + translateX),
+          y: y * scale + (canvas.height / 2 + translateY),
+        };
+      }
+
+      function screenToWorld(sx, sy) {
+        return {
+          x: (sx - (canvas.width / 2 + translateX)) / scale,
+          y: (sy - (canvas.height / 2 + translateY)) / scale,
+        };
+      }
+
+      // ===========================================
+      // === Persistence Logic (Feature 6) ===
+      // ===========================================
+
+      const STORAGE_KEY = "investigativeBoardState";
+
+      function saveState() {
+        if (!window.localStorage) return;
+
+        // Stop simulation before saving a snapshot
+        if (isLayoutSimulating) applyLayout();
+
+        const state = {
+          pins,
+          connections,
+          cards,
+          history,
+          scale,
+          translateX,
+          translateY,
+          timelineActive,
+          timelinePins,
+          timelineY,
+          timelineLeft,
+          timelineRight,
+          selectedColor,
+          palette,
+          nextId,
+          selectedTypeByFamily,
+          currentFamily,
+          currentTypeId,
+        };
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+          console.error("Error saving state to localStorage:", error);
+        }
+      }
+
+      function loadState() {
+        if (!window.localStorage) return false;
+
+        try {
+          const storedState = localStorage.getItem(STORAGE_KEY);
+          if (storedState) {
+            const state = JSON.parse(storedState);
+
+            pins = state.pins || [];
+            connections = state.connections || [];
+            cards = state.cards || [];
+            history = state.history || [];
+
+            scale = state.scale || 1;
+            translateX = state.translateX || 0;
+            translateY = state.translateY || 0;
+
+            timelineActive = state.timelineActive || false;
+            timelinePins = state.timelinePins || [];
+            timelineY = state.timelineY || 0;
+            timelineLeft = state.timelineLeft || 0;
+            timelineRight = state.timelineRight || 0;
+
+            selectedColor = state.selectedColor || palette[0].value;
+            palette = state.palette || defaultColors;
+            nextId = state.nextId || nextId;
+
+            selectedTypeByFamily =
+              state.selectedTypeByFamily || selectedTypeByFamily;
+            currentFamily = state.currentFamily || currentFamily;
+            currentTypeId = state.currentTypeId || currentTypeId;
+
+            console.log("State loaded successfully from localStorage.");
+            return true;
+          }
+        } catch (error) {
+          console.error("Error loading state from localStorage:", error);
+        }
+        return false;
+      }
+
+      // Update saveHistory to also save the state
+      function saveHistory() {
+        // Stop simulation before saving a snapshot
+        if (isLayoutSimulating) applyLayout();
+
+        const snapshot = {
+          pins: JSON.parse(JSON.stringify(pins)),
+          connections: JSON.parse(JSON.stringify(connections)),
+          cards: JSON.parse(JSON.stringify(cards)),
+          tempStartIndex,
+          connectStartIndex,
+          selectedPinIndex,
+          timelineActive,
+          timelinePins: JSON.parse(JSON.stringify(timelinePins)),
+          timelineY,
+          timelineLeft,
+          timelineRight,
+          scale,
+          translateX,
+          translateY,
+        };
+        history.push(snapshot);
+        if (history.length > MAX_HISTORY) history.shift();
+
+        saveState(); // Crucial: Save to local storage after every history snapshot
+      }
+
+      function undo() {
+        if (!history.length) return;
+        // Stop simulation when restoring state
+        if (isLayoutSimulating) applyLayout();
+
+        const snapshot = history.pop();
+        pins = snapshot.pins;
+        connections = snapshot.connections;
+        cards = snapshot.cards;
+        tempStartIndex = snapshot.tempStartIndex;
+        connectStartIndex = snapshot.connectStartIndex;
+        selectedPinIndex = snapshot.selectedPinIndex;
+        timelineActive = snapshot.timelineActive;
+        timelinePins = snapshot.timelinePins;
+        timelineY = snapshot.timelineY;
+        timelineLeft = snapshot.timelineLeft;
+        timelineRight = snapshot.timelineRight;
+        scale = snapshot.scale;
+        translateX = snapshot.translateX;
+        translateY = snapshot.translateY;
+        renderCards();
+        renderSelectedPinInfo();
+        saveState(); // Save state after undoing
+        draw();
+      }
+
+      function redo() {
+        if (futureStack.length > 0) {
+          historyStack.push(JSON.stringify({ pins, connections }));
+          const newState = JSON.parse(futureStack.pop());
+          pins = newState.pins;
+          connections = newState.connections;
+          saveState();
+
+          // CRITICAL FIX: Restart the draw loop if it's paused
+          if (!animId) {
+            animId = requestAnimationFrame(draw);
+          }
+          draw(); // Force a redraw immediately
+        }
+      }
+
+      // ===========================================
+      // === Web Worker Initialization & Logic (UNCHANGED) ===
+      // ===========================================
+
+      // ===========================================
+      // === Web Worker Initialization & Logic (Refactored to applyLayout) ===
+      // ===========================================
+
+      if (window.Worker) {
+        var layoutWorker = new Worker("layoutWorker.js");
+        var isLayoutSimulating = false;
+        var currentLayoutMode = "none"; // NEW: Tracks the active layout mode
+      } else {
+        var layoutWorker = null;
+        var isLayoutSimulating = false;
+        var currentLayoutMode = "none"; // NEW: Tracks the active layout mode
+        console.warn(
+          "Web Workers not supported. Force layout will run synchronously on the main thread and may cause jank."
+        );
+      }
+
+      if (layoutWorker) {
+        layoutWorker.onmessage = (e) => {
+          // The worker now sends 'update'
+          if (e.data.command === "update") {
+            const positions = e.data.pins;
+
+            positions.forEach((pos) => {
+              if (pins[pos.index]) {
+                pins[pos.index].x = pos.x;
+                pins[pos.index].y = pos.y;
+                // Preserve velocity for smooth transitions
+                if (pos.vx !== undefined) pins[pos.index].vx = pos.vx;
+                if (pos.vy !== undefined) pins[pos.index].vy = pos.vy;
+              }
+            });
+
+            // If the simulation is running and the mode is NOT timeline, we re-trigger
+            if (isLayoutSimulating && currentLayoutMode !== "timeline") {
+              setTimeout(triggerForceLayout, 50);
+            }
+
+            draw();
+          } else if (e.data.command === "STOPPED") {
+            // Worker signal that it has stopped
+            isLayoutSimulating = false;
+            currentLayoutMode = "none";
+            draw();
+          }
+        };
+      }
+
+      // Function to send the pins to the worker for one tick
+      function triggerForceLayout() {
+        if (
+          !isLayoutSimulating ||
+          !layoutWorker ||
+          currentLayoutMode === "timeline"
+        )
+          return;
+
+        // Pass the currentLayoutMode and connection info to the worker
+        layoutWorker.postMessage({
+          command: "start",
+          // Pass necessary pin data, including index and root status for mindmap
+          pins: pins.map((p, i) => ({
+            ...p,
+            index: i,
+            isRoot: i === selectedPinIndex, // Pass root for mindmap
+          })),
+          connections: connections,
+          layoutMode: currentLayoutMode, // Pass the current mode
+        });
+      }
+
+      // The new unified layout controller (replaces toggleForceLayout)
+      function applyLayout(mode) {
+        if (!pins.length) return;
+
+        if (!animId) {
+          animId = requestAnimationFrame(draw); // Ensures loop starts if paused
+        }
+
+        // Use the ID of the buttons defined in index.html
+        const buttonIds = {
+          default: "magic",
+          mindmap: "radial",
+          clusters: "clusters",
+          timeline: "timeline",
+        };
+        const activeButtons = ["magic", "radial", "clusters", "timeline"];
+
+        // 1. Toggle behavior (stop if the same mode is running)
+        if (isLayoutSimulating && currentLayoutMode === mode) {
+          isLayoutSimulating = false;
+          currentLayoutMode = "none";
+          layoutWorker.postMessage({ command: "stop" });
+
+          // Deactivate all buttons
+          activeButtons.forEach((id) =>
+            document.getElementById(id).classList.remove("active")
+          );
+          draw();
+          saveState(); // Save final positions
+          return;
+        }
+
+        // 2. Set up for new layout
+        saveHistory(); // Save state before starting new layout
+
+        // Deactivate all buttons before activating the new one
+        activeButtons.forEach((id) =>
+          document.getElementById(id).classList.remove("active")
+        );
+        document.getElementById(buttonIds[mode]).classList.add("active");
+
+        currentLayoutMode = mode;
+        isLayoutSimulating = true;
+
+        // 3. Handle Timeline (Static Layout)
+        timelineActive = mode === "timeline";
+
+        if (mode === "timeline") {
+          // Timeline is calculated on the main thread (it's fast and static)
+          layoutTimeline();
+          isLayoutSimulating = false; // Timeline is static, turn off simulation flag
+          currentLayoutMode = "none"; // Clear mode after applying static layout
+          document.getElementById("timeline").classList.remove("active");
+          saveState();
+          draw();
+          return;
+        }
+
+        // 4. Start Force Layout Simulation
+
+        // Reset velocities for a clean start
+        pins.forEach((p) => {
+          p.vx = p.vy = p.fx = p.fy = 0;
+        });
+        triggerForceLayout();
+
+        // 5. Ensure the animation loop is running
+        if (!animId) {
+          animId = requestAnimationFrame(draw);
+        }
+      }
+
+      if (layoutWorker) {
+        layoutWorker.onmessage = (e) => {
+          if (e.data.command === "LAYOUT_UPDATE") {
+            const positions = e.data.positions;
+
+            positions.forEach((pos) => {
+              if (pins[pos.index]) {
+                pins[pos.index].x = pos.x;
+                pins[pos.index].y = pos.y;
+                if (pos.vx !== undefined) pins[pos.index].vx = pos.vx;
+                if (pos.vy !== undefined) pins[pos.index].vy = pos.vy;
+                if (pos.fx !== undefined) pins[pos.index].fx = pos.fx;
+                if (pos.fy !== undefined) pins[pos.fy].fy = pos.fy;
+              }
+            });
+
+            if (isLayoutSimulating) {
+              setTimeout(triggerForceLayout, 50);
+            }
+
+            draw();
+          }
+        };
+      }
+
+      function triggerForceLayout() {
+        if (!isLayoutSimulating || !layoutWorker) return;
+
+        pins.forEach((p) => {
+          p.vx = p.vx || 0;
+          p.vy = p.vy || 0;
+          p.fx = p.fx || 0;
+          p.fy = p.fy || 0;
+        });
+
+        layoutWorker.postMessage({
+          command: "START_FORCE_LAYOUT",
+          pins: JSON.parse(JSON.stringify(pins)),
+          connections: connections,
+        });
+      }
+
+      // index.html - The new unified layout controller (replaces toggleForceLayout)
+      function applyLayout(mode) {
+        if (!pins.length) return;
+
+        if (!animId) {
+          animId = requestAnimationFrame(draw);
+        }
+
+        // 1. Toggle behavior (stop if the same mode is running)
+        if (isLayoutSimulating && currentLayoutMode === mode) {
+          isLayoutSimulating = false;
+          currentLayoutMode = "none";
+          layoutWorker.postMessage({ command: "stop" });
+          draw();
+          return;
+        }
+
+        // 2. Set up for new layout
+        currentLayoutMode = mode;
+        isLayoutSimulating = true;
+
+        // Disable timeline if a spatial layout is selected
+        timelineActive = mode === "timeline";
+
+        // Find a suitable root pin for Mind Map mode (e.g., the selected pin)
+        let rootPinIndex = selectedPinIndex;
+
+        // 3. Post message to the worker with the new mode and pins
+        layoutWorker.postMessage({
+          command: "start",
+          // Send a copy of pins with indices and the root flag
+          pins: pins.map((p, i) => ({
+            ...p,
+            index: i,
+            isRoot: i === rootPinIndex,
+          })),
+          connections: connections,
+          layoutMode: mode, // CRITICAL: Pass the layout mode
+        });
+
+        // 4. Ensure the animation loop is running
+        if (!animId) {
+          animId = requestAnimationFrame(draw);
+        }
+        draw();
+      }
+
+      // ===========================================
+
+      let currentTool = "pin";
+
+      function setTool(id) {
+        currentTool = id;
+        renderTools();
+      }
+
+      // Palette initialization moved down so loadState can modify it before rendering
+      const defaultColors = [
+        { name: "Red", value: "#f85149" },
+        { name: "Blue", value: "#58a6ff" },
+        { name: "Green", value: "#3fb950" },
+        { name: "Yellow", value: "#f1c40f" },
+        { name: "Purple", value: "#a471f7" },
+      ];
+      let palette = [...defaultColors];
+      let selectedColor = palette[0].value;
+
+      function renderTools() {
+        toolset.innerHTML = "";
+        const tools = [
+          { id: "pan", label: "Move", icon: "🖐" },
+          { id: "select", label: "Select", icon: "🔳" }, // NEW: Select tool for marquee
+          { id: "pin", label: "Pin", icon: "📍" },
+        ];
+        tools.forEach((t) => {
+          const btn = document.createElement("div");
+          btn.className = "tool-btn" + (currentTool === t.id ? " active" : "");
+          btn.innerHTML = `<span class="icon">${t.icon}</span><span>${t.label}</span>`;
+          btn.onclick = () => setTool(t.id);
+          toolset.appendChild(btn);
+        });
+      }
+
+      let typeMenuEl = null;
+
+      function closeTypeMenu() {
+        if (typeMenuEl) typeMenuEl.remove();
+        typeMenuEl = null;
+      }
+
+      function openTypeMenuForFamily(family, anchorEl) {
+        // ... (unchanged)
+        closeTypeMenu();
+        const rect = anchorEl.getBoundingClientRect();
+        const menuEl = document.createElement("div");
+        menuEl.className = "type-menu";
+
+        const currentId =
+          selectedTypeByFamily[family] ||
+          NODE_TYPES.find((t) => t.family === family).id;
+
+        NODE_TYPES.filter((t) => t.family === family).forEach((t) => {
+          const item = document.createElement("button");
+          item.className =
+            "type-menu-item" + (t.id === currentId ? " active" : "");
+          item.innerHTML = `<span class="icon">${t.icon}</span><span>${t.label}</span>`;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            selectedTypeByFamily[family] = t.id;
+            if (currentFamily === family) currentTypeId = t.id;
+            closeTypeMenu();
+            saveState(); // Save menu preference
+            renderMenu();
+            draw();
+          };
+          menuEl.appendChild(item);
+        });
+
+        document.body.appendChild(menuEl);
+        menuEl.style.left = rect.left + "px";
+        menuEl.style.top = rect.bottom + 4 + "px";
+        typeMenuEl = menuEl;
+      }
+
+      function setCurrentFamily(family) {
+        currentFamily = family;
+        currentTypeId =
+          selectedTypeByFamily[family] ||
+          NODE_TYPES.find((t) => t.family === family).id;
+        saveState(); // Save menu preference
+        renderMenu();
+        draw();
+      }
+
+      window.addEventListener("click", closeTypeMenu);
+
+      function renderTypeBar() {
+        // ... (unchanged)
+        const bar = document.createElement("div");
+        bar.className = "type-bar";
+
+        const families = [
+          { id: "pin", label: "Pin", iconDefault: "●" },
+          { id: "card", label: "Card", iconDefault: "▤" },
+        ];
+
+        families.forEach((f) => {
+          const group = document.createElement("div");
+          group.className = "type-group";
+
+          const activeType = getNodeType(
+            selectedTypeByFamily[f.id] ||
+              NODE_TYPES.find((t) => t.family === f.id).id
+          );
+
+          const option = document.createElement("div");
+          option.className =
+            "type-option" + (currentFamily === f.id ? " active" : "");
+          option.innerHTML = `<div class="type-option-icon">${
+            activeType.icon || f.iconDefault
+          }</div><div class="label">${f.label}</div>`;
+          option.onclick = (e) => {
+            e.stopPropagation();
+            setCurrentFamily(f.id);
+          };
+
+          const caret = document.createElement("button");
+          caret.className = "type-caret";
+          caret.textContent = "▾";
+          caret.onclick = (e) => {
+            e.stopPropagation();
+            openTypeMenuForFamily(f.id, caret);
+          };
+
+          group.appendChild(option);
+          group.appendChild(caret);
+          bar.appendChild(group);
+        });
+
+        return bar;
+      }
+
+      function renderMenu() {
+        menu.innerHTML = "";
+        menu.appendChild(toolset);
+        renderTools();
+
+        menu.appendChild(renderTypeBar());
+
+        palette.forEach((col) => {
+          const el = document.createElement("div");
+          el.className =
+            "color-option" + (col.value === selectedColor ? " active" : "");
+          el.innerHTML = `<div class="label">${col.name}</div><div class="swatch" style="background:${col.value}"></div>`;
+          el.onclick = () => {
+            selectedColor = col.value;
+            saveState();
+            renderMenu();
+            draw();
+          };
+          menu.appendChild(el);
+        });
+
+        const add = document.createElement("div");
+        add.className = "color-option";
+        add.innerHTML = `<div class="add-btn">+</div>`;
+        add.onclick = () => {
+          const hex = prompt("Hex color:", "#ff9500");
+          if (hex && /^#[0-9A-F]{6}$/i.test(hex)) {
+            const name = prompt("Name:", "Custom") || "Custom";
+            palette.push({ name, value: hex.toLowerCase() });
+            selectedColor = hex.toLowerCase();
+            saveState(); // Save new palette and color
+            renderMenu();
+          }
+        };
+        menu.appendChild(add);
+      }
+
+      // Initial default cards (only used if no state is loaded)
+      let nextId = 5;
+
+      const defaultCards = [
+        {
+          id: 0,
+          title: "Project Orion",
+          subtitle: "Classified propulsion research 1958–1965",
+          date: "1958",
+          icon: "★",
+          color: "#f85149",
+          category: "event",
+          used: false,
+        },
+        {
+          id: 1,
+          title: "MKUltra",
+          subtitle: "CIA mind control program using LSD",
+          date: "1953–1973",
+          icon: "⚙️",
+          color: "#a471f7",
+          category: "program",
+          used: false,
+        },
+        {
+          id: 2,
+          title: "Roswell Incident",
+          subtitle: "Alleged UFO crash retrieval",
+          date: "Jul 1947",
+          icon: "🔔",
+          color: "#58a6ff",
+          category: "incident",
+          used: false,
+        },
+        {
+          id: 3,
+          title: "Operation Paperclip",
+          subtitle: "US recruitment of Nazi scientists",
+          date: "1945–1959",
+          icon: "✈️",
+          color: "#f1c40f",
+          category: "operation",
+          used: false,
+        },
+        {
+          id: 4,
+          title: "Area 51",
+          subtitle: "Highly classified USAF facility",
+          date: "1955–",
+          icon: "🔒",
+          color: "#3fb950",
+          category: "facility",
+          used: false,
+        },
+      ];
+
+      // --- CRITICAL INITIALIZATION BLOCK ---
+      if (!loadState()) {
+        cards = defaultCards;
+      }
+      // Ensure nextId is at least the highest ID used + 1 if the default array was used
+      if (cards.length > 0) {
+        const maxId = cards.reduce((max, card) => Math.max(max, card.id), -1);
+        nextId = Math.max(nextId, maxId + 1);
+      }
+
+      renderMenu();
+      renderCards(); // Render cards after loadState runs
+
+      function getConnectedComponent(startIdx) {
+        // ... (unchanged)
+        const visited = new Set();
+        const stack = [startIdx];
+        while (stack.length) {
+          const i = stack.pop();
+          if (visited.has(i)) continue;
+          visited.add(i);
+          for (const c of connections) {
+            if (c.startIndex === i && !visited.has(c.endIndex))
+              stack.push(c.endIndex);
+            if (c.endIndex === i && !visited.has(c.startIndex))
+              stack.push(c.startIndex);
+          }
+        }
+        return Array.from(visited);
+      }
+
+      function getTargetPins() {
+        // ... (unchanged)
+        if (selectedPins.length > 0) {
+          // If multiple pins are selected, return only those
+          return selectedPins.map((i) => pins[i]).filter((p) => p);
+        }
+        if (selectedPinIndex !== null && pins[selectedPinIndex]) {
+          return getConnectedComponent(selectedPinIndex).map((i) => pins[i]);
+        }
+        return [...pins];
+      }
+
+      // ************ CRITICAL FIX 1: Refined setSelectedPin ************
+      function setSelectedPin(index) {
+        // If a pin is selected (index is a number), set both single and marquee selection
+        if (
+          typeof index === "number" &&
+          index !== null &&
+          index !== undefined
+        ) {
+          selectedPinIndex = index;
+          selectedPins = [index];
+        } else {
+          // If called with null or undefined, clear all selection state
+          selectedPinIndex = null;
+          selectedPins = [];
+        }
+
+        renderSelectedPinInfo();
+        closeRadialMenu(); // Close radial menu if a different pin is selected
+        draw();
+      }
+
+      function renderSelectedPinInfo() {
+        // Handle selection for single pin or the first pin in a group selection
+        let displayIndex = selectedPinIndex;
+        if (displayIndex === null && selectedPins.length > 0) {
+          displayIndex = selectedPins[0];
+        }
+
+        if (displayIndex === null || !pins[displayIndex]) {
+          pinInfo.style.display = "none";
+          return;
+        }
+
+        const pin = pins[displayIndex];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+        let title = pin.label || (card ? card.title : "Untitled Pin");
+        let subtitle = card
+          ? card.subtitle || ""
+          : pin.cardId == null
+          ? "Free pin (no source card)"
+          : "";
+
+        if (selectedPins.length > 1) {
+          title = `${selectedPins.length} Pins Selected`;
+          subtitle = "Use batch actions in the future!";
+        }
+
+        const note = pin.note || "";
+        const dateStr = pin.date || (card ? card.date : "");
+        const metaBits = [];
+        if (dateStr) metaBits.push(`Date: ${dateStr}`);
+        if (card) metaBits.push(`Source: ${card.category || "card"}`);
+        if (pin.cardId == null) metaBits.push("Detached from tray cards");
+
+        pinInfoTitle.textContent = title;
+        pinInfoSub.textContent = subtitle;
+        pinInfoNote.textContent =
+          note || "Double-click this pin to add a note.";
+        pinInfoMeta.textContent = metaBits.join(" • ");
+        pinInfoColor.style.background = pin.color || "#555";
+
+        pinInfo.style.display = "block";
+      }
+
+      let modalPinIndex = null;
+
+      function openPinModal(index) {
+        // ... (unchanged)
+        const pin = pins[index];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+        pmTitle.value = pin.label || (card ? card.title : "");
+        pmColor.value = pin.color || selectedColor;
+        pmDescription.value = pin.note || "";
+        pmDate.value = pin.date || (card ? card.date : "");
+
+        modalPinIndex = index;
+        pinModalBackdrop.style.display = "flex";
+        pmTitle.focus();
+        pmTitle.select();
+        closeRadialMenu(); // Close radial menu when modal opens
+      }
+
+      function closePinModal() {
+        // ... (unchanged)
+        modalPinIndex = null;
+        pinModalBackdrop.style.display = "none";
+      }
+
+      pinModalClose.onclick = closePinModal;
+      pmCancel.onclick = closePinModal;
+      pinModalBackdrop.addEventListener("click", (e) => {
+        if (e.target === pinModalBackdrop) closePinModal();
+      });
+
+      pmSave.onclick = () => {
+        // ... (unchanged)
+        if (modalPinIndex === null) return;
+
+        saveHistory();
+
+        const pin = pins[modalPinIndex];
+
+        const title = pmTitle.value.trim();
+        const color = pmColor.value.trim();
+        const note = pmDescription.value.trim();
+        const date = pmDate.value.trim();
+
+        if (title) pin.label = title;
+        if (color && /^#[0-9A-F]{6}$/i.test(color)) pin.color = color;
+        pin.note = note;
+        pin.date = date || "";
+
+        setSelectedPin(modalPinIndex);
+        closePinModal();
+        saveState(); // Save state after editing pin
+      };
+
+      function deleteSelectedPin() {
+        // ... (unchanged)
+        if (selectedPinIndex === null && selectedPins.length === 0) return;
+
+        saveHistory();
+
+        // Determine which indices to delete: single selectedPinIndex or the whole selectedPins array
+        const indicesToDelete =
+          selectedPinIndex !== null && selectedPins.length < 2
+            ? [selectedPinIndex]
+            : [...selectedPins];
+
+        // Sort indices in descending order to avoid index shifting problems during deletion
+        indicesToDelete.sort((a, b) => b - a);
+
+        indicesToDelete.forEach((removedIndex) => {
+          const removedPin = pins[removedIndex];
+
+          if (removedPin && removedPin.cardId != null) {
+            const card = cards.find((c) => c.id === removedPin.cardId);
+            if (card) card.used = false;
+          }
+
+          // Remove pin
+          pins.splice(removedIndex, 1);
+
+          // Adjust connections and other indices
+          connections = connections
+            .filter(
+              (c) =>
+                c.startIndex !== removedIndex && c.endIndex !== removedIndex
+            )
+            .map((c) => {
+              const nc = { ...c };
+              if (nc.startIndex > removedIndex) nc.startIndex--;
+              if (nc.endIndex > removedIndex) nc.endIndex--;
+              return nc;
+            });
+
+          function adjustIndex(idx) {
+            if (idx === null || idx === undefined) return null;
+            if (idx === removedIndex) return null;
+            if (idx > removedIndex) return idx - 1;
+            return idx;
+          }
+
+          tempStartIndex = adjustIndex(tempStartIndex);
+          connectStartIndex = adjustIndex(connectStartIndex);
+          // We'll manage selectedPinIndex/selectedPins outside this loop
+          // to ensure setSelectedPin is called only once at the end
+          selectedPins = selectedPins
+            .filter((idx) => idx !== removedIndex)
+            .map(adjustIndex);
+        });
+
+        if (selectedPins.length > 0) {
+          // Re-select the first pin if multiple were deleted
+          setSelectedPin(selectedPins[0]);
+        } else {
+          setSelectedPin(null);
+        }
+
+        closeRadialMenu();
+        renderCards(); // Update cards after deletion
+        saveState(); // Save state after deletion
+
+        draw();
+      }
+
+      function parseDate(dateStr) {
+        // ... (unchanged)
+        if (!dateStr) return null;
+        const yearMatch = dateStr.match(/\d{4}/);
+        if (yearMatch) return new Date(yearMatch[0], 0, 1).getTime();
+        const parsed = Date.parse(dateStr);
+        return isNaN(parsed) ? null : parsed;
+      }
+
+      // === LAYOUT FUNCTIONS (UNCHANGED) ===
+
+      function layoutRadial() {
+        // ...
+        if (isLayoutSimulating) applyLayout();
+
+        const targets = getTargetPins();
+        if (targets.length < 1) return;
+
+        saveHistory();
+
+        let cx = 0,
+          cy = 0;
+        targets.forEach((p) => {
+          cx += p.x;
+          cy += p.y;
+        });
+        cx /= targets.length;
+        cy /= targets.length;
+
+        const centralIndex =
+          targets.length === 1 ? 0 : Math.floor(targets.length / 2);
+        const centralPin = targets[centralIndex];
+        centralPin.x = cx;
+        centralPin.y = cy;
+
+        const radiusStep = 180;
+        let ring = 0;
+        let countInRing = 0;
+
+        targets.forEach((pin, i) => {
+          if (i === centralIndex) return;
+
+          if (countInRing === 0) {
+            const maxInRing = 6 + ring * 3;
+            countInRing = maxInRing;
+          }
+
+          const angle = (i % countInRing) * ((Math.PI * 2) / countInRing);
+          const radius = 120 + ring * radiusStep;
+
+          pin.x = cx + Math.cos(angle) * radius;
+          pin.y = cy + Math.sin(angle) * radius;
+
+          countInRing--;
+          if (countInRing === 0) ring++;
+        });
+
+        draw();
+      }
+
+      function layoutAffinity() {
+        // ...
+        if (isLayoutSimulating) applyLayout();
+
+        const targets = getTargetPins();
+        if (targets.length < 2) return;
+
+        saveHistory();
+
+        const groups = {};
+        targets.forEach((pin) => {
+          const key = pin.color || "#888888";
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(pin);
+        });
+
+        if (Object.keys(groups).length <= 1) {
+          const shuffled = [...targets];
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
+          const groupCount = Math.min(
+            5,
+            Math.max(3, Math.floor(targets.length / 4))
+          );
+          for (let i = 0; i < shuffled.length; i++) {
+            const key = "group_" + (i % groupCount);
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(shuffled[i]);
+          }
+        }
+
+        let gx = -400;
+        Object.values(groups).forEach((group) => {
+          if (group.length === 1) {
+            group[0].x += gx;
+            group[0].y += (Math.random() - 0.5) * 200;
+            gx += 800;
+            return;
+          }
+
+          const cx = group.reduce((s, p) => s + p.x, 0) / group.length + gx;
+          const cy = group.reduce((s, p) => s + p.y, 0) / group.length;
+
+          group.forEach((pin, i) => {
+            const angle =
+              (i / group.length) * Math.PI * 2 + Math.random() * 0.6;
+            const radius = 100 + group.length * 15 + Math.random() * 60;
+            pin.x = cx + Math.cos(angle) * radius;
+            pin.y = cy + Math.sin(angle) * radius;
+          });
+
+          gx += 800;
+        });
+
+        draw();
+      }
+
+      function layoutTimeline() {
+        // ...
+        if (isLayoutSimulating) applyLayout();
+
+        const timedPins = pins
+          .map((pin) => {
+            const card =
+              pin.cardId != null
+                ? cards.find((c) => c.id === pin.cardId)
+                : null;
+            const dateStr = pin.date || (card ? card.date : "");
+            return { pin, dateStr };
+          })
+          .filter((tp) => tp.dateStr);
+
+        if (timedPins.length < 2) {
+          alert("Need at least 2 pins with dates on the board!");
+          return;
+        }
+
+        saveHistory();
+
+        timedPins.forEach((tp) => (tp.timestamp = parseDate(tp.dateStr)));
+        timedPins.sort((a, b) => a.timestamp - b.timestamp);
+        timelinePins = timedPins;
+
+        const minTime = timedPins[0].timestamp;
+        const maxTime = timedPins[timedPins.length - 1].timestamp;
+
+        const lowestY = pins.length ? Math.max(...pins.map((p) => p.y)) : 0;
+        const footerMarginWorld = 200 / scale;
+        timelineY = lowestY + footerMarginWorld;
+
+        const allXs = pins.map((p) => p.x);
+        const minX = allXs.length ? Math.min(...allXs) : 0;
+        const maxX = allXs.length ? Math.max(...allXs) : 1000;
+        const horizontalPaddingWorld = 150 / scale;
+        timelineLeft = minX - horizontalPaddingWorld;
+        timelineRight = maxX + horizontalPaddingWorld;
+        const worldSpan = timelineRight - timelineLeft || 1;
+
+        const offsetWorld = 120 / scale;
+
+        timelineActive = true;
+
+        timedPins.forEach((tp, i) => {
+          const t = (tp.timestamp - minTime) / (maxTime - minTime || 1);
+          tp.pin.x = timelineLeft + t * worldSpan;
+          tp.pin.y = timelineY + (i % 2 === 0 ? -offsetWorld : offsetWorld);
+        });
+
+        const footerScreenY = timelineY * scale + translateY;
+        if (footerScreenY > canvas.height - 80) {
+          translateY -= footerScreenY - (canvas.height - 80);
+        }
+
+        draw();
+      }
+
+      function renderCards() {
+        // ... (unchanged, but now loads initial state from the global `cards` array)
+        cardList.innerHTML = "";
+        cards.forEach((c) => {
+          const div = document.createElement("div");
+          div.className = "card" + (c.used ? " used" : "");
+          div.draggable = true;
+          div.style.borderLeftColor = c.color;
+          div.innerHTML = `
+        <div class="card-icon">${c.icon}</div>
+        <div class="card-title">${c.title}</div>
+        <div class="card-subtitle">${c.subtitle}</div>
+        <div class="card-date">${c.date}</div>
+      `;
+          div.ondragstart = (e) => e.dataTransfer.setData("cardId", c.id);
+          div.ondragend = () => (div.style.opacity = "1");
+          div.ondblclick = () => {
+            const pinIdx = pins.findIndex((p) => p.cardId === c.id);
+            if (pinIdx !== -1) setSelectedPin(pinIdx);
+            div.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          };
+          cardList.appendChild(div);
+        });
+        const add = document.createElement("div");
+        add.className = "card";
+        add.style.borderLeftColor = "#666";
+        add.innerHTML =
+          '<div style="font-size:48px;color:#666;display:grid;place-items:center;height:100%">+</div>';
+        add.onclick = () => {
+          const title = prompt("New card title:") || "Untitled";
+          const subtitle = prompt("Subtitle:") || "";
+          const date = prompt("Date:") || "";
+          const icon = prompt("Icon (emoji):") || "📝";
+          const color = prompt("Color (hex):") || "#666";
+
+          if (title) {
+            cards.push({
+              id: nextId++,
+              title,
+              subtitle,
+              date,
+              icon,
+              color,
+              category: "custom",
+              used: false,
+            });
+            renderCards();
+            saveHistory();
+            saveState(); // Save state after adding card
+          }
+        };
+        cardList.appendChild(add);
+      }
+
+      // ===========================================
+      // === Radial Menu Logic (Feature 3) ===
+      // ===========================================
+
+      function openRadialMenu(pinIndex, screenX, screenY) {
+        closeRadialMenu(); // Close any existing menu
+        setSelectedPin(pinIndex); // Select the pin before opening the menu
+
+        const pin = pins[pinIndex];
+        const radius = 70; // Distance from center
+        const items = [
+          { icon: "🔗", action: "connect", title: "Connect" },
+          { icon: "✏️", action: "edit", title: "Edit" },
+          {
+            icon: "🗑️",
+            action: "delete",
+            title: "Delete",
+            className: "delete",
+          },
+          { icon: "⭐", action: "focus", title: "Focus" },
+        ];
+
+        radialMenuEl.style.left = screenX + "px";
+        radialMenuEl.style.top = screenY + "px";
+        radialMenuEl.style.display = "block";
+
+        items.forEach((item, i) => {
+          const angle = (i / items.length) * Math.PI * 2;
+          const x = screenX + radius * Math.cos(angle - Math.PI / 2) - 24; // -24 for half width/height
+          const y = screenY + radius * Math.sin(angle - Math.PI / 2) - 24;
+
+          const itemEl = document.createElement("div");
+          itemEl.className =
+            "radial-item" + (item.className ? " " + item.className : "");
+          itemEl.innerHTML = item.icon;
+          itemEl.style.left = x + "px";
+          itemEl.style.top = y + "px";
+          itemEl.title = item.title;
+
+          itemEl.onclick = (e) => {
+            e.stopPropagation();
+            closeRadialMenu();
+            executeRadialAction(item.action, pinIndex);
+          };
+          radialMenuEl.appendChild(itemEl);
+        });
+
+        // Add a click listener to the radial menu container to stop propagation
+        radialMenuEl.onclick = (e) => e.stopPropagation();
+      }
+
+      function closeRadialMenu() {
+        radialMenuEl.innerHTML = "";
+        radialMenuEl.style.display = "none";
+        radialMenuEl.onclick = null;
+      }
+
+      function executeRadialAction(action, pinIndex) {
+        switch (action) {
+          case "connect":
+            connectStartIndex = pinIndex;
+            break;
+          case "edit":
+            openPinModal(pinIndex);
+            break;
+          case "delete":
+            if (confirm("Delete this pin?")) deleteSelectedPin();
+            break;
+          case "focus":
+            // For now, simple zoom in on the pin
+            const screen = worldToScreen(pins[pinIndex].x, pins[pinIndex].y);
+            scale = 1.5;
+            translateX = canvas.width / 2 - screen.x;
+            translateY = canvas.height / 2 - screen.y;
+            saveState(); // Save new camera state
+            break;
+        }
+        draw();
+      }
+
+      // Close menu when clicking anywhere else
+      window.addEventListener("click", closeRadialMenu);
+
+      // ===========================================
+      // === DRAWING FUNCTIONS ===
+
+      function lightenColor(hex, percent) {
+        const num = parseInt(hex.slice(1), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) + amt;
+        const G = ((num >> 8) & 0x00ff) + amt;
+        const B = (num & 0x0000ff) + amt;
+        return (
+          "#" +
+          (
+            0x1000000 +
+            (R < 255 ? R : 255) * 0x10000 +
+            (G < 255 ? G : 255) * 0x100 +
+            (B < 255 ? B : 255)
+          )
+            .toString(16)
+            .slice(1)
+        );
+      }
+
+      function roundRectPath(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.lineTo(x + w - rr, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+        ctx.lineTo(x + w, y + h - rr);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+        ctx.lineTo(x + rr, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+        ctx.lineTo(x, y + rr);
+        ctx.quadraticCurveTo(x, y, x + rr, y);
+        ctx.closePath();
+      }
+
+      function drawPinShape(pin, metrics, index) {
+        const scr = worldToScreen(pin.x, pin.y);
+        const m = metrics;
+        const isSelected = index === selectedPinIndex;
+
+        // CRITICAL: Define scale for easy access and application
+        const s = scale;
+
+        if (m.shape === "card") {
+          const s = scale;
+          const w = m.width * s;
+          const h = m.height * s;
+          const x = scr.x - w / 2;
+          const y = scr.y - h / 2;
+
+          // --- 1. Draw Base Shadow (COMPARTMENTALIZED DRAWING) ---
+          ctx.beginPath(); // **CRITICAL: Start new path**
+          ctx.fillStyle = "rgba(0,0,0,0.4)";
+          roundRectPath(ctx, x + 3 * s, y + 3 * s, w, h, 6 * s);
+          ctx.closePath();
+          ctx.fill();
+
+          // --- 2. Draw Main Card Body ---
+          ctx.beginPath(); // **CRITICAL: Start new path**
+          ctx.fillStyle = pin.color;
+          roundRectPath(ctx, x, y, w, h, 6 * s);
+          ctx.closePath();
+          ctx.fill();
+
+          // --- 3. Draw Variants (Folder Tab and Document Header) ---
+          if (m.variant === "document") {
+            // Document Card Header Shadow/Block
+            ctx.beginPath(); // **CRITICAL: Start new path for variant**
+            ctx.fillStyle = "rgba(0,0,0,0.16)";
+            roundRectPath(
+              ctx,
+              x + 4 * s,
+              y + 4 * s,
+              w - 8 * s,
+              h * 0.25,
+              4 * s
+            );
+            ctx.closePath();
+            ctx.fill();
+          } else if (m.variant === "folder") {
+            // Folder Tab (Lightened Color)
+            const tabW = w * 0.4;
+            const tabH = h * 0.3;
+            ctx.beginPath(); // **CRITICAL: Start new path for variant**
+            ctx.fillStyle = lightenColor(pin.color, 12);
+            roundRectPath(ctx, x + 6 * s, y - tabH * 0.5, tabW, tabH, 4 * s);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          // --- 4. Inner Lines (Scaled) ---
+          const innerX = x + 0.16 * w;
+          const innerW = w - 0.32 * w;
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(0,0,0,0.32)";
+          for (let row = 0; row < 3; row++) {
+            const ly = y + 0.35 * h + row * (h * 0.18);
+            ctx.beginPath(); // Each line needs its own path
+            ctx.moveTo(innerX, ly);
+            ctx.lineTo(innerX + innerW, ly);
+            ctx.closePath();
+            ctx.stroke();
+          }
+
+          // --- 5. Selection Border ---
+          if (isSelected) {
+            ctx.beginPath(); // **CRITICAL: Start new path for selection**
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            roundRectPath(
+              ctx,
+              x - 3 * s,
+              y - 6 * s,
+              w + 6 * s,
+              h + 10 * s,
+              8 * s
+            );
+            ctx.closePath();
+            ctx.stroke();
+          }
+
+          // Marquee Selection Highlight
+          if (selectedPins.includes(index)) {
+            ctx.beginPath(); // **CRITICAL: Start new path for marquee**
+            ctx.strokeStyle = "#f90";
+            ctx.lineWidth = 4 / s;
+            roundRectPath(ctx, x, y, w, h, 6 * s);
+            ctx.closePath();
+            ctx.stroke();
+          }
+
+          // --- 6. Label (No path drawing needed) ---
+          if (pin.label) {
+            ctx.font = `bold ${15 * s}px system-ui`;
+            ctx.textAlign = "center";
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 23 * s);
+            ctx.fillStyle = "white";
+            ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 21 * s);
+          }
+        } else if (m.shape === "rect" || m.shape === "pill") {
+          // --- Logic for Rectangular/Pill Pins (Scaled) ---
+          const w = m.width * s;
+          const h = m.height * s;
+          const x = scr.x - w / 2;
+          const y = scr.y - h / 2;
+          const r = m.shape === "pill" ? h / 2 : 6 * s;
+
+          ctx.fillStyle = "rgba(0,0,0,0.4)";
+          roundRectPath(ctx, x + 3 * s, y + 3 * s, w, h, r);
+          ctx.fill();
+
+          ctx.fillStyle = pin.color;
+          roundRectPath(ctx, x, y, w, h, r);
+          ctx.fill();
+
+          if (isSelected) {
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            roundRectPath(
+              ctx,
+              x - 3 * s,
+              y - 3 * s,
+              w + 6 * s,
+              h + 6 * s,
+              r + 2 * s
+            );
+            ctx.stroke();
+          }
+
+          if (selectedPins.includes(index)) {
+            ctx.strokeStyle = "#f90";
+            ctx.lineWidth = 4 / s;
+            roundRectPath(ctx, x, y, w, h, r);
+            ctx.stroke();
+          }
+
+          if (pin.label) {
+            ctx.font = `bold ${15 * s}px system-ui`;
+            ctx.textAlign = "center";
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 23 * s);
+            ctx.fillStyle = "white";
+            ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 21 * s);
+          }
+        } else {
+          // Circle pins
+          // --- Logic for Circle Pins (Scaled) ---
+          const r = m.radius * s;
+
+          ctx.fillStyle = "rgba(0,0,0,0.4)";
+          ctx.beginPath();
+          ctx.arc(scr.x + 3 * s, scr.y + 3 * s, r, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = pin.color;
+          ctx.beginPath();
+          ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "rgba(255,255,255,0.5)";
+          ctx.beginPath();
+          ctx.arc(
+            scr.x - 2 * s,
+            scr.y - 2 * s,
+            Math.max(4 * s, r * 0.45),
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+
+          if (isSelected) {
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(scr.x, scr.y, r + 4 * s, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          if (selectedPins.includes(index)) {
+            ctx.strokeStyle = "#f90";
+            ctx.lineWidth = 4 / s;
+            ctx.beginPath();
+            ctx.arc(scr.x, scr.y, r + 4 * s, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          if (pin.label) {
+            ctx.font = `bold ${15 * s}px system-ui`;
+            ctx.textAlign = "center";
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillText(pin.label, scr.x, scr.y + r + 23 * s);
+            ctx.fillStyle = "white";
+            ctx.fillText(pin.label, scr.x, scr.y + r + 21 * s);
+          }
+        }
+      }
+
+      function drawTimeline() {
+        // ... (unchanged)
+        if (!timelineActive || timelinePins.length < 2) return;
+
+        // Timeline Line
+        ctx.strokeStyle = "#58a6ff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const start = worldToScreen(timelineLeft, timelineY);
+        const end = worldToScreen(timelineRight, timelineY);
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+
+        // Pin Connectors
+        ctx.strokeStyle = "#58a6ff";
+        ctx.lineWidth = 1.5;
+        timelinePins.forEach((tp) => {
+          const pinScreen = worldToScreen(tp.pin.x, tp.pin.y);
+          const timelineScreen = worldToScreen(tp.pin.x, timelineY);
+          ctx.beginPath();
+          ctx.moveTo(pinScreen.x, pinScreen.y);
+          ctx.lineTo(timelineScreen.x, timelineScreen.y);
+          ctx.stroke();
+
+          // Date Labels (only draw if scale is high enough)
+          if (scale > 0.5) {
+            ctx.fillStyle = "#e6edf3";
+            ctx.font = `${(14 * scale) / Math.sqrt(scale)}px system-ui`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillText(tp.dateStr, timelineScreen.x, timelineScreen.y + 10);
+          }
+        });
+      }
+
+      function drawConnections() {
+        // Draw all connections between pins
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 1.5 / scale; // Line width scales inversely with zoom for consistent look
+
+        connections.forEach((c) => {
+          const startPin = pins[c.startIndex];
+          const endPin = pins[c.endIndex];
+
+          // Skip if pins are deleted or indices are invalid
+          if (!startPin || !endPin) return;
+
+          const start = worldToScreen(startPin.x, startPin.y);
+          const end = worldToScreen(endPin.x, endPin.y);
+
+          ctx.beginPath();
+          ctx.moveTo(start.x, start.y);
+          ctx.lineTo(end.x, end.y);
+          ctx.stroke();
+        });
+
+        // Draw potential connection line
+        if (connectStartIndex !== null) {
+          const startPin = pins[connectStartIndex];
+          if (startPin) {
+            const start = worldToScreen(startPin.x, startPin.y);
+            const mouseWorld = screenToWorld(mousePos.x, mousePos.y);
+            const end = worldToScreen(mouseWorld.x, mouseWorld.y);
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 3 / scale;
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw connections
+        ctx.lineWidth = 2;
+        connections.forEach((c) => {
+          const p1 = pins[c.startIndex];
+          const p2 = pins[c.endIndex];
+          if (!p1 || !p2) return;
+
+          const s1 = worldToScreen(p1.x, p1.y);
+          const s2 = worldToScreen(p2.x, p2.y);
+
+          // Hide connections if zoomed out too far (Feature 1)
+          if (scale < 0.1) return;
+
+          ctx.strokeStyle = c.color || "#999";
+          ctx.beginPath();
+          ctx.moveTo(s1.x, s1.y);
+          ctx.lineTo(s2.x, s2.y);
+          ctx.stroke();
+        });
+
+        // --- NEW LOGIC: DETERMINE ACTIVE LINE START INDEX ---
+        let activeLineStartIndex = null;
+        if (connectStartIndex !== null) {
+          // Priority 1: Right-click connection is active (always draw squiggly line)
+          activeLineStartIndex = connectStartIndex;
+        } else if (currentTool === "pin" && selectedPinIndex !== null) {
+          // Priority 2: Pin tool is selected AND a pin is selected (draw squiggly line)
+          activeLineStartIndex = selectedPinIndex;
+        }
+        // ---------------------------------------------------
+
+        // Draw temporary connection line (WAVE EFFECT)
+        if (activeLineStartIndex !== null) {
+          const p1 = pins[activeLineStartIndex];
+          const s1 = worldToScreen(p1.x, p1.y);
+
+          // Animate the line dash offset for the "moving" effect
+          ctx.lineDashOffset = -((time * 0.5) % 10);
+
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 2; // Thicker line for better visibility
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(s1.x, s1.y);
+
+          // Calculate distance and number of segments for the wave
+          const dx = mouseScreenX - s1.x;
+          const dy = mouseScreenY - s1.y;
+          const distance = Math.hypot(dx, dy);
+          const segments = Math.max(3, Math.floor(distance / (30 * scale)));
+
+          // Wave parameters
+          const waveMagnitude = 10 * Math.sqrt(scale);
+          const waveSpeed = time * 0.05;
+
+          for (let i = 1; i <= segments; i++) {
+            const t = i / segments;
+            const x = s1.x + dx * t;
+            const y = s1.y + dy * t;
+
+            const perpX = -dy / distance;
+            const perpY = dx / distance;
+
+            // Apply sine wave based on time and position.
+            const wave =
+              Math.sin(t * Math.PI) *
+              Math.sin(t * 10 + waveSpeed) *
+              waveMagnitude;
+
+            ctx.lineTo(x + perpX * wave, y + perpY * wave);
+          }
+
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.lineDashOffset = 0; // Reset offset
+          ctx.lineWidth = 1; // Reset line width for subsequent drawing
+        }
+
+        // Draw pins
+        pins.forEach((pin, index) => {
+          const metrics = getPinMetrics(index);
+          drawPinShape(pin, metrics, index); // PASS INDEX HERE
+        });
+
+        // Draw timeline (if active)
+        drawTimeline();
+
+        // --- NEW LOGIC: Draw Marquee Selection Box ---
+        if (marqueeStart && marqueeEnd) {
+          ctx.beginPath();
+          const startScreen = worldToScreen(marqueeStart.x, marqueeStart.y);
+          const endScreen = worldToScreen(marqueeEnd.x, marqueeEnd.y);
+
+          const x = startScreen.x;
+          const y = startScreen.y;
+          const w = endScreen.x - startScreen.x;
+          const h = endScreen.y - startScreen.y;
+
+          ctx.rect(x, y, w, h);
+          ctx.fillStyle = "rgba(255, 153, 0, 0.1)";
+          ctx.fill();
+          ctx.strokeStyle = "#f90";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]); // Reset line dash state
+        }
+        // --- END MARQUEE DRAWING ---
+
+        // This is a game-style animation loop, so requestAnimationFrame is still needed
+        // but now the position updates come from the worker.
+        if (!isLayoutSimulating) {
+          time += 1; // Increment time for animation
+          animId = requestAnimationFrame(draw);
+        }
+      }
+
+      // === EVENT HANDLERS ===
+
+      let isPanning = false;
+      let dragPinIndex = null;
+      let lastPinchDist = 0;
+
+      // ===================================================
+      // CRITICAL FIX: Zoom-to-Cursor AND Keyboard Panning
+      // ===================================================
+      canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          isUserInteracting = true;
+
+          // --- NEW LOGIC: Keyboard Panning ---
+          if (e.ctrlKey || e.shiftKey || e.metaKey) {
+            // Pan left/right if deltaX is available, otherwise use deltaY for vertical pan.
+            // Pan amount scaled correctly with current zoom level
+            const panAmount = 2 / scale;
+            if (e.deltaX !== 0) {
+              translateX -= e.deltaX * panAmount * scale;
+            }
+            if (e.deltaY !== 0) {
+              translateY -= e.deltaY * panAmount * scale;
+            }
+            saveState();
+            draw();
+            return;
+          }
+          // --- END NEW LOGIC ---
+
+          const zoomSpeed = 1.05;
+          // Determine if zooming in (deltaY < 0) or out (deltaY > 0)
+          const delta = e.deltaY > 0 ? 1 / zoomSpeed : zoomSpeed;
+
+          // 1. Get the mouse position relative to the CANVAS's top-left corner
+          const rect = canvas.getBoundingClientRect();
+          const screenX = e.clientX - rect.left;
+          const screenY = e.clientY - rect.top;
+
+          // 2. Calculate the world coordinate UNDER the mouse *before* scaling
+          const wx = (screenX - translateX) / scale;
+          const wy = (screenY - translateY) / scale;
+
+          // 3. Apply the scale change
+          const oldScale = scale;
+          scale *= delta;
+          scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+
+          // If scale didn't change (hit min/max), do nothing
+          if (scale === oldScale) return;
+
+          // 4. Adjust offsets (Pan) so the world coordinate (wx, wy) remains under the mouse (screenX, screenY)
+          translateX = screenX - wx * scale;
+          translateY = screenY - wy * scale;
+
+          saveState();
+          draw();
+        },
+        { passive: false }
+      ); // Set to false because we use e.preventDefault()
+
+      // End CRITICAL FIX for Zoom
+
+      canvas.onmousedown = (e) => {
+        e.preventDefault();
+        isUserInteracting = true;
+
+        // Correct Y coordinate for canvas offset: e.clientY - MENU_HEIGHT
+        const world = screenToWorld(e.clientX, e.clientY - MENU_HEIGHT);
+        prevScreenX = e.clientX;
+        prevScreenY = e.clientY;
+        didDrag = false;
+        closeRadialMenu(); // Close radial menu on new click
+
+        if (e.button === 0) {
+          // Left click
+          let hit = false;
+          for (let i = pins.length - 1; i >= 0; i--) {
+            const pin = pins[i];
+            const metrics = getPinMetrics(i);
+            const r = metrics.radius;
+            const sx = pin.x;
+            const sy = pin.y;
+
+            if (Math.hypot(world.x - sx, world.y - sy) < r) {
+              dragPinIndex = i;
+              hit = true;
+              if (connectStartIndex !== null) {
+                finalizeConnection(i);
+                return;
+              }
+              setSelectedPin(i);
+              // selectedPins = [i]; // Handled inside setSelectedPin
+              break;
+            }
+          }
+
+          if (!hit && currentTool === "pan") {
+            isPanning = true;
+            setSelectedPin(null); // Clears single and marquee selection when starting a pan
+          } else if (!hit && currentTool === "select") {
+            // NEW LOGIC: Start Marquee Selection
+            // setSelectedPin(null); // Don't deselect yet, we might be adding to a selection
+            // Only clear previous selection if Ctrl/Cmd is NOT held down
+            if (!(e.ctrlKey || e.metaKey)) {
+              setSelectedPin(null); // Clear all selections before starting a new marquee
+            }
+            marqueeStart = world;
+            marqueeEnd = world;
+            draw();
+          } else if (!hit && currentTool === "pin") {
+            // Pin creation on empty space
+            const previousIndex = selectedPinIndex; // Capture current selection
+
+            const newPin = {
+              x: world.x,
+              y: world.y,
+              color: selectedColor,
+              label: "",
+              note: "",
+              date: "",
+              typeId: currentTypeId,
+            };
+            pins.push(newPin);
+            const newIndex = pins.length - 1;
+
+            // --- FEATURE MODIFICATION: Branching from Right-Click Connection ---
+            if (connectStartIndex !== null) {
+              // Priority 1: If connection started by right-click (dashed line visible), connect and keep parent selected.
+              finalizeConnection(newIndex);
+            } else {
+              // Priority 2: Fallback to existing behavior:
+
+              // NEW FIX: Automatic Connection (Issue 2)
+              if (previousIndex !== null) {
+                connections.push({
+                  startIndex: previousIndex,
+                  endIndex: newIndex,
+                  color: selectedColor,
+                });
+              }
+
+              // Set the newly created pin as selected
+              setSelectedPin(newIndex);
+            }
+            // ----------------------------------------------------------------------
+
+            dragPinIndex = newIndex;
+            // selectedPins = [newIndex]; // Handled inside setSelectedPin
+            saveHistory();
+            saveState();
+          }
+        }
+      };
+
+      canvas.onmousemove = (e) => {
+        // Correct Y coordinate for canvas offset: e.clientY - MENU_HEIGHT
+        mouseScreenX = e.clientX;
+        mouseScreenY = e.clientY - MENU_HEIGHT;
+        isUserInteracting = true;
+
+        if (isLayoutSimulating) return;
+
+        const world = screenToWorld(e.clientX, e.clientY - MENU_HEIGHT);
+
+        if (dragPinIndex !== null) {
+          didDrag = true;
+          pins[dragPinIndex].x = world.x;
+          pins[dragPinIndex].y = world.y;
+          draw();
+        } else if (isPanning) {
+          didDrag = true;
+          translateX += e.clientX - prevScreenX;
+          translateY += e.clientY - prevScreenY;
+          prevScreenX = e.clientX;
+          prevScreenY = e.clientY;
+          draw();
+        } else if (marqueeStart !== null) {
+          // NEW LOGIC: Update Marquee End
+          didDrag = true;
+          marqueeEnd = world;
+          draw();
+        }
+      };
+
+      canvas.onmouseup = (e) => {
+        isPanning = false;
+        isUserInteracting = true;
+
+        // --- NEW LOGIC: Finalize Marquee Selection ---
+        if (marqueeStart !== null) {
+          // Calculate the selection box boundaries
+          const minX = Math.min(marqueeStart.x, marqueeEnd.x);
+          const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
+          const minY = Math.min(marqueeStart.y, marqueeEnd.y);
+          const maxY = Math.max(marqueeStart.y, marqueeEnd.y);
+
+          let newlySelected = [];
+
+          pins.forEach((pin, index) => {
+            // Use pin center plus a small buffer for hit detection
+            const buffer = 5 / scale;
+            if (
+              pin.x >= minX - buffer &&
+              pin.x <= maxX + buffer &&
+              pin.y >= minY - buffer &&
+              pin.y <= maxY + buffer
+            ) {
+              newlySelected.push(index);
+            }
+          });
+
+          // Apply selection: Preserve existing if Ctrl/Cmd was held, otherwise replace
+          if (e.ctrlKey || e.metaKey) {
+            // Merge newly selected pins with existing, preventing duplicates
+            newlySelected.forEach((idx) => {
+              if (!selectedPins.includes(idx)) {
+                selectedPins.push(idx);
+              }
+            });
+          } else {
+            selectedPins = newlySelected;
+          }
+
+          marqueeStart = null;
+          marqueeEnd = null;
+
+          // Set the single selected pin to the first in the group for the info panel
+          selectedPinIndex = selectedPins.length > 0 ? selectedPins[0] : null;
+
+          draw(); // Redraw with final selection
+          renderSelectedPinInfo();
+          dragPinIndex = null;
+          didDrag = false;
+          return; // Skip the radial menu logic if marquee was used
+        }
+
+        if (dragPinIndex !== null) {
+          if (!didDrag) {
+            // Trigger Radial Menu (Feature 3) on click (no drag)
+            const pin = pins[dragPinIndex];
+            const screen = worldToScreen(pin.x, pin.y);
+            // openRadialMenu expects absolute screen coordinates
+            openRadialMenu(dragPinIndex, screen.x, screen.y + MENU_HEIGHT); // CRITICAL FIX: Add MENU_HEIGHT
+          } else {
+            saveHistory(); // Save position after drag
+            saveState(); // Save final positions
+          }
+        }
+
+        dragPinIndex = null;
+      };
+
+      canvas.ondblclick = (e) => {
+        e.preventDefault();
+        // Open modal if a pin is hit
+        const { x, y } = screenToWorld(e.clientX, e.clientY - MENU_HEIGHT); // CRITICAL FIX: Y-coord
+        for (let i = pins.length - 1; i >= 0; i--) {
+          const pin = pins[i];
+          const metrics = getPinMetrics(i);
+          const r = metrics.radius;
+          if (Math.hypot(x - pin.x, y - pin.y) < r) {
+            openPinModal(i);
+            return;
+          }
+        }
+      };
+
+      canvas.oncontextmenu = (e) => {
+        e.preventDefault();
+        let hitPinIndex = null;
+        const { x, y } = screenToWorld(e.clientX, e.clientY - MENU_HEIGHT); // CRITICAL FIX: Y-coord
+
+        for (let i = pins.length - 1; i >= 0; i--) {
+          const pin = pins[i];
+          const metrics = getPinMetrics(i);
+          const r = metrics.radius;
+          if (Math.hypot(x - pin.x, y - pin.y) < r) {
+            hitPinIndex = i;
+            break;
+          }
+        }
+
+        if (hitPinIndex !== null) {
+          if (connectStartIndex === null) {
+            // Start connection
+            connectStartIndex = hitPinIndex;
+            setSelectedPin(hitPinIndex);
+          } else if (connectStartIndex === hitPinIndex) {
+            // Cancel connection AND deselect
+            connectStartIndex = null;
+            setSelectedPin(null); // CRITICAL FIX 2: Deselect on right-click same pin
+          } else {
+            // Complete connection
+            finalizeConnection(hitPinIndex);
+          }
+        } else {
+          // Cancel connection AND deselect if clicking empty space
+          connectStartIndex = null;
+          setSelectedPin(null); // CRITICAL FIX 2: Deselect on right-click empty space
+        }
+        draw();
+      };
+
+      function finalizeConnection(endIndex) {
+        if (connectStartIndex === endIndex) return;
+
+        const exists = connections.some(
+          (c) =>
+            (c.startIndex === connectStartIndex && c.endIndex === endIndex) ||
+            (c.startIndex === endIndex && c.endIndex === connectStartIndex)
+        );
+
+        if (!exists) {
+          saveHistory();
+          connections.push({
+            startIndex: connectStartIndex,
+            endIndex: endIndex,
+            color: selectedColor,
+          });
+          // Pin metrics update is no longer needed here as it only affected size, which we removed.
+        }
+
+        // DO NOT call setSelectedPin(endIndex) here, as the new feature requires
+        // the original pin (connectStartIndex) to remain selected.
+        saveState(); // Save state after connection
+        draw();
+      }
+
+      // --- DRAG AND DROP (Cards) ---
+      canvas.ondragover = (e) => e.preventDefault();
+      canvas.ondrop = (e) => {
+        e.preventDefault();
+        const cardId = parseInt(e.dataTransfer.getData("cardId"));
+        const card = cards.find((c) => c.id === cardId);
+
+        if (card && !card.used) {
+          saveHistory();
+          const previousIndex = selectedPinIndex; // Capture current selection
+
+          const { x, y } = screenToWorld(e.clientX, e.clientY - MENU_HEIGHT); // CRITICAL FIX: Y-coord
+
+          const newPin = {
+            x,
+            y,
+            color: card.color || selectedColor,
+            label: card.title,
+            note: "",
+            date: card.date,
+            cardId: card.id,
+            typeId: selectedTypeByFamily.card, // <--- NOW USES THE SELECTED CARD TYPE
+          };
+
+          pins.push(newPin);
+          card.used = true;
+          renderCards();
+          const newIndex = pins.length - 1; // Get the index of the new pin
+
+          // --- FEATURE MODIFICATION: Branching from Right-Click Connection ---
+          if (connectStartIndex !== null) {
+            // Priority 1: If connection started by right-click (dashed line is visible):
+            // 1. Finalize the connection (connects newIndex to connectStartIndex).
+            finalizeConnection(newIndex);
+            // 2. DO NOT call setSelectedPin(newIndex), keeping the original pin selected.
+          } else {
+            // Priority 2: Fallback to existing behavior (no right-click connection active):
+
+            // NEW FIX: Automatic Connection (Issue 2) - connect to the last selected pin
+            if (previousIndex !== null) {
+              connections.push({
+                startIndex: previousIndex,
+                endIndex: newIndex,
+                color: selectedColor,
+              });
+            }
+
+            // Set the newly placed pin as selected
+            setSelectedPin(newIndex);
+          }
+          // ----------------------------------------------------------------------
+
+          saveState(); // Save state after dropping card
+          draw();
+        }
+      };
+
+      // --- GLOBAL EVENT LISTENERS ---
+
+      window.onresize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - MENU_HEIGHT - TRAY_HEIGHT; // Corrected calculation
+        draw();
+      };
+
+      // Get the control buttons
+      const resetBtn = document.getElementById("reset");
+      const magicBtn = document.getElementById("magic");
+      const radialBtn = document.getElementById("radial");
+      const clustersBtn = document.getElementById("clusters");
+      const timelineBtn = document.getElementById("timeline");
+
+      // Attach the click handlers to activate the layouts
+      magicBtn.onclick = () => applyLayout("default");
+      radialBtn.onclick = () => applyLayout("mindmap");
+      clustersBtn.onclick = () => applyLayout("clusters");
+      timelineBtn.onclick = () => applyLayout("timeline");
+
+      resetBtn.onclick = () => {
+        if (
+          confirm("Are you sure you want to reset the board (clear all data)?")
+        ) {
+          localStorage.removeItem(STORAGE_KEY);
+          window.location.reload();
+        }
+      };
+
+      // === NEW FIX: FAMILY & VARIANT CYCLING WITH NUMBER KEYS (Issue 1) ===
+      function selectFamily(family) {
+        currentFamily = family;
+        // Keep the last selected variant for this family, or default to first
+        const fallback = NODE_TYPES.find((t) => t.family === family);
+        currentTypeId =
+          selectedTypeByFamily[family] ||
+          (fallback ? fallback.id : NODE_TYPES[0].id);
+        saveState(); // Save menu preference
+        renderMenu();
+        draw();
+      }
+
+      function cycleVariantInCurrentFamily() {
+        const variants = NODE_TYPES.filter((t) => t.family === currentFamily);
+        if (variants.length <= 1) return;
+
+        const currentId = currentTypeId;
+        const currentIndex = variants.findIndex((t) => t.id === currentId);
+        const nextIndex = (currentIndex + 1) % variants.length;
+        const nextType = variants[nextIndex];
+
+        selectedTypeByFamily[currentFamily] = nextType.id;
+        currentTypeId = nextType.id;
+
+        saveState(); // Save menu preference
+        renderMenu();
+        draw();
+      }
+      // --- END NEW FIX: FAMILY & VARIANT CYCLING ---
+
+      // Keyboard Shortcuts (QoL Feature)
+      window.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+          e.preventDefault();
+          undo();
+        }
+        if (
+          (selectedPinIndex !== null || selectedPins.length > 0) &&
+          (e.key === "Delete" || e.key === "Backspace") &&
+          !pinModalBackdrop.style.display
+        ) {
+          e.preventDefault();
+          deleteSelectedPin();
+        }
+
+        // NEW FIX: Key 1 for Pins, Key 2 for Cards (with cycling)
+        if (e.key === "1") {
+          e.preventDefault();
+          if (currentFamily === "pin") {
+            cycleVariantInCurrentFamily(); // Already on pins → cycle variant
+          } else {
+            selectFamily("pin"); // Switch to pins
+          }
+        }
+        if (e.key === "2") {
+          e.preventDefault();
+          if (currentFamily === "card") {
+            cycleVariantInCurrentFamily(); // Already on cards → cycle variant
+          } else {
+            selectFamily("card"); // Switch to cards
+          }
+        }
+
+        // ************ CRITICAL FIX 2: ESC Key Deselect ************
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setSelectedPin(null); // Fully deselect active pin(s)
+          connectStartIndex = null; // Clear connection state
+          marqueeStart = null;
+          marqueeEnd = null;
+          closeRadialMenu();
+          draw();
+        }
+      });
+
+      // Final initial draw
+      draw();
+    </script>
+  </body>
+</html>

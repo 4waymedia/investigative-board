@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Investigative Board</title>
+    <link rel="stylesheet" href="css/board-styles.css" />
+  </head>
+  <body>
+    <div id="menu">
+      <div id="toolset"></div>
+    </div>
+
+    <canvas id="board"></canvas>
+
+    <div id="pin-info">
+      <div id="pin-info-header">
+        <div>
+          <div id="pin-info-title"></div>
+          <div id="pin-info-sub"></div>
+        </div>
+        <div class="pin-color-pill" id="pin-info-color"></div>
+      </div>
+      <div id="pin-info-note"></div>
+      <div class="pin-info-meta" id="pin-info-meta"></div>
+    </div>
+
+    <div id="pin-modal-backdrop">
+      <div id="pin-modal">
+        <div id="pin-modal-header">
+          <div id="pin-modal-title">Edit Pin</div>
+          <div id="pin-modal-close">✕</div>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Title</div>
+          <input
+            id="pm-title"
+            class="modal-input"
+            type="text"
+            placeholder="Pin title"
+          />
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Color (hex)</div>
+          <input
+            id="pm-color"
+            class="modal-input"
+            type="text"
+            placeholder="#58a6ff"
+          />
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Description / Notes</div>
+          <textarea
+            id="pm-description"
+            class="modal-textarea"
+            placeholder="What does this pin represent?"
+          ></textarea>
+        </div>
+        <div class="modal-field">
+          <div class="modal-label">Date</div>
+          <input
+            id="pm-date"
+            class="modal-input"
+            type="text"
+            placeholder="e.g. 1958, Jul 1947, 1963-11-22"
+          />
+        </div>
+        <div id="pin-modal-footer">
+          <button class="btn" id="pm-cancel">Cancel</button>
+          <button class="btn primary" id="pm-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tray"><div id="card-list"></div></div>
+    <div id="controls">
+      <div class="ctrl-btn" id="reset" title="Reset board">↻</div>
+      <div class="ctrl-btn magic" id="magic" title="Magic Place">★</div>
+      <div class="ctrl-btn radial" id="radial" title="Radial Mind Map">🌸</div>
+      <div class="ctrl-btn clusters" id="clusters" title="Affinity Clusters">
+        ☁️
+      </div>
+      <div class="ctrl-btn timeline" id="timeline" title="Auto Timeline">
+        ⏳
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("board");
+      const ctx = canvas.getContext("2d");
+      const menu = document.getElementById("menu");
+      const toolset = document.getElementById("toolset");
+      const cardList = document.getElementById("card-list");
+
+      const pinInfo = document.getElementById("pin-info");
+      const pinInfoTitle = document.getElementById("pin-info-title");
+      const pinInfoSub = document.getElementById("pin-info-sub");
+      const pinInfoNote = document.getElementById("pin-info-note");
+      const pinInfoMeta = document.getElementById("pin-info-meta");
+      const pinInfoColor = document.getElementById("pin-info-color");
+
+      const pinModalBackdrop = document.getElementById("pin-modal-backdrop");
+      const pinModalClose = document.getElementById("pin-modal-close");
+      const pmTitle = document.getElementById("pm-title");
+      const pmColor = document.getElementById("pm-color");
+      const pmDescription = document.getElementById("pm-description");
+      const pmDate = document.getElementById("pm-date");
+      const pmCancel = document.getElementById("pm-cancel");
+      const pmSave = document.getElementById("pm-save");
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight - 200;
+
+      let scale = 1;
+      let offsetX = 0;
+      let offsetY = 0;
+      const MIN_SCALE = 0.25;
+      const MAX_SCALE = 3;
+
+      let history = [];
+      const MAX_HISTORY = 100;
+
+      let pins = [];
+      let connections = [];
+      let cards = [];
+      let tempStartIndex = null;
+      let connectStartIndex = null;
+      let selectedPinIndex = null;
+
+      let mouseScreenX = 0,
+        mouseScreenY = 0,
+        prevScreenX = 0,
+        prevScreenY = 0,
+        speed = 0;
+      let time = 0,
+        animId = null;
+      let didDrag = false;
+
+      let timelineActive = false;
+      let timelinePins = [];
+      let timelineY = 0;
+      let timelineLeft = 0;
+      let timelineRight = 0;
+
+      const NODE_TYPES = [
+        {
+          id: "pin:circle",
+          label: "Circle Pin",
+          icon: "●",
+          family: "pin",
+          variant: "circle",
+        },
+        {
+          id: "pin:square",
+          label: "Square Pin",
+          icon: "■",
+          family: "pin",
+          variant: "square",
+        },
+        {
+          id: "pin:pill",
+          label: "Pill Pin",
+          icon: "▭",
+          family: "pin",
+          variant: "pill",
+        },
+        {
+          id: "card:card",
+          label: "Note Card",
+          icon: "▤",
+          family: "card",
+          variant: "card",
+        },
+        {
+          id: "card:doc",
+          label: "Doc Card",
+          icon: "📄",
+          family: "card",
+          variant: "document",
+        },
+        {
+          id: "card:folder",
+          label: "Folder Card",
+          icon: "📁",
+          family: "card",
+          variant: "folder",
+        },
+      ];
+
+      function getNodeType(id) {
+        return NODE_TYPES.find((t) => t.id === id) || NODE_TYPES[0];
+      }
+
+      let selectedTypeByFamily = { pin: "pin:circle", card: "card:card" };
+      let currentFamily = "pin";
+      let currentTypeId = selectedTypeByFamily.pin;
+
+      const PIN_BASES = {
+        "pin:circle": { shape: "circle", baseRadius: 9 },
+        "pin:square": {
+          shape: "rect",
+          baseRadius: 9,
+          baseWidth: 22,
+          baseHeight: 22,
+        },
+        "pin:pill": {
+          shape: "pill",
+          baseRadius: 9,
+          baseWidth: 40,
+          baseHeight: 22,
+        },
+        "card:card": {
+          shape: "card",
+          baseRadius: 9,
+          baseWidth: 46,
+          baseHeight: 30,
+        },
+        "card:doc": {
+          shape: "card",
+          baseRadius: 9,
+          baseWidth: 32,
+          baseHeight: 46,
+        },
+        "card:folder": {
+          shape: "card",
+          baseRadius: 4,
+          baseWidth: 50,
+          baseHeight: 36,
+        },
+      };
+
+      function getConnectionCount(index) {
+        let count = 0;
+        for (const c of connections)
+          if (c.startIndex === index || c.endIndex === index) count++;
+        return count;
+      }
+
+      function getPinMetrics(index) {
+        const pin = pins[index];
+        const fam = pin.visualFamily || "pin";
+        const variant = pin.variant || "circle";
+        let typeId = `${fam}:${variant}`;
+        if (fam === "card") {
+          if (variant === "card") typeId = "card:card";
+          else if (variant === "document") typeId = "card:doc";
+          else if (variant === "folder") typeId = "card:folder";
+        }
+        const def = PIN_BASES[typeId] || PIN_BASES["pin:circle"];
+        const baseR = def.baseRadius || 9;
+        const n = getConnectionCount(index);
+        let extra = 0;
+        if (n >= 3) extra += 2;
+        if (n >= 6) extra += 2;
+        if (n >= 9) extra += 2;
+        if (n >= 12) extra += 2;
+        const radius = baseR + extra;
+        const factor = radius / baseR;
+        return {
+          shape: def.shape || "circle",
+          radius,
+          width: def.baseWidth ? def.baseWidth * factor : null,
+          height: def.baseHeight ? def.baseHeight * factor : null,
+        };
+      }
+
+      function worldToScreen(x, y) {
+        return { x: x * scale + offsetX, y: y * scale + offsetY };
+      }
+      function screenToWorld(sx, sy) {
+        return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
+      }
+
+      function saveHistory() {
+        const snapshot = {
+          pins: JSON.parse(JSON.stringify(pins)),
+          connections: JSON.parse(JSON.stringify(connections)),
+          cards: JSON.parse(JSON.stringify(cards)),
+          tempStartIndex,
+          connectStartIndex,
+          selectedPinIndex,
+          timelineActive,
+          timelinePins: JSON.parse(JSON.stringify(timelinePins)),
+          timelineY,
+          timelineLeft,
+          timelineRight,
+          scale,
+          offsetX,
+          offsetY,
+        };
+        history.push(snapshot);
+        if (history.length > MAX_HISTORY) history.shift();
+      }
+
+      function undo() {
+        if (!history.length) return;
+        const snapshot = history.pop();
+        pins = snapshot.pins;
+        connections = snapshot.connections;
+        cards = snapshot.cards;
+        tempStartIndex = snapshot.tempStartIndex;
+        connectStartIndex = snapshot.connectStartIndex;
+        selectedPinIndex = snapshot.selectedPinIndex;
+        timelineActive = snapshot.timelineActive;
+        timelinePins = snapshot.timelinePins;
+        timelineY = snapshot.timelineY;
+        timelineLeft = snapshot.timelineLeft;
+        timelineRight = snapshot.timelineRight;
+        scale = snapshot.scale;
+        offsetX = snapshot.offsetX;
+        offsetY = snapshot.offsetY;
+        renderCards();
+        renderSelectedPinInfo();
+        draw();
+      }
+
+      let currentTool = "pin";
+
+      function setTool(id) {
+        currentTool = id;
+        renderTools();
+      }
+
+      function renderTools() {
+        toolset.innerHTML = "";
+        const tools = [
+          { id: "pan", label: "Move", icon: "🖐" },
+          { id: "pin", label: "Pin", icon: "📍" },
+        ];
+        tools.forEach((t) => {
+          const btn = document.createElement("div");
+          btn.className = "tool-btn" + (currentTool === t.id ? " active" : "");
+          btn.innerHTML = `<span class="icon">${t.icon}</span><span>${t.label}</span>`;
+          btn.onclick = () => setTool(t.id);
+          toolset.appendChild(btn);
+        });
+      }
+
+      let typeMenuEl = null;
+
+      function closeTypeMenu() {
+        if (typeMenuEl) typeMenuEl.remove();
+        typeMenuEl = null;
+      }
+
+      function openTypeMenuForFamily(family, anchorEl) {
+        closeTypeMenu();
+        const rect = anchorEl.getBoundingClientRect();
+        const menuEl = document.createElement("div");
+        menuEl.className = "type-menu";
+
+        const currentId =
+          selectedTypeByFamily[family] ||
+          NODE_TYPES.find((t) => t.family === family).id;
+
+        NODE_TYPES.filter((t) => t.family === family).forEach((t) => {
+          const item = document.createElement("button");
+          item.className =
+            "type-menu-item" + (t.id === currentId ? " active" : "");
+          item.innerHTML = `<span class="icon">${t.icon}</span><span>${t.label}</span>`;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            selectedTypeByFamily[family] = t.id;
+            if (currentFamily === family) currentTypeId = t.id;
+            closeTypeMenu();
+            renderMenu();
+            draw();
+          };
+          menuEl.appendChild(item);
+        });
+
+        document.body.appendChild(menuEl);
+        menuEl.style.left = rect.left + "px";
+        menuEl.style.top = rect.bottom + 4 + "px";
+        typeMenuEl = menuEl;
+      }
+
+      function setCurrentFamily(family) {
+        currentFamily = family;
+        currentTypeId =
+          selectedTypeByFamily[family] ||
+          NODE_TYPES.find((t) => t.family === family).id;
+        renderMenu();
+        draw();
+      }
+
+      window.addEventListener("click", closeTypeMenu);
+
+      function renderTypeBar() {
+        const bar = document.createElement("div");
+        bar.className = "type-bar";
+
+        const families = [
+          { id: "pin", label: "Pin", iconDefault: "●" },
+          { id: "card", label: "Card", iconDefault: "▤" },
+        ];
+
+        families.forEach((f) => {
+          const group = document.createElement("div");
+          group.className = "type-group";
+
+          const activeType = getNodeType(
+            selectedTypeByFamily[f.id] ||
+              NODE_TYPES.find((t) => t.family === f.id).id
+          );
+
+          const option = document.createElement("div");
+          option.className =
+            "type-option" + (currentFamily === f.id ? " active" : "");
+          option.innerHTML = `<div class="type-option-icon">${
+            activeType.icon || f.iconDefault
+          }</div><div class="label">${f.label}</div>`;
+          option.onclick = (e) => {
+            e.stopPropagation();
+            setCurrentFamily(f.id);
+          };
+
+          const caret = document.createElement("button");
+          caret.className = "type-caret";
+          caret.textContent = "▾";
+          caret.onclick = (e) => {
+            e.stopPropagation();
+            openTypeMenuForFamily(f.id, caret);
+          };
+
+          group.appendChild(option);
+          group.appendChild(caret);
+          bar.appendChild(group);
+        });
+
+        return bar;
+      }
+
+      const defaultColors = [
+        { name: "Red", value: "#f85149" },
+        { name: "Blue", value: "#58a6ff" },
+        { name: "Green", value: "#3fb950" },
+        { name: "Yellow", value: "#f1c40f" },
+        { name: "Purple", value: "#a471f7" },
+      ];
+      let palette = [...defaultColors];
+      let selectedColor = palette[0].value;
+
+      function renderMenu() {
+        menu.innerHTML = "";
+        menu.appendChild(toolset);
+        renderTools();
+
+        menu.appendChild(renderTypeBar());
+
+        palette.forEach((col) => {
+          const el = document.createElement("div");
+          el.className =
+            "color-option" + (col.value === selectedColor ? " active" : "");
+          el.innerHTML = `<div class="label">${col.name}</div><div class="swatch" style="background:${col.value}"></div>`;
+          el.onclick = () => {
+            selectedColor = col.value;
+            renderMenu();
+            draw();
+          };
+          menu.appendChild(el);
+        });
+
+        const add = document.createElement("div");
+        add.className = "color-option";
+        add.innerHTML = `<div class="add-btn">+</div>`;
+        add.onclick = () => {
+          const hex = prompt("Hex color:", "#ff9500");
+          if (hex && /^#[0-9A-F]{6}$/i.test(hex)) {
+            const name = prompt("Name:", "Custom") || "Custom";
+            palette.push({ name, value: hex.toLowerCase() });
+            selectedColor = hex.toLowerCase();
+            renderMenu();
+          }
+        };
+        menu.appendChild(add);
+      }
+      renderMenu();
+
+      cards = [
+        {
+          id: 0,
+          title: "Project Orion",
+          subtitle: "Classified propulsion research 1958–1965",
+          date: "1958",
+          icon: "★",
+          color: "#f85149",
+          category: "event",
+          used: false,
+        },
+        {
+          id: 1,
+          title: "MKUltra",
+          subtitle: "CIA mind control program using LSD",
+          date: "1953–1973",
+          icon: "⚙️",
+          color: "#a471f7",
+          category: "program",
+          used: false,
+        },
+        {
+          id: 2,
+          title: "Roswell Incident",
+          subtitle: "Alleged UFO crash retrieval",
+          date: "Jul 1947",
+          icon: "🔔",
+          color: "#58a6ff",
+          category: "incident",
+          used: false,
+        },
+        {
+          id: 3,
+          title: "Operation Paperclip",
+          subtitle: "US recruitment of Nazi scientists",
+          date: "1945–1959",
+          icon: "✈️",
+          color: "#f1c40f",
+          category: "operation",
+          used: false,
+        },
+        {
+          id: 4,
+          title: "Area 51",
+          subtitle: "Highly classified USAF facility",
+          date: "1955–",
+          icon: "🔒",
+          color: "#3fb950",
+          category: "facility",
+          used: false,
+        },
+      ];
+      let nextId = 5;
+
+      function getConnectedComponent(startIdx) {
+        const visited = new Set();
+        const stack = [startIdx];
+        while (stack.length) {
+          const i = stack.pop();
+          if (visited.has(i)) continue;
+          visited.add(i);
+          for (const c of connections) {
+            if (c.startIndex === i && !visited.has(c.endIndex))
+              stack.push(c.endIndex);
+            if (c.endIndex === i && !visited.has(c.startIndex))
+              stack.push(c.startIndex);
+          }
+        }
+        return Array.from(visited);
+      }
+
+      function getTargetPins() {
+        if (selectedPinIndex !== null && pins[selectedPinIndex]) {
+          return getConnectedComponent(selectedPinIndex).map((i) => pins[i]);
+        }
+        return [...pins];
+      }
+
+      function setSelectedPin(index) {
+        selectedPinIndex = index;
+        renderSelectedPinInfo();
+        draw();
+      }
+
+      function renderSelectedPinInfo() {
+        if (selectedPinIndex === null || !pins[selectedPinIndex]) {
+          pinInfo.style.display = "none";
+          return;
+        }
+        const pin = pins[selectedPinIndex];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+        const title = pin.label || (card ? card.title : "Untitled Pin");
+        const subtitle = card
+          ? card.subtitle || ""
+          : pin.cardId == null
+          ? "Free pin (no source card)"
+          : "";
+        const note = pin.note || "";
+        const dateStr = pin.date || (card ? card.date : "");
+        const metaBits = [];
+        if (dateStr) metaBits.push(`Date: ${dateStr}`);
+        if (card) metaBits.push(`Source: ${card.category || "card"}`);
+        if (pin.cardId == null) metaBits.push("Detached from tray cards");
+
+        pinInfoTitle.textContent = title;
+        pinInfoSub.textContent = subtitle;
+        pinInfoNote.textContent =
+          note || "Double-click this pin to add a note.";
+        pinInfoMeta.textContent = metaBits.join(" • ");
+        pinInfoColor.style.background = pin.color || "#555";
+
+        pinInfo.style.display = "block";
+      }
+
+      let modalPinIndex = null;
+
+      function openPinModal(index) {
+        const pin = pins[index];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+        pmTitle.value = pin.label || (card ? card.title : "");
+        pmColor.value = pin.color || selectedColor;
+        pmDescription.value = pin.note || "";
+        pmDate.value = pin.date || (card ? card.date : "");
+
+        modalPinIndex = index;
+        pinModalBackdrop.style.display = "flex";
+        pmTitle.focus();
+        pmTitle.select();
+      }
+
+      function closePinModal() {
+        modalPinIndex = null;
+        pinModalBackdrop.style.display = "none";
+      }
+
+      pinModalClose.onclick = closePinModal;
+      pmCancel.onclick = closePinModal;
+      pinModalBackdrop.addEventListener("click", (e) => {
+        if (e.target === pinModalBackdrop) closePinModal();
+      });
+
+      pmSave.onclick = () => {
+        if (modalPinIndex === null) return;
+
+        saveHistory();
+
+        const pin = pins[modalPinIndex];
+
+        const title = pmTitle.value.trim();
+        const color = pmColor.value.trim();
+        const note = pmDescription.value.trim();
+        const date = pmDate.value.trim();
+
+        if (title) pin.label = title;
+        if (color && /^#[0-9A-F]{6}$/i.test(color)) pin.color = color;
+        pin.note = note;
+        pin.date = date || "";
+
+        setSelectedPin(modalPinIndex);
+        closePinModal();
+      };
+
+      function deleteSelectedPin() {
+        if (selectedPinIndex === null || !pins[selectedPinIndex]) return;
+
+        saveHistory();
+
+        const removedIndex = selectedPinIndex;
+        const removedPin = pins[removedIndex];
+
+        if (removedPin.cardId != null) {
+          const card = cards.find((c) => c.id === removedPin.cardId);
+          if (card) card.used = false;
+          renderCards();
+        }
+
+        pins.splice(removedIndex, 1);
+
+        connections = connections
+          .filter(
+            (c) => c.startIndex !== removedIndex && c.endIndex !== removedIndex
+          )
+          .map((c) => {
+            const nc = { ...c };
+            if (nc.startIndex > removedIndex) nc.startIndex--;
+            if (nc.endIndex > removedIndex) nc.endIndex--;
+            return nc;
+          });
+
+        function adjustIndex(idx) {
+          if (idx === null || idx === undefined) return null;
+          if (idx === removedIndex) return null;
+          if (idx > removedIndex) return idx - 1;
+          return idx;
+        }
+
+        tempStartIndex = adjustIndex(tempStartIndex);
+        connectStartIndex = adjustIndex(connectStartIndex);
+        selectedPinIndex = null;
+        pinInfo.style.display = "none";
+
+        draw();
+      }
+
+      function parseDate(dateStr) {
+        if (!dateStr) return null;
+        const yearMatch = dateStr.match(/\d{4}/);
+        if (yearMatch) return new Date(yearMatch[0], 0, 1).getTime();
+        const parsed = Date.parse(dateStr);
+        return isNaN(parsed) ? null : parsed;
+      }
+
+      // === LAYOUT FUNCTIONS ===
+
+      function layoutRadial() {
+        const targets = getTargetPins();
+        if (targets.length < 1) return;
+
+        saveHistory();
+
+        let cx = 0,
+          cy = 0;
+        targets.forEach((p) => {
+          cx += p.x;
+          cy += p.y;
+        });
+        cx /= targets.length;
+        cy /= targets.length;
+
+        const centralIndex =
+          targets.length === 1 ? 0 : Math.floor(targets.length / 2);
+        const centralPin = targets[centralIndex];
+        centralPin.x = cx;
+        centralPin.y = cy;
+
+        const radiusStep = 180;
+        let ring = 0;
+        let countInRing = 0;
+
+        targets.forEach((pin, i) => {
+          if (i === centralIndex) return;
+
+          if (countInRing === 0) {
+            const maxInRing = 6 + ring * 3;
+            countInRing = maxInRing;
+          }
+
+          const angle = (i % countInRing) * ((Math.PI * 2) / countInRing);
+          const radius = 120 + ring * radiusStep;
+
+          pin.x = cx + Math.cos(angle) * radius;
+          pin.y = cy + Math.sin(angle) * radius;
+
+          countInRing--;
+          if (countInRing === 0) ring++;
+        });
+
+        draw();
+      }
+
+      function layoutAffinity() {
+        const targets = getTargetPins();
+        if (targets.length < 2) return;
+
+        saveHistory();
+
+        const groups = {};
+        targets.forEach((pin) => {
+          const key = pin.color || "#888888";
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(pin);
+        });
+
+        if (Object.keys(groups).length <= 1) {
+          const shuffled = [...targets];
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
+          const groupCount = Math.min(
+            5,
+            Math.max(3, Math.floor(targets.length / 4))
+          );
+          for (let i = 0; i < shuffled.length; i++) {
+            const key = "group_" + (i % groupCount);
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(shuffled[i]);
+          }
+        }
+
+        let gx = -400;
+        Object.values(groups).forEach((group) => {
+          if (group.length === 1) {
+            group[0].x += gx;
+            group[0].y += (Math.random() - 0.5) * 200;
+            gx += 800;
+            return;
+          }
+
+          const cx = group.reduce((s, p) => s + p.x, 0) / group.length + gx;
+          const cy = group.reduce((s, p) => s + p.y, 0) / group.length;
+
+          group.forEach((pin, i) => {
+            const angle =
+              (i / group.length) * Math.PI * 2 + Math.random() * 0.6;
+            const radius = 100 + group.length * 15 + Math.random() * 60;
+            pin.x = cx + Math.cos(angle) * radius;
+            pin.y = cy + Math.sin(angle) * radius;
+          });
+
+          gx += 800;
+        });
+
+        draw();
+      }
+
+      function layoutTimeline() {
+        const timedPins = pins
+          .map((pin) => {
+            const card =
+              pin.cardId != null
+                ? cards.find((c) => c.id === pin.cardId)
+                : null;
+            const dateStr = pin.date || (card ? card.date : "");
+            return { pin, dateStr };
+          })
+          .filter((tp) => tp.dateStr);
+
+        if (timedPins.length < 2) {
+          alert("Need at least 2 pins with dates on the board!");
+          return;
+        }
+
+        saveHistory();
+
+        timedPins.forEach((tp) => (tp.timestamp = parseDate(tp.dateStr)));
+        timedPins.sort((a, b) => a.timestamp - b.timestamp);
+        timelinePins = timedPins;
+
+        const minTime = timedPins[0].timestamp;
+        const maxTime = timedPins[timedPins.length - 1].timestamp;
+
+        const lowestY = pins.length ? Math.max(...pins.map((p) => p.y)) : 0;
+        const footerMarginWorld = 200 / scale;
+        timelineY = lowestY + footerMarginWorld;
+
+        const allXs = pins.map((p) => p.x);
+        const minX = allXs.length ? Math.min(...allXs) : 0;
+        const maxX = allXs.length ? Math.max(...allXs) : 1000;
+        const horizontalPaddingWorld = 150 / scale;
+        timelineLeft = minX - horizontalPaddingWorld;
+        timelineRight = maxX + horizontalPaddingWorld;
+        const worldSpan = timelineRight - timelineLeft || 1;
+
+        const offsetWorld = 120 / scale;
+
+        timelineActive = true;
+
+        timedPins.forEach((tp, i) => {
+          const t = (tp.timestamp - minTime) / (maxTime - minTime || 1);
+          tp.pin.x = timelineLeft + t * worldSpan;
+          tp.pin.y = timelineY + (i % 2 === 0 ? -offsetWorld : offsetWorld);
+        });
+
+        const footerScreenY = timelineY * scale + offsetY;
+        if (footerScreenY > canvas.height - 80) {
+          offsetY -= footerScreenY - (canvas.height - 80);
+        }
+
+        draw();
+      }
+
+      function renderCards() {
+        cardList.innerHTML = "";
+        cards.forEach((c) => {
+          const div = document.createElement("div");
+          div.className = "card" + (c.used ? " used" : "");
+          div.draggable = true;
+          div.style.borderLeftColor = c.color;
+          div.innerHTML = `
+				<div class="card-icon">${c.icon}</div>
+				<div class="card-title">${c.title}</div>
+				<div class="card-subtitle">${c.subtitle}</div>
+				<div class="card-date">${c.date}</div>
+			`;
+          div.ondragstart = (e) => e.dataTransfer.setData("cardId", c.id);
+          div.ondragend = () => (div.style.opacity = "1");
+          div.ondblclick = () => {
+            const pinIdx = pins.findIndex((p) => p.cardId === c.id);
+            if (pinIdx !== -1) setSelectedPin(pinIdx);
+            div.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          };
+          cardList.appendChild(div);
+        });
+        const add = document.createElement("div");
+        add.className = "card";
+        add.style.borderLeftColor = "#666";
+        add.innerHTML =
+          '<div style="font-size:48px;color:#666;display:grid;place-items:center;height:100%">+</div>';
+        add.onclick = () => {
+          const title = prompt("New card title:") || "Untitled";
+          const subtitle = prompt("Subtitle:") || "";
+          const date = prompt("Date/Number:") || "";
+          const color = selectedColor;
+          cards.push({
+            id: nextId++,
+            title,
+            subtitle,
+            date,
+            icon: "📄",
+            color,
+            category: "note",
+            used: false,
+          });
+          renderCards();
+        };
+        cardList.appendChild(add);
+      }
+      renderCards();
+
+      canvas.ondragover = (e) => e.preventDefault();
+      canvas.ondrop = (e) => {
+        e.preventDefault();
+        const cardId = parseInt(e.dataTransfer.getData("cardId"));
+        const card = cards.find((c) => c.id === cardId);
+        if (!card || card.used) return;
+
+        saveHistory();
+
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+
+        const world = screenToWorld(sx, sy);
+        const newIdx = pins.length;
+        pins.push({
+          x: world.x,
+          y: world.y,
+          color: card.color,
+          label: card.title,
+          note: "",
+          date: card.date || "",
+          cardId: card.id,
+          visualFamily: "card",
+          variant: "card",
+        });
+        card.used = true;
+        renderCards();
+        setSelectedPin(newIdx);
+        draw();
+      };
+
+      canvas.addEventListener("click", (e) => {
+        if (didDrag) {
+          didDrag = false;
+          return;
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+
+        if (e.altKey || e.metaKey) {
+          const hitConn = hitTestConnection(sx, sy);
+          if (hitConn !== -1) {
+            saveHistory();
+            connections.splice(hitConn, 1);
+            draw();
+            return;
+          }
+        }
+
+        const hitIndex = hitTestPinAtScreen(sx, sy);
+
+        if (hitIndex !== null) {
+          const i = hitIndex;
+
+          if (e.shiftKey) {
+            if (connectStartIndex === null) {
+              connectStartIndex = i;
+            } else if (connectStartIndex !== i) {
+              saveHistory();
+              connections.push({ startIndex: connectStartIndex, endIndex: i });
+              connectStartIndex = null;
+            }
+          }
+
+          setSelectedPin(i);
+          return;
+        }
+
+        if (currentTool === "pin") {
+          saveHistory();
+
+          const world = screenToWorld(sx, sy);
+          const t = getNodeType(currentTypeId);
+          const newIdx = pins.length;
+
+          pins.push({
+            x: world.x,
+            y: world.y,
+            color: selectedColor,
+            label: "",
+            note: "",
+            date: "",
+            cardId: null,
+            visualFamily: t.family,
+            variant: t.variant,
+          });
+
+          if (tempStartIndex === null) {
+            tempStartIndex = newIdx;
+          } else {
+            connections.push({ startIndex: tempStartIndex, endIndex: newIdx });
+            tempStartIndex = newIdx;
+          }
+
+          setSelectedPin(newIdx);
+          draw();
+        } else {
+          connectStartIndex = null;
+        }
+      });
+
+      canvas.addEventListener("dblclick", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+
+        const targetIndex = hitTestPinAtScreen(sx, sy);
+        if (targetIndex === null) return;
+        openPinModal(targetIndex);
+      });
+
+      canvas.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        tempStartIndex = null;
+        connectStartIndex = null;
+        draw();
+      });
+
+      let isPanning = false;
+      let panLastX = 0;
+      let panLastY = 0;
+      let draggingPinIndex = null;
+      let draggingGroup = null;
+      let dragPinOffset = { x: 0, y: 0 };
+
+      canvas.addEventListener("mousedown", (e) => {
+        didDrag = false;
+
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+
+        if (e.button === 1) {
+          isPanning = true;
+          panLastX = e.clientX;
+          panLastY = e.clientY;
+          canvas.style.cursor = "grab";
+          e.preventDefault();
+          return;
+        }
+
+        if (e.button === 0) {
+          const hitIndex = hitTestPinAtScreen(sx, sy);
+          if (hitIndex !== null) {
+            const i = hitIndex;
+            const world = screenToWorld(sx, sy);
+            setSelectedPin(i);
+
+            saveHistory();
+
+            if (e.shiftKey) {
+              const indices = getConnectedComponent(i);
+              draggingGroup = {
+                indices,
+                startWorld: world,
+                pinStartPositions: indices.map((idx) => ({
+                  index: idx,
+                  x: pins[idx].x,
+                  y: pins[idx].y,
+                })),
+              };
+            } else {
+              draggingPinIndex = i;
+              const pin = pins[i];
+              dragPinOffset.x = pin.x - world.x;
+              dragPinOffset.y = pin.y - world.y;
+            }
+
+            canvas.style.cursor = "grabbing";
+            e.preventDefault();
+            return;
+          }
+
+          if (currentTool === "pan") {
+            isPanning = true;
+            panLastX = e.clientX;
+            panLastY = e.clientY;
+            canvas.style.cursor = "grab";
+            e.preventDefault();
+          }
+        }
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (isPanning) {
+          isPanning = false;
+          canvas.style.cursor = "crosshair";
+        }
+        if (draggingPinIndex !== null || draggingGroup) {
+          draggingPinIndex = null;
+          draggingGroup = null;
+          canvas.style.cursor = "crosshair";
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+
+        prevScreenX = mouseScreenX;
+        prevScreenY = mouseScreenY;
+        mouseScreenX = e.clientX - rect.left;
+        mouseScreenY = e.clientY - rect.top;
+        speed = Math.hypot(
+          mouseScreenX - prevScreenX,
+          mouseScreenY - prevScreenY
+        );
+
+        const moved = Math.abs(e.movementX) > 1 || Math.abs(e.movementY) > 1;
+        if (
+          moved &&
+          (isPanning || draggingPinIndex !== null || draggingGroup)
+        ) {
+          didDrag = true;
+        }
+
+        if (isPanning) {
+          const dx = e.clientX - panLastX;
+          const dy = e.clientY - panLastY;
+          panLastX = e.clientX;
+          panLastY = e.clientY;
+          offsetX += dx;
+          offsetY += dy;
+          draw();
+        } else if (draggingGroup) {
+          const world = screenToWorld(mouseScreenX, mouseScreenY);
+          const dx = world.x - draggingGroup.startWorld.x;
+          const dy = world.y - draggingGroup.startWorld.y;
+
+          draggingGroup.pinStartPositions.forEach((entry) => {
+            const pin = pins[entry.index];
+            pin.x = entry.x + dx;
+            pin.y = entry.y + dy;
+          });
+
+          renderSelectedPinInfo();
+          draw();
+        } else if (draggingPinIndex !== null) {
+          const world = screenToWorld(mouseScreenX, mouseScreenY);
+          const pin = pins[draggingPinIndex];
+          pin.x = world.x + dragPinOffset.x;
+          pin.y = world.y + dragPinOffset.y;
+          renderSelectedPinInfo();
+          draw();
+        }
+      });
+
+      canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          const rect = canvas.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+
+          if (e.ctrlKey || e.metaKey || e.altKey) {
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            const newScale = Math.min(
+              MAX_SCALE,
+              Math.max(MIN_SCALE, scale * zoomFactor)
+            );
+            const scaleRatio = newScale / scale;
+
+            offsetX = sx - (sx - offsetX) * scaleRatio;
+            offsetY = sy - (sy - offsetY) * scaleRatio;
+            scale = newScale;
+            draw();
+          } else {
+            offsetX -= e.deltaX;
+            offsetY -= e.deltaY;
+            draw();
+          }
+        },
+        { passive: false }
+      );
+
+      document.getElementById("magic").onclick = () => {
+        const unused = cards.filter((c) => !c.used);
+        if (unused.length === 0) return;
+
+        saveHistory();
+
+        let angle = 0;
+        unused.forEach((c, i) => {
+          setTimeout(() => {
+            const radius = 100 + i * 60;
+            const centerWorld = screenToWorld(
+              canvas.width / 2,
+              canvas.height / 2
+            );
+            const x = centerWorld.x + Math.cos(angle) * radius;
+            const y = centerWorld.y + Math.sin(angle) * radius;
+
+            const newIdx = pins.length;
+            pins.push({
+              x,
+              y,
+              color: c.color,
+              label: c.title,
+              note: "",
+              date: c.date || "",
+              cardId: c.id,
+              visualFamily: "card",
+              variant: "card",
+            });
+            c.used = true;
+            renderCards();
+            setSelectedPin(newIdx);
+            draw();
+            angle += (Math.PI * 2) / unused.length;
+          }, i * 150);
+        });
+      };
+
+      document.getElementById("reset").onclick = () => {
+        if (confirm("Clear board?")) {
+          saveHistory();
+
+          pins = [];
+          connections = [];
+          cards.forEach((c) => (c.used = false));
+          tempStartIndex = null;
+          connectStartIndex = null;
+          selectedPinIndex = null;
+          timelineActive = false;
+          timelinePins = [];
+          renderCards();
+          pinInfo.style.display = "none";
+          draw();
+        }
+      };
+
+      document.getElementById("radial").onclick = layoutRadial;
+      document.getElementById("clusters").onclick = layoutAffinity;
+      document.getElementById("timeline").onclick = layoutTimeline;
+
+      function lightenColor(hex, percent) {
+        const num = parseInt(hex.slice(1), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) + amt;
+        const G = ((num >> 8) & 0x00ff) + amt;
+        const B = (num & 0x0000ff) + amt;
+        return (
+          "#" +
+          (
+            0x1000000 +
+            (R < 255 ? R : 255) * 0x10000 +
+            (G < 255 ? G : 255) * 0x100 +
+            (B < 255 ? B : 255)
+          )
+            .toString(16)
+            .slice(1)
+        );
+      }
+
+      function roundRectPath(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.lineTo(x + w - rr, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+        ctx.lineTo(x + w, y + h - rr);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+        ctx.lineTo(x + rr, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+        ctx.lineTo(x, y + rr);
+        ctx.quadraticCurveTo(x, y, x + rr, y);
+        ctx.closePath();
+      }
+
+      function drawLine(x1, y1, x2, y2, color, wiggly) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        if (wiggly) {
+          const steps = 30;
+          const dx = (x2 - x1) / steps;
+          const dy = (y2 - y1) / steps;
+          let t = time;
+          for (let i = 1; i <= steps; i++) {
+            const amp = Math.min(speed * 0.8, 14) + 4;
+            const offX = Math.sin(t * 2.5) * amp;
+            const offY = Math.cos(t * 1.9) * amp;
+            ctx.lineTo(x1 + dx * i + offX, y1 + dy * i + offY);
+            t += 0.22;
+          }
+        } else {
+          ctx.lineTo(x2, y2);
+        }
+        ctx.stroke();
+      }
+
+      function distancePointToSegment(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
+        const t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+        const clampedT = Math.max(0, Math.min(1, t));
+        const cx = x1 + clampedT * dx;
+        const cy = y1 + clampedT * dy;
+        return Math.hypot(px - cx, py - cy);
+      }
+
+      function hitTestConnection(sx, sy, tolerance = 10) {
+        for (let i = 0; i < connections.length; i++) {
+          const c = connections[i];
+          const a = pins[c.startIndex];
+          const b = pins[c.endIndex];
+          if (!a || !b) continue;
+          const sa = worldToScreen(a.x, a.y);
+          const sb = worldToScreen(b.x, b.y);
+          const dist = distancePointToSegment(sx, sy, sa.x, sa.y, sb.x, sb.y);
+          if (dist <= tolerance) return i;
+        }
+        return -1;
+      }
+
+      function hitTestPinAtIndex(i, sx, sy) {
+        const pin = pins[i];
+        const scr = worldToScreen(pin.x, pin.y);
+        const m = getPinMetrics(i);
+        if (m.shape === "card" || m.shape === "rect" || m.shape === "pill") {
+          const w = m.width || m.radius * 2.4;
+          const h = m.height || m.radius * 2.0;
+          const left = scr.x - w / 2;
+          const top = scr.y - h / 2;
+          return sx >= left && sx <= left + w && sy >= top && sy <= top + h;
+        } else {
+          return Math.hypot(scr.x - sx, scr.y - sy) < m.radius + 4;
+        }
+      }
+
+      function hitTestPinAtScreen(sx, sy) {
+        for (let i = pins.length - 1; i >= 0; i--) {
+          if (hitTestPinAtIndex(i, sx, sy)) return i;
+        }
+        return null;
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (timelineActive && timelineLeft !== null && timelineRight !== null) {
+          const leftScr = worldToScreen(timelineLeft, timelineY);
+          const rightScr = worldToScreen(timelineRight, timelineY);
+
+          ctx.strokeStyle = "#ffffff88";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(leftScr.x, leftScr.y);
+          ctx.lineTo(rightScr.x, rightScr.y);
+          ctx.stroke();
+
+          timelinePins.forEach((tp) => {
+            const baseScr = worldToScreen(tp.pin.x, timelineY);
+            const pinScr = worldToScreen(tp.pin.x, tp.pin.y);
+
+            ctx.strokeStyle = "#ffffff44";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(baseScr.x, baseScr.y);
+            ctx.lineTo(pinScr.x, pinScr.y);
+            ctx.stroke();
+
+            ctx.font = "12px system-ui";
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#ffffff88";
+            const above = pinScr.y < baseScr.y;
+            ctx.fillText(tp.dateStr, pinScr.x, baseScr.y + (above ? -10 : 25));
+          });
+        }
+
+        connections.forEach((c) => {
+          const a = pins[c.startIndex];
+          const b = pins[c.endIndex];
+          if (!a || !b) return;
+          const sa = worldToScreen(a.x, a.y);
+          const sb = worldToScreen(b.x, b.y);
+          drawLine(sa.x, sa.y, sb.x, sb.y, a.color || "#f85149", false);
+        });
+
+        pins.forEach((pin, i) => {
+          const scr = worldToScreen(pin.x, pin.y);
+          const m = getPinMetrics(i);
+          const isSelected = i === selectedPinIndex;
+
+          if (m.shape === "card") {
+            const s = scale; // Use the current scale factor
+            const w = m.width * s;
+            const h = m.height * s;
+            const x = scr.x - w / 2;
+            const y = scr.y - h / 2;
+
+            // --- 1. Draw Base Shadow ---
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            // Original: offset +3, +3; radius 6
+            roundRectPath(ctx, x + 3 * s, y + 3 * s, w, h, 6 * s);
+            ctx.fill();
+
+            // --- 2. Draw Main Card Body ---
+            ctx.fillStyle = pin.color;
+            // Original: radius 6
+            roundRectPath(ctx, x, y, w, h, 6 * s);
+            ctx.fill();
+
+            // --- 3. Draw Variants (Folder Tab and Document Header) ---
+            if (pin.variant === "document") {
+              // Document Card Header Shadow/Block
+              ctx.fillStyle = "rgba(0,0,0,0.16)";
+              // Original: x+4, y+4, w-8, radius 4
+              roundRectPath(
+                ctx,
+                x + 4 * s, // Scaled X offset
+                y + 4 * s, // Scaled Y offset
+                w - 8 * s, // Scaled width
+                h * 0.25, // Fixed height ratio
+                4 * s // Scaled radius
+              );
+              ctx.fill();
+            } else if (pin.variant === "folder") {
+              // Folder Tab (Lightened Color)
+              const tabW = w * 0.4;
+              const tabH = h * 0.3;
+              ctx.fillStyle = lightenColor(pin.color, 12);
+              // Original: x+6, y - tabH * 0.5, radius 4
+              roundRectPath(
+                ctx,
+                x + 6 * s, // Scaled X offset
+                y - tabH * 0.5, // Tab sits above the card body (Y is negative offset)
+                tabW, // Fixed width ratio
+                tabH, // Fixed height ratio
+                4 * s // Scaled radius
+              );
+              ctx.fill();
+            }
+
+            // --- 4. Inner Lines (Scaled) ---
+            const innerX = x + 0.16 * w;
+            const innerW = w - 0.32 * w;
+            ctx.lineWidth = 2; // Fixed line width for inner lines
+            ctx.strokeStyle = "rgba(0,0,0,0.32)";
+            for (let row = 0; row < 3; row++) {
+              const ly = y + 0.35 * h + row * (h * 0.18);
+              ctx.beginPath();
+              ctx.moveTo(innerX, ly);
+              ctx.lineTo(innerX + innerW, ly);
+              ctx.stroke();
+            }
+
+            // --- 5. Selection Border ---
+            if (isSelected) {
+              ctx.strokeStyle = "rgba(255,255,255,0.9)";
+              ctx.lineWidth = 2;
+              // Original offset x-3, y-6, w+6, h+10, radius 8
+              roundRectPath(
+                ctx,
+                x - 3 * s,
+                y - 6 * s,
+                w + 6 * s,
+                h + 10 * s,
+                8 * s
+              );
+              ctx.stroke();
+            }
+
+            // Marquee Selection Highlight
+            if (selectedPins.includes(index)) {
+              ctx.strokeStyle = "#f90";
+              ctx.lineWidth = 4 / s;
+              roundRectPath(ctx, x, y, w, h, 6 * s);
+              ctx.stroke();
+            }
+
+            // --- 6. Label ---
+            if (pin.label) {
+              ctx.font = `bold ${15 * s}px system-ui`;
+              ctx.textAlign = "center";
+              ctx.fillStyle = "rgba(0,0,0,0.6)";
+              ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 23 * s);
+              ctx.fillStyle = "white";
+              ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 21 * s);
+            }
+          } else if (m.shape === "rect" || m.shape === "pill") {
+            const w = m.width;
+            const h = m.height;
+            const x = scr.x - w / 2;
+            const y = scr.y - h / 2;
+            const r = m.shape === "pill" ? h / 2 : 6;
+
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            roundRectPath(ctx, x + 3, y + 3, w, h, r);
+            ctx.fill();
+
+            ctx.fillStyle = pin.color;
+            roundRectPath(ctx, x, y, w, h, r);
+            ctx.fill();
+
+            if (isSelected) {
+              ctx.strokeStyle = "rgba(255,255,255,0.9)";
+              ctx.lineWidth = 2;
+              roundRectPath(ctx, x - 3, y - 3, w + 6, h + 6, r + 2);
+              ctx.stroke();
+            }
+
+            if (pin.label) {
+              ctx.font = "bold 15px system-ui";
+              ctx.textAlign = "center";
+              ctx.fillStyle = "rgba(0,0,0,0.6)";
+              ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 23);
+              ctx.fillStyle = "white";
+              ctx.fillText(pin.label, scr.x, scr.y + h / 2 + 21);
+            }
+          } else {
+            const r = m.radius;
+
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            ctx.beginPath();
+            ctx.arc(scr.x + 3, scr.y + 3, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = pin.color;
+            ctx.beginPath();
+            ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "rgba(255,255,255,0.5)";
+            ctx.beginPath();
+            ctx.arc(
+              scr.x - 2,
+              scr.y - 2,
+              Math.max(4, r * 0.45),
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+
+            if (isSelected) {
+              ctx.strokeStyle = "rgba(255,255,255,0.9)";
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(scr.x, scr.y, r + 4, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+
+            if (pin.label) {
+              ctx.font = "bold 15px system-ui";
+              ctx.textAlign = "center";
+              ctx.fillStyle = "rgba(0,0,0,0.6)";
+              ctx.fillText(pin.label, scr.x, scr.y + r + 23);
+              ctx.fillStyle = "white";
+              ctx.fillText(pin.label, scr.x, scr.y + r + 21);
+            }
+          }
+        });
+      }
+
+      window.addEventListener("resize", () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - 200;
+        draw();
+      });
+
+      window.addEventListener("keydown", (e) => {
+        const tag = (e.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea") return;
+
+        if ((e.key === "z" || e.key === "Z") && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          undo();
+          return;
+        }
+
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          deleteSelectedPin();
+          return;
+        }
+
+        if (e.key === "m" || e.key === "M") {
+          setTool("pan");
+        } else if (e.key === "p" || e.key === "P") {
+          setTool("pin");
+        }
+
+        // Quick family switches
+        // NUMBER KEYS: 1 = Pins, 2 = Cards
+        if (e.key === "1") {
+          e.preventDefault();
+          if (currentFamily === "pin") {
+            cycleVariantInCurrentFamily(); // Already on pins → cycle variant
+          } else {
+            selectFamily("pin"); // Switch to pins
+          }
+        } else if (e.key === "2") {
+          e.preventDefault();
+          if (currentFamily === "card") {
+            cycleVariantInCurrentFamily(); // Already on cards → cycle variant
+          } else {
+            selectFamily("card"); // Switch to cards
+          }
+        }
+
+        if (e.key === "Escape") {
+          e.preventDefault();
+          selectedPinIndex = null;
+          pinInfo.style.display = "none";
+          tempStartIndex = null; // ← THIS LINE FIXES THE UNWANTED PREVIEW LINE
+          connectStartIndex = null; // ← Also clear any Shift-click connection start
+          draw();
+        }
+      });
+
+      // === FAMILY & VARIANT CYCLING WITH NUMBER KEYS ===
+      function selectFamily(family) {
+        currentFamily = family;
+        // Keep the last selected variant for this family, or default to first
+        const fallback = NODE_TYPES.find((t) => t.family === family);
+        currentTypeId = selectedTypeByFamily[family] || fallback.id;
+        renderMenu();
+        draw();
+      }
+
+      function cycleVariantInCurrentFamily() {
+        const variants = NODE_TYPES.filter((t) => t.family === currentFamily);
+        if (variants.length <= 1) return;
+
+        const currentId = currentTypeId;
+        const currentIndex = variants.findIndex((t) => t.id === currentId);
+        const nextIndex = (currentIndex + 1) % variants.length;
+        const nextType = variants[nextIndex];
+
+        selectedTypeByFamily[currentFamily] = nextType.id;
+        currentTypeId = nextType.id;
+
+        renderMenu();
+        draw();
+      }
+
+      draw();
+    </script>
+  </body>
+</html>

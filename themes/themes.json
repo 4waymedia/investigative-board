@@ -1,0 +1,223 @@
+{
+  "G1": {
+    "name": "Investigative Noir",
+    "color-list": [
+      "#000000",
+      "#1A1A1A",
+      "#4A4A4A",
+      "#FF4500",
+      "#FFD700",
+      "#00BFFF",
+      "#228B22",
+      "#8A2BE2",
+      "#DC143C"
+    ],
+    "textColor": "#FFFFFF",
+    "background": {
+      "type": "solid",
+      "value": "#000000",
+      "texture": "noise",
+      "textureOpacity": 0.05
+    },
+    "full description": "This theme draws from classic film noir aesthetics, perfect for conspiracy investigations or mystery mapping. The dark background enhances focus on connections, with pins and cards in muted grays (#1A1A1A, #4A4A4A) for a shadowy feel. Lines use vibrant accents like orange (#FF4500) for high-priority links and gold (#FFD700) for key revelations. Objects (entities/events) pop in blues (#00BFFF) and greens (#228B22) for categorization, while purples (#8A2BE2) and reds (#DC143C) highlight warnings or secrets. The top toolbar remains neutral in black for seamless integration, and the bottom object row uses subtle gradients from dark to light gray for drag-and-drop visibility. Overall, it balances high contrast for readability with an immersive, suspenseful atmosphere."
+  },
+  "G2": {
+    "name": "Sci-Fi Futuristic",
+    "color-list": [
+      "#0A0F1A",
+      "#1C2331",
+      "#00FFFF",
+      "#FF00FF",
+      "#00FF00",
+      "#FFFF00",
+      "#FF69B4",
+      "#4B0082",
+      "#20B2AA"
+    ],
+    "textColor": "#FFFFFF",
+    "background": {
+      "type": "linear-gradient",
+      "direction": "to bottom",
+      "colors": ["#0A0F1A", "#1C2331"],
+      "stops": [0, 100]
+    },
+    "full description": "Inspired by cyberpunk and space opera sci-fi, this theme transforms the canvas into a high-tech holographic display for exploring futuristic plots or tech investigations. Pins glow in cyan (#00FFFF) for digital nodes, cards in neon magenta (#FF00FF) for data clusters. Lines curve with electric green (#00FF00) for energy flows and yellow (#FFFF00) for neural connections. Objects use hot pink (#FF69B4) for alien entities, indigo (#4B0082) for tech events, and turquoise (#20B2AA) for collections. The toolbar at the top features metallic gradients in dark blues for a control panel vibe, while the bottom row shimmers with subtle animations on hover. The design balances bold neon pops against a dark void for dramatic visual hierarchy and an otherworldly investigative feel."
+  },
+  "G3": {
+    "name": "Watercolor Exploration",
+    "color-list": [
+      "#F5F5F5",
+      "#A8DADC",
+      "#457B9D",
+      "#E63946",
+      "#F1FAEE",
+      "#1D3557",
+      "#F4A261",
+      "#2A9D8F",
+      "#E76F51",
+      "#264653"
+    ],
+    "textColor": "#1D3557",
+    "background": {
+      "type": "solid",
+      "value": "#F5F5F5",
+      "texture": "paper",
+      "textureOpacity": 0.1
+    },
+    "full description": "This theme adopts a soft, artistic watercolor style, ideal for creative planning, historical timelines, or organic investigations like mind mapping ideas. The light background (#F5F5F5 base) provides a gentle, non-distracting space. Pins in cool blues (#A8DADC, #457B9D) suggest fluidity, cards in warm reds (#E63946) and beiges (#F1FAEE) for narrative depth. Lines blend softly in navy (#1D3557) and orange (#F4A261) for organic connections. Objects are colored in greens (#2A9D8F) for growth/entities, corals (#E76F51) for events, and deep teals (#264653) for data collections, mimicking painted elements. The top toolbar uses translucent washes for tools, and the bottom row features hand-drawn icon styles. It achieves balance through pastel harmonies, promoting calm focus and creative flow in presentations."
+  },
+  "C1": {
+    "name": "Signal Noir",
+    "color_list": [
+      "#0B0F14",
+      "#161B22",
+      "#58A6FF",
+      "#F78166",
+      "#7EE787",
+      "#D2A8FF",
+      "#E3B341",
+      "#8B949E"
+    ],
+    "textColor": "#E6EDF3",
+    "background": {
+      "type": "gradient",
+      "value": "radial-gradient(circle at center, #0F141A 0%, #0B0F14 70%)"
+    },
+    "description": "A modern investigative theme built for clarity under pressure. Signal Noir emphasizes contrast, hierarchy, and intent—ideal for intelligence analysis, timelines, and complex relational graphs. Bright colors act as semantic signals rather than decoration, while the dark graphite background minimizes eye strain during long sessions. Perfect for investigations, research synthesis, and narrative deconstruction."
+  },
+  "C2": {
+    "name": "Architect's Desk",
+    "color_list": [
+      "#F7F5F2",
+      "#E6E2DC",
+      "#2F3E46",
+      "#52796F",
+      "#84A98C",
+      "#BC6C25",
+      "#6D6875",
+      "#ADB5BD"
+    ],
+    "textColor": "#2F3E46",
+    "background": {
+      "type": "pattern",
+      "baseColor": "#3B82F6",
+      "patternType": "grid",
+      "patternColor": "rgba(255,255,255,0.4)",
+      "patternSize": 20
+    },
+    "description": "A calm, strategic theme inspired by architectural drawings and planning boards. Architect’s Desk is optimized for structured thinking: roadmaps, product planning, systems design, and cause-effect modeling. Muted earth tones reduce cognitive noise while preserving strong visual grouping. This theme shines when clarity, order, and professional polish matter more than drama."
+  },
+  "C3": {
+    "name": "Quantum Wash",
+    "color_list": [
+      "#0E0B16",
+      "#231942",
+      "#5E548E",
+      "#9F86C0",
+      "#E0B1CB",
+      "#00F5D4",
+      "#FFAFCC",
+      "#CDB4DB"
+    ],
+    "textColor": "#E0B1CB",
+    "background": {
+      "type": "gradient",
+      "value": "linear-gradient(135deg, #0E0B16 0%, #231942 50%, #1B1A2E 100%)"
+    },
+    "description": "An expressive, sci-fi watercolor fusion designed for exploratory thinking. Quantum Wash embraces uncertainty, emergence, and pattern discovery—excellent for theory building, speculative research, storytelling, and futurecasting. Soft gradients and luminous accents create a sense of depth and motion, making the canvas feel alive without overwhelming structure."
+  },
+  "Gem1": {
+    "theme-name": "Neo-Modern",
+    "theme-focus": "Planning & Corporate Data",
+    "color-list": [
+      "#424242",
+      "#1E88E5",
+      "#4CAF50",
+      "#FFC107",
+      "#E91E63",
+      "#795548",
+      "#9C27B0",
+      "#E0E0E0"
+    ],
+    "textColor": "#424242",
+    "background": {
+      "type": "solid",
+      "value": "#F5F5F5"
+    },
+    "full description": "The Neo-Modern theme is designed for **maximum clarity and professional use** (e.g., project planning, process mapping). It uses a clean, bright aesthetic where categorical colors clearly delineate different node or object types. \n\n* **Pins/Labels:** The dark gray **#424242** for high readability.\n* **Lines/Connections:** A medium gray **#E0E0E0** for secondary connections, with the primary object colors used for fan-out lines to maintain identity.\n* **Cards/Objects:** The vibrant palette is applied qualitatively to the main body of cards and pins for instant distinction (Blue: #1E88E5 for *Active*, Green: #4CAF50 for *Complete*, Yellow: #FFC107 for *Warning*, Pink: #E91E63 for *Urgent*, etc.)."
+  },
+  "Gem2": {
+    "theme-name": "Cyber-Sleuth",
+    "theme-focus": "Investigation & Sci-Fi",
+    "color-list": [
+      "#00BFFF",
+      "#00FF7F",
+      "#FF00FF",
+      "#FFFF00",
+      "#FF4500",
+      "#8A2BE2",
+      "#BCBDbe"
+    ],
+    "textColor": "#00BFFF",
+    "background": {
+      "type": "radial-gradient",
+      "baseColor": "#0A192F",
+      "centerColor": "#0A192F",
+      "edgeColor": "#000000",
+      "centerX": 0.5,
+      "centerY": 0.5,
+      "radius": 0.8
+    },
+    "full description": "This theme creates an immersive, high-tech, and futuristic environment perfect for **in-depth visual investigation and complex network analysis**. The dark background is ideal for reducing eye strain during long sessions and making critical data 'pop.'\n\n* **Pins/Lines/Active Elements:** The electric blue **#00BFFF** is used for all active selections, primary lines, and pins, giving a 'digital glow' effect.\n* **Cards/Objects:** The rest of the palette is composed of high-saturation, neon-like colors. The yellow **#FFFF00** is perfect for 'evidence' or 'critical entities,' while the green **#00FF7F** could represent 'secure' or 'verified' data. The light gray **#BCBDbe** is used for inactive/archived objects.\n* **Layout:** This theme works exceptionally well with the 'Force-directed' and 'Cluster' layouts, emphasizing the glowing, interconnected nature of the data."
+  },
+  "Gem3": {
+    "theme-name": "Artist's Sketchbook",
+    "theme-focus": "Mind Maps & Creative Brainstorming",
+    "color-list": [
+      "#4C3B30",
+      "#A1887F",
+      "#B3E5FC",
+      "#C8E6C9",
+      "#FFF9C4",
+      "#FFCCBC",
+      "#D1C4E9"
+    ],
+    "textColor": "#4C3B30",
+    "background": {
+      "type": "solid",
+      "value": "#FAF9F7",
+      "texture": "paper",
+      "textureOpacity": 0.08
+    },
+    "full description": "The Artist's Sketchbook theme offers a **warm, organic, and non-intimidating space for creative thinking and mind-mapping**. The colors are all muted, light, and pastels, mimicking the translucency of watercolor pigments on paper.\n\n* **Pins/Labels/Lines:** A dark, cool brown **#4C3B30** is used for all text and the primary node lines, simulating a pencil or ink sketch on the paper.\n* **Connections:** The secondary lines use the warm brown **#A1887F** (like a sepia pencil) for a subtle, sketched look.\n* **Cards/Objects:** The soft palette (Light Blue, Light Green, Pale Yellow, Coral, and Lavender) is used for the card fill colors. The lighter saturation and soft hues ensure that the 'pencil' text remains highly legible, perfect for the 'Radial Mind Map' layout."
+  },
+  "M1": {
+    "name": "The Matrix",
+    "color-list": [
+      "#000000",
+      "#00FF41",
+      "#00CC33",
+      "#009922",
+      "#003311",
+      "#00FF88",
+      "#00AA55",
+      "#004422"
+    ],
+    "textColor": "#FFFFFF",
+    "background": {
+      "type": "radial-gradient",
+      "baseColor": "#000000",
+      "centerColor": "#000000",
+      "edgeColor": "#001100",
+      "centerX": 0.5,
+      "centerY": 0.5,
+      "radius": 1.0,
+      "glow": {
+        "color": "#00FF41",
+        "opacity": 0.15,
+        "blur": 50
+      }
+    },
+    "full description": "Inspired by the iconic Matrix film aesthetic, this theme creates a cyberpunk digital realm perfect for tech investigations, network analysis, and conspiracy mapping. The deep black background (#000000) provides maximum contrast, with a subtle neon green (#00FF41) radial glow that hints at the digital matrix code. Text appears in crisp white (#FFFFFF) for maximum readability against the dark void. Cards feature green accent shadows (#00FF41) that create a subtle digital glow effect, mimicking the Matrix's signature visual style. The color palette emphasizes various shades of neon green (#00FF41, #00CC33, #009922) against pure black, creating a high-contrast, futuristic environment that makes connections and data relationships pop with electric intensity. Perfect for investigations that feel like hacking into a system or uncovering digital conspiracies."
+  }
+}
