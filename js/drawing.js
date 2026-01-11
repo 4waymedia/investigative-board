@@ -70,6 +70,7 @@ function drawCenterPin(areaPin, centerPos) {
   }
 
   // Create temporary pin object for center pin
+  const pinScale = areaPin.pinScale || 1;
   const centerPin = {
     x: areaPin.x || 0, // Same position as area
     y: areaPin.y || 0,
@@ -77,7 +78,8 @@ function drawCenterPin(areaPin, centerPos) {
     typeId: cardTypeId,
     label: areaPin.title || '', // Use title as label for center pin
     title: areaPin.title || '', // Use area's title
-    description: areaPin.description || '' // Use area's description
+    description: areaPin.description || '', // Use area's description
+    pinScale: pinScale // Scale factor for center pin size
   };
 
   // Ensure centerPin has required properties
@@ -264,7 +266,7 @@ function drawPinShape(pin, metrics, index) {
   } else if (m.shape === "area-circle") {
     // --- Logic for Area Circle (Scaled) ---
     const r = m.radius * s;
-    const borderWidth = (pin.borderWidth || 2) * s;
+    const borderWidth = Math.min((pin.borderWidth || 2) * s, r * 0.8); // Clamp border width to prevent disappearing fill
     const fillColor = pin.fillColor || pin.color + "40"; // Default semi-transparent
     const borderColor = pin.borderColor || pin.color;
     const textColor = pin.textColor || (window._currentThemeTextColor || "#FFFFFF");
@@ -278,18 +280,21 @@ function drawPinShape(pin, metrics, index) {
     ctx.arc(scr.x + 4 * s, scr.y + 4 * s, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Fill
+    // Fill (ensure we have a minimum fill radius)
+    const fillRadius = Math.max(r - borderWidth/2, 1);
     ctx.fillStyle = fillColor;
     ctx.beginPath();
-    ctx.arc(scr.x, scr.y, r - borderWidth/2, 0, Math.PI * 2);
+    ctx.arc(scr.x, scr.y, fillRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = borderWidth;
-    ctx.beginPath();
-    ctx.arc(scr.x, scr.y, r - borderWidth/2, 0, Math.PI * 2);
-    ctx.stroke();
+    // Border (only draw if border width is reasonable)
+    if (borderWidth > 0.1) {
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = borderWidth;
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, fillRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Selection highlight
     if (isSelected) {
@@ -327,7 +332,7 @@ function drawPinShape(pin, metrics, index) {
     const x = scr.x - w / 2;
     const y = scr.y - h / 2;
     const r = m.baseRadius * s;
-    const borderWidth = (pin.borderWidth || 2) * s;
+    const borderWidth = Math.min((pin.borderWidth || 2) * s, Math.min(w, h) * 0.4); // Clamp border width to prevent disappearing fill
     const fillColor = pin.fillColor || pin.color + "40"; // Default semi-transparent
     const borderColor = pin.borderColor || pin.color;
     const textColor = pin.textColor || (window._currentThemeTextColor || "#FFFFFF");
@@ -340,16 +345,22 @@ function drawPinShape(pin, metrics, index) {
     roundRectPath(ctx, x + 4 * s, y + 4 * s, w, h, r);
     ctx.fill();
 
-    // Fill
+    // Fill (ensure we have minimum fill dimensions)
+    const fillInset = borderWidth / 2;
+    const fillW = Math.max(w - borderWidth, 2);
+    const fillH = Math.max(h - borderWidth, 2);
+    const fillR = Math.max(r - fillInset, 0);
     ctx.fillStyle = fillColor;
-    roundRectPath(ctx, x + borderWidth/2, y + borderWidth/2, w - borderWidth, h - borderWidth, r - borderWidth/2);
+    roundRectPath(ctx, x + fillInset, y + fillInset, fillW, fillH, fillR);
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = borderWidth;
-    roundRectPath(ctx, x + borderWidth/2, y + borderWidth/2, w - borderWidth, h - borderWidth, r - borderWidth/2);
-    ctx.stroke();
+    // Border (only draw if border width is reasonable)
+    if (borderWidth > 0.1) {
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = borderWidth;
+      roundRectPath(ctx, x + fillInset, y + fillInset, fillW, fillH, fillR);
+      ctx.stroke();
+    }
 
     // Selection highlight
     if (isSelected) {

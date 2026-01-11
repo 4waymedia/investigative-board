@@ -36,70 +36,149 @@
           <div id="pin-modal-title">Edit Pin</div>
           <div id="pin-modal-close">✕</div>
         </div>
-        <div class="modal-field">
-          <div class="modal-label">Title</div>
-          <input
-            id="pm-title"
-            class="modal-input"
-            type="text"
-            placeholder="Pin title"
-          />
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Color (hex)</div>
-          <div class="color-input-wrapper">
-            <input
-              id="pm-color"
-              class="modal-input color-input"
-              type="text"
-              placeholder="#58a6ff"
-            />
-            <input
-              id="pm-color-picker"
-              class="color-picker"
-              type="color"
-              value="#58a6ff"
-            />
-          </div>
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Description / Notes</div>
-          <textarea
-            id="pm-description"
-            class="modal-textarea"
-            placeholder="What does this pin represent?"
-          ></textarea>
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Date</div>
-          <input
-            id="pm-date"
-            class="modal-input"
-            type="text"
-            placeholder="e.g. 1958, Jul 1947, 1963-11-22"
-          />
+
+        <!-- Tab Navigation -->
+        <div id="modal-tabs">
+          <div class="tab-button active" data-tab="info">Info</div>
+          <div class="tab-button" data-tab="style">Style</div>
+          <div class="tab-button" data-tab="settings">Settings</div>
         </div>
 
-        <!-- Area-specific fields (shown only for area pins) -->
-        <div id="area-fields" style="display: none;">
-          <div class="modal-field">
-            <div class="modal-label">Area Title</div>
-            <input
-              id="pm-area-title"
-              class="modal-input"
-              type="text"
-              placeholder="Area title"
-            />
+        <!-- Tab Content -->
+        <div id="modal-content">
+          <!-- Info Tab -->
+          <div class="tab-content active" id="info-tab">
+            <div class="modal-field">
+              <div class="modal-label">Title</div>
+              <input
+                id="pm-title"
+                class="modal-input"
+                type="text"
+                placeholder="Pin title"
+              />
+            </div>
+            <div class="modal-field">
+              <div class="modal-label">Description / Notes</div>
+              <textarea
+                id="pm-description"
+                class="modal-textarea"
+                placeholder="What does this pin represent?"
+              ></textarea>
+            </div>
+            <div class="modal-field">
+              <div class="modal-label">Date</div>
+              <input
+                id="pm-date"
+                class="modal-input"
+                type="text"
+                placeholder="e.g. 1958, Jul 1947, 1963-11-22"
+              />
+            </div>
+
+            <!-- Area-specific info fields -->
+            <div id="area-info-fields" style="display: none;">
+              <div class="modal-field">
+                <div class="modal-label">Area Title</div>
+                <input
+                  id="pm-area-title"
+                  class="modal-input"
+                  type="text"
+                  placeholder="Area title"
+                />
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Area Description</div>
+                <input
+                  id="pm-area-description"
+                  class="modal-input"
+                  type="text"
+                  placeholder="Area description"
+                />
+              </div>
+            </div>
           </div>
-          <div class="modal-field">
-            <div class="modal-label">Description</div>
-            <input
-              id="pm-area-description"
-              class="modal-input"
-              type="text"
-              placeholder="Area description"
-            />
+
+          <!-- Style Tab -->
+          <div class="tab-content" id="style-tab">
+            <!-- Regular pin color -->
+            <div class="modal-field" id="pin-color-field">
+              <div class="modal-label">Pin Color (hex)</div>
+              <div class="color-input-wrapper">
+                <input
+                  id="pm-color"
+                  class="modal-input color-input"
+                  type="text"
+                  placeholder="#58a6ff"
+                />
+                <input
+                  id="pm-color-picker"
+                  class="color-picker"
+                  type="color"
+                  value="#58a6ff"
+                />
+              </div>
+            </div>
+
+            <!-- Area-specific style fields -->
+            <div id="area-style-fields" style="display: none;">
+              <div class="modal-field">
+                <div class="modal-label">Fill Color (hex)</div>
+                <div class="color-input-wrapper">
+                  <input
+                    id="pm-area-fill-color"
+                    class="modal-input color-input"
+                    type="text"
+                    placeholder="#58a6ff40"
+                  />
+                  <input
+                    id="pm-area-fill-color-picker"
+                    class="color-picker"
+                    type="color"
+                    value="#58a6ff"
+                  />
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Border Color (hex)</div>
+                <div class="color-input-wrapper">
+                  <input
+                    id="pm-area-border-color"
+                    class="modal-input color-input"
+                    type="text"
+                    placeholder="#58a6ff"
+                  />
+                  <input
+                    id="pm-area-border-color-picker"
+                    class="color-picker"
+                    type="color"
+                    value="#58a6ff"
+                  />
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Text Color (hex)</div>
+                <div class="color-input-wrapper">
+                  <input
+                    id="pm-area-text-color"
+                    class="modal-input color-input"
+                    type="text"
+                    placeholder="#ffffff"
+                  />
+                  <input
+                    id="pm-area-text-color-picker"
+                    class="color-picker"
+                    type="color"
+                    value="#ffffff"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
+
+          <!-- Settings Tab -->
+          <div class="tab-content" id="settings-tab">
+            <!-- Area-specific settings fields -->
+            <div id="area-settings-fields" style="display: none;">
               <div class="modal-field">
                 <div class="modal-label">Pin Shape</div>
                 <div class="icon-selector-wrapper">
@@ -114,99 +193,39 @@
                   </select>
                 </div>
               </div>
-          <div class="modal-field">
-            <div class="modal-label">Fill Color (hex)</div>
-            <div class="color-input-wrapper">
-              <input
-                id="pm-area-fill-color"
-                class="modal-input color-input"
-                type="text"
-                placeholder="#58a6ff40"
-              />
-              <input
-                id="pm-area-fill-color-picker"
-                class="color-picker"
-                type="color"
-                value="#58a6ff"
-              />
-            </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Border Color (hex)</div>
-            <div class="color-input-wrapper">
-              <input
-                id="pm-area-border-color"
-                class="modal-input color-input"
-                type="text"
-                placeholder="#58a6ff"
-              />
-              <input
-                id="pm-area-border-color-picker"
-                class="color-picker"
-                type="color"
-                value="#58a6ff"
-              />
-            </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Border Width</div>
-            <input
-              id="pm-area-border-width"
-              class="modal-input"
-              type="number"
-              min="1"
-              max="10"
-              step="1"
-              placeholder="2"
-            />
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Text Color (hex)</div>
-            <div class="color-input-wrapper">
-              <input
-                id="pm-area-text-color"
-                class="modal-input color-input"
-                type="text"
-                placeholder="#ffffff"
-              />
-              <input
-                id="pm-area-text-color-picker"
-                class="color-picker"
-                type="color"
-                value="#ffffff"
-              />
-            </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Icon Color (hex)</div>
-            <div class="color-input-wrapper">
-              <input
-                id="pm-area-icon-color"
-                class="modal-input color-input"
-                type="text"
-                placeholder="#58a6ff"
-              />
-              <input
-                id="pm-area-icon-color-picker"
-                class="color-picker"
-                type="color"
-                value="#58a6ff"
-              />
-            </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Area Size</div>
-            <div class="size-slider-wrapper">
-              <input
-                id="pm-area-size"
-                class="size-slider"
-                type="range"
-                min="50"
-                max="1000"
-                step="10"
-                value="200"
-              />
-              <span id="pm-area-size-value" class="size-value">200px</span>
+              <div class="modal-field">
+                <div class="modal-label">Border Width</div>
+                <input
+                  id="pm-area-border-width"
+                  class="modal-input"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value="2"
+                />
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Center Pin Scale</div>
+                <div class="size-slider-wrapper">
+                  <input id="pm-area-pin-scale" class="size-slider" type="range" min="0.5" max="3" step="0.1" value="1" />
+                  <span id="pm-area-pin-scale-value" class="size-value">1.0x</span>
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Area Size</div>
+                <div class="size-slider-wrapper">
+                  <input
+                    id="pm-area-size"
+                    class="size-slider"
+                    type="range"
+                    min="50"
+                    max="1000"
+                    step="10"
+                    value="200"
+                  />
+                  <span id="pm-area-size-value" class="size-value">200px</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -778,13 +797,15 @@
 
           const fallbackTypeDetail = getNodeType(fallbackTypeId) || { variant: "circle" };
 
+          // Only apply pinScale to non-area pins in fallback too
+          const fallbackPinScale = (!typeId.startsWith('area:')) ? (pin.pinScale || 1) : 1;
           return {
             shape: fallbackBase.shape,
             baseRadius: fallbackBase.baseRadius,
             variant: fallbackTypeDetail.variant,
-            radius: pin.radius || fallbackBase.baseRadius,
-            width: pin.width || fallbackBase.baseWidth,
-            height: pin.height || fallbackBase.baseHeight,
+            radius: (pin.radius || fallbackBase.baseRadius) * fallbackPinScale,
+            width: (pin.width || fallbackBase.baseWidth) * fallbackPinScale,
+            height: (pin.height || fallbackBase.baseHeight) * fallbackPinScale,
           };
         }
 
@@ -792,24 +813,26 @@
         const typeDetail = getNodeType(typeId);
 
         // 3. Define the core metrics object
+        // Only apply pinScale to non-area pins (area pins use pinScale for center pin scaling)
+        const pinScale = (!typeId.startsWith('area:')) ? (pin.pinScale || 1) : 1;
         const metrics = {
           shape: base.shape,
           baseRadius: base.baseRadius,
           variant: typeDetail.variant, // <--- CRITICAL FIX: Attach the variant
           // Use pin.radius/width/height if they exist (for dynamic sizing), otherwise use base
-          radius: pin.radius || base.baseRadius,
-          width: pin.width || base.baseWidth,
-          height: pin.height || base.baseHeight,
+          radius: (pin.radius || base.baseRadius) * pinScale,
+          width: (pin.width || base.baseWidth) * pinScale,
+          height: (pin.height || base.baseHeight) * pinScale,
         };
 
         // If the pin has been resized by the user, we ensure the metrics reflect that
         if (pin.width && pin.height) {
-          metrics.width = pin.width;
-          metrics.height = pin.height;
+          metrics.width = pin.width * pinScale;
+          metrics.height = pin.height * pinScale;
 
           // For area-circle, update radius to fit the rectangle
           if (base.shape === "area-circle") {
-            metrics.radius = Math.min(pin.width, pin.height) / 2;
+            metrics.radius = Math.min(pin.width, pin.height) / 2 * pinScale;
           }
         }
 
@@ -2621,6 +2644,38 @@
       // ============================================================================
       let modalPinIndex = null;
 
+      function switchTab(tabName) {
+        // Hide all tab content
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabContents.forEach(content => content.classList.remove('active'));
+
+        // Remove active class from all tab buttons
+        const tabButtons = document.querySelectorAll('.tab-button');
+        tabButtons.forEach(button => button.classList.remove('active'));
+
+        // Show selected tab content
+        const selectedContent = document.getElementById(tabName + '-tab');
+        if (selectedContent) {
+          selectedContent.classList.add('active');
+        }
+
+        // Activate selected tab button
+        const selectedButton = document.querySelector(`[data-tab="${tabName}"]`);
+        if (selectedButton) {
+          selectedButton.classList.add('active');
+        }
+      }
+
+      function setupTabSwitching() {
+        const tabButtons = document.querySelectorAll('.tab-button');
+        tabButtons.forEach(button => {
+          button.addEventListener('click', function() {
+            const tabName = this.getAttribute('data-tab');
+            switchTab(tabName);
+          });
+        });
+      }
+
       function openPinModal(index) {
         const pin = pins[index];
         const card =
@@ -2633,9 +2688,19 @@
 
         // Handle area-specific fields
         const isArea = pin.typeId && pin.typeId.startsWith("area:");
-        const areaFields = document.getElementById("area-fields");
+        const areaInfoFields = document.getElementById("area-info-fields");
+        const areaStyleFields = document.getElementById("area-style-fields");
+        const areaSettingsFields = document.getElementById("area-settings-fields");
+        const pinColorField = document.getElementById("pin-color-field");
+
         if (isArea) {
-          areaFields.style.display = "block";
+          // Show area-specific fields in their respective tabs
+          areaInfoFields.style.display = "block";
+          areaStyleFields.style.display = "block";
+          areaSettingsFields.style.display = "block";
+          pinColorField.style.display = "none";
+          // Switch to settings tab for area pins (where most controls are)
+          switchTab('settings');
           document.getElementById("pm-area-title").value = pin.title || "";
           document.getElementById("pm-area-description").value = pin.description || "";
           document.getElementById("pm-area-pin").value = pin.icon || "▤"; // Default to note card
@@ -2643,7 +2708,6 @@
           document.getElementById("pm-area-border-color").value = pin.borderColor || "";
           document.getElementById("pm-area-border-width").value = pin.borderWidth || 2;
           document.getElementById("pm-area-text-color").value = pin.textColor || "";
-          document.getElementById("pm-area-icon-color").value = pin.iconColor || "";
 
           // Update pin display
           updateAreaPinDisplay(pin.icon || "▤");
@@ -2660,17 +2724,45 @@
             sizeValue.textContent = this.value + "px";
           };
 
+          // Handle pin scale slider
+          const pinScaleSlider = document.getElementById("pm-area-pin-scale");
+          const pinScaleValue = document.getElementById("pm-area-pin-scale-value");
+
+          // Calculate maximum pin scale based on area size to prevent center pin from extending beyond boundary
+          const areaSize = Math.max(pin.width || 200, pin.height || 200);
+          const maxPinScale = Math.min(3, areaSize / 60); // Assuming base pin size ~60px, limit to 3x or area-constrained
+          pinScaleSlider.max = Math.max(0.5, maxPinScale);
+
+          const currentPinScale = Math.min(pin.pinScale || 1, maxPinScale);
+          pinScaleSlider.value = currentPinScale;
+          pinScaleValue.textContent = currentPinScale.toFixed(1) + "x";
+
+          // Update pin scale value display when slider changes
+          pinScaleSlider.oninput = function() {
+            const value = parseFloat(this.value);
+            pinScaleValue.textContent = value.toFixed(1) + "x";
+          };
+
           // Set up pin selector
           const pinSelector = document.getElementById("pm-area-pin");
           pinSelector.onchange = function() {
             updateAreaPinDisplay(this.value);
           };
         } else {
-          areaFields.style.display = "none";
+          // Hide area-specific fields, show regular pin color
+          areaInfoFields.style.display = "none";
+          areaStyleFields.style.display = "none";
+          areaSettingsFields.style.display = "none";
+          pinColorField.style.display = "block";
+          // Switch to info tab for regular pins
+          switchTab('info');
         }
 
         modalPinIndex = index;
         pinModalBackdrop.style.display = "flex";
+
+        // Set up tab switching
+        setupTabSwitching();
 
         // Set up color picker synchronization
         setupColorPickerSync();
@@ -2691,8 +2783,7 @@
           { input: "pm-color", picker: "pm-color-picker" },
           { input: "pm-area-fill-color", picker: "pm-area-fill-color-picker" },
           { input: "pm-area-border-color", picker: "pm-area-border-color-picker" },
-          { input: "pm-area-text-color", picker: "pm-area-text-color-picker" },
-          { input: "pm-area-icon-color", picker: "pm-area-icon-color-picker" }
+          { input: "pm-area-text-color", picker: "pm-area-text-color-picker" }
         ];
 
         colorPairs.forEach(pair => {
@@ -2933,7 +3024,7 @@ function lightenColor(color, percent) {
           const borderColor = document.getElementById("pm-area-border-color").value.trim();
           const borderWidth = parseInt(document.getElementById("pm-area-border-width").value) || 2;
           const textColor = document.getElementById("pm-area-text-color").value.trim();
-          const iconColor = document.getElementById("pm-area-icon-color").value.trim();
+          const pinScale = parseFloat(document.getElementById("pm-area-pin-scale").value) || 1;
           const areaSize = parseInt(document.getElementById("pm-area-size").value) || 200;
 
           pin.title = areaTitle;
@@ -2945,7 +3036,9 @@ function lightenColor(color, percent) {
           if (borderColor && /^#[0-9A-F]{6}$/i.test(borderColor)) pin.borderColor = borderColor;
           pin.borderWidth = Math.max(1, Math.min(10, borderWidth));
           if (textColor && /^#[0-9A-F]{6}$/i.test(textColor)) pin.textColor = textColor;
-          if (iconColor && /^#[0-9A-F]{6}$/i.test(iconColor)) pin.iconColor = iconColor;
+          // Constrain pin scale based on area size to prevent center pin from extending beyond boundary
+          const maxAllowedScale = Math.min(3, areaSize / 60);
+          pin.pinScale = Math.max(0.5, Math.min(maxAllowedScale, pinScale));
         }
 
         setSelectedPin(modalPinIndex);
