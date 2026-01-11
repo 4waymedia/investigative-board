@@ -727,7 +727,7 @@
       // PIN/CARD SHAPE DEFINITIONS
       // ============================================================================
       const PIN_BASES = {
-        "pin:circle": { shape: "circle", baseRadius: 20 },
+        "pin:circle": { shape: "circle", baseRadius: 18 },
         "pin:square": {
           shape: "rect",
           baseRadius: 4,
@@ -1536,6 +1536,10 @@
 
         menu.appendChild(renderTypeBar());
 
+        // Color options container
+        const colorContainer = document.createElement("div");
+        colorContainer.className = "color-container";
+
         palette.forEach((col) => {
           const el = document.createElement("div");
           el.className =
@@ -1547,7 +1551,7 @@
             renderMenu();
             draw();
           };
-          menu.appendChild(el);
+          colorContainer.appendChild(el);
         });
 
         const add = document.createElement("div");
@@ -1556,8 +1560,6 @@
         add.onclick = () => {
           openAddColorModal();
         };
-        menu.appendChild(add);
-
         // Connection Type Toggle
         const connTypeDiv = document.createElement("div");
         connTypeDiv.className = "color-option";
@@ -1572,10 +1574,12 @@
           draw();
         };
         connTypeDiv.title = `Connection Type: ${connectionType} (Press 'T' to toggle)`;
-        menu.appendChild(connTypeDiv);
+        colorContainer.appendChild(connTypeDiv);
 
         // Theme Selector
-        menu.appendChild(renderThemeSelector());
+        colorContainer.appendChild(renderThemeSelector());
+
+        menu.appendChild(colorContainer);
       }
 
       function closeThemeMenu() {
@@ -5999,11 +6003,16 @@
         if (e.shiftKey && e.key >= "1" && e.key <= "9") {
           e.preventDefault();
           const colorIndex = parseInt(e.key) - 1; // Convert "1" to index 0, "2" to index 1, etc.
+          console.log(`Shift+${e.key} pressed. Color index: ${colorIndex}, Palette length: ${palette.length}`);
+          console.log('Palette:', palette.map((c, i) => `${i}: ${c.name} (${c.value})`));
           if (colorIndex < palette.length) {
+            console.log(`Selecting color: ${palette[colorIndex].name} (${palette[colorIndex].value})`);
             selectedColor = palette[colorIndex].value;
             saveState();
             renderMenu();
             draw();
+          } else {
+            console.log(`Color index ${colorIndex} is out of range`);
           }
         }
 
