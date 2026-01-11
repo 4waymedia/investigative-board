@@ -47,12 +47,20 @@
         </div>
         <div class="modal-field">
           <div class="modal-label">Color (hex)</div>
-          <input
-            id="pm-color"
-            class="modal-input"
-            type="text"
-            placeholder="#58a6ff"
-          />
+          <div class="color-input-wrapper">
+            <input
+              id="pm-color"
+              class="modal-input color-input"
+              type="text"
+              placeholder="#58a6ff"
+            />
+            <input
+              id="pm-color-picker"
+              class="color-picker"
+              type="color"
+              value="#58a6ff"
+            />
+          </div>
         </div>
         <div class="modal-field">
           <div class="modal-label">Description / Notes</div>
@@ -92,32 +100,53 @@
               placeholder="Area description"
             />
           </div>
-          <div class="modal-field">
-            <div class="modal-label">Icon</div>
-            <input
-              id="pm-area-icon"
-              class="modal-input"
-              type="text"
-              placeholder="e.g. 📍, ⭐, 🎯"
-            />
-          </div>
+              <div class="modal-field">
+                <div class="modal-label">Pin Shape</div>
+                <div class="icon-selector-wrapper">
+                  <div id="pm-area-pin-display" class="icon-display">▤</div>
+                  <select id="pm-area-pin" class="icon-selector">
+                    <option value="">None</option>
+                    <optgroup label="Center Pin Types">
+                      <option value="▤">▤ Note Card</option>
+                      <option value="📄">📄 Document Card</option>
+                      <option value="📁">📁 Folder Card</option>
+                    </optgroup>
+                  </select>
+                </div>
+              </div>
           <div class="modal-field">
             <div class="modal-label">Fill Color (hex)</div>
-            <input
-              id="pm-area-fill-color"
-              class="modal-input"
-              type="text"
-              placeholder="#58a6ff40"
-            />
+            <div class="color-input-wrapper">
+              <input
+                id="pm-area-fill-color"
+                class="modal-input color-input"
+                type="text"
+                placeholder="#58a6ff40"
+              />
+              <input
+                id="pm-area-fill-color-picker"
+                class="color-picker"
+                type="color"
+                value="#58a6ff"
+              />
+            </div>
           </div>
           <div class="modal-field">
             <div class="modal-label">Border Color (hex)</div>
-            <input
-              id="pm-area-border-color"
-              class="modal-input"
-              type="text"
-              placeholder="#58a6ff"
-            />
+            <div class="color-input-wrapper">
+              <input
+                id="pm-area-border-color"
+                class="modal-input color-input"
+                type="text"
+                placeholder="#58a6ff"
+              />
+              <input
+                id="pm-area-border-color-picker"
+                class="color-picker"
+                type="color"
+                value="#58a6ff"
+              />
+            </div>
           </div>
           <div class="modal-field">
             <div class="modal-label">Border Width</div>
@@ -133,21 +162,52 @@
           </div>
           <div class="modal-field">
             <div class="modal-label">Text Color (hex)</div>
-            <input
-              id="pm-area-text-color"
-              class="modal-input"
-              type="text"
-              placeholder="#ffffff"
-            />
+            <div class="color-input-wrapper">
+              <input
+                id="pm-area-text-color"
+                class="modal-input color-input"
+                type="text"
+                placeholder="#ffffff"
+              />
+              <input
+                id="pm-area-text-color-picker"
+                class="color-picker"
+                type="color"
+                value="#ffffff"
+              />
+            </div>
           </div>
           <div class="modal-field">
             <div class="modal-label">Icon Color (hex)</div>
-            <input
-              id="pm-area-icon-color"
-              class="modal-input"
-              type="text"
-              placeholder="#58a6ff"
-            />
+            <div class="color-input-wrapper">
+              <input
+                id="pm-area-icon-color"
+                class="modal-input color-input"
+                type="text"
+                placeholder="#58a6ff"
+              />
+              <input
+                id="pm-area-icon-color-picker"
+                class="color-picker"
+                type="color"
+                value="#58a6ff"
+              />
+            </div>
+          </div>
+          <div class="modal-field">
+            <div class="modal-label">Area Size</div>
+            <div class="size-slider-wrapper">
+              <input
+                id="pm-area-size"
+                class="size-slider"
+                type="range"
+                min="50"
+                max="1000"
+                step="10"
+                value="200"
+              />
+              <span id="pm-area-size-value" class="size-value">200px</span>
+            </div>
           </div>
         </div>
 
@@ -595,14 +655,10 @@
           family: "area",
           variant: "square",
         },
-        {
-          id: "area:rectangle",
-          label: "Rectangle Area",
-          icon: "▭",
-          family: "area",
-          variant: "rectangle",
-        },
       ];
+
+      // Make NODE_TYPES globally accessible for miniature pin rendering
+      window.NODE_TYPES = NODE_TYPES;
 
       // Type Selection State
       let selectedTypeByFamily = { pin: "pin:circle", card: "card:card", area: "area:circle" };
@@ -658,12 +714,6 @@
           baseWidth: 100,
           baseHeight: 100,
         },
-        "area:rectangle": {
-          shape: "area-rect",
-          baseRadius: 6,
-          baseWidth: 150,
-          baseHeight: 80,
-        },
       };
 
       // ============================================================================
@@ -680,12 +730,63 @@
         return count;
       }
 
-      function getPinMetrics(index) {
-        const pin = pins[index];
+      function getPinMetrics(pinOrIndex) {
+        let pin;
+        if (typeof pinOrIndex === 'number') {
+          // It's an index
+          pin = pins[pinOrIndex];
+        } else {
+          // It's a pin object
+          pin = pinOrIndex;
+        }
         const typeId = pin.typeId || "pin:circle"; // Use default if missing
 
         // 1. Get the base dimensions (from PIN_BASES)
         const base = PIN_BASES[typeId];
+
+        // Handle case where typeId no longer exists (fallback to appropriate type)
+        if (!base) {
+          console.warn(`Unknown pin type "${typeId}", falling back to appropriate default`);
+          let fallbackTypeId = "pin:circle"; // Default fallback
+
+          // Try to find an appropriate fallback based on the type family
+          if (typeId.startsWith("area:")) {
+            fallbackTypeId = "area:circle";
+          } else if (typeId.startsWith("card:")) {
+            fallbackTypeId = "card:card";
+          } else if (typeId.startsWith("pin:")) {
+            fallbackTypeId = "pin:circle";
+          }
+
+          // If the fallback type also doesn't exist, use the first available type
+          let fallbackBase = PIN_BASES[fallbackTypeId];
+          if (!fallbackBase) {
+            const firstKey = Object.keys(PIN_BASES)[0];
+            fallbackBase = PIN_BASES[firstKey];
+          }
+
+          // Ultimate fallback if PIN_BASES is somehow empty
+          if (!fallbackBase) {
+            console.error("PIN_BASES is empty! Using hardcoded fallback.");
+            fallbackBase = {
+              shape: "circle",
+              baseRadius: 9,
+              baseWidth: 50,
+              baseHeight: 50
+            };
+          }
+
+          const fallbackTypeDetail = getNodeType(fallbackTypeId) || { variant: "circle" };
+
+          return {
+            shape: fallbackBase.shape,
+            baseRadius: fallbackBase.baseRadius,
+            variant: fallbackTypeDetail.variant,
+            radius: pin.radius || fallbackBase.baseRadius,
+            width: pin.width || fallbackBase.baseWidth,
+            height: pin.height || fallbackBase.baseHeight,
+          };
+        }
 
         // 2. Get the full type details (from NODE_TYPES)
         const typeDetail = getNodeType(typeId);
@@ -705,6 +806,11 @@
         if (pin.width && pin.height) {
           metrics.width = pin.width;
           metrics.height = pin.height;
+
+          // For area-circle, update radius to fit the rectangle
+          if (base.shape === "area-circle") {
+            metrics.radius = Math.min(pin.width, pin.height) / 2;
+          }
         }
 
         return metrics;
@@ -723,8 +829,14 @@
           const halfHeight = metrics.height / 2;
           return pointX >= areaX - halfWidth && pointX <= areaX + halfWidth &&
                  pointY >= areaY - halfHeight && pointY <= areaY + halfHeight;
+        } else {
+          // Fallback: treat as rectangular area
+          console.warn(`Unknown area shape "${metrics.shape}", treating as rectangle`);
+          const halfWidth = metrics.width / 2;
+          const halfHeight = metrics.height / 2;
+          return pointX >= areaX - halfWidth && pointX <= areaX + halfWidth &&
+                 pointY >= areaY - halfHeight && pointY <= areaY + halfHeight;
         }
-        return false;
       }
 
       function updateAreaContainment() {
@@ -754,6 +866,7 @@
       function worldToScreen(x, y) {
         return { x: x * scale + offsetX, y: y * scale + offsetY };
       }
+      window.worldToScreen = worldToScreen;
 
       function screenToWorld(sx, sy) {
         return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
@@ -903,10 +1016,19 @@
 
       function setTool(id) {
         currentTool = id;
-        // When switching to text tool, also update the family selection
-        if (id === "text") {
+
+        // Set currentTypeId to the appropriate default for the tool
+        if (id === "pin") {
+          currentTypeId = "pin:circle";
+        } else if (id === "card") {
+          currentTypeId = "card:card";
+        } else if (id === "area") {
+          currentTypeId = "area:circle";
+        } else if (id === "text") {
+          // Text tool doesn't use currentTypeId, it uses currentTextType
           currentFamily = "pin"; // Reset to default pin family when switching to text
         }
+
         // Cancel any ongoing area or text creation drag when changing tools
         isDraggingArea = false;
         areaDragStart = null;
@@ -2516,18 +2638,43 @@
           areaFields.style.display = "block";
           document.getElementById("pm-area-title").value = pin.title || "";
           document.getElementById("pm-area-description").value = pin.description || "";
-          document.getElementById("pm-area-icon").value = pin.icon || "";
+          document.getElementById("pm-area-pin").value = pin.icon || "▤"; // Default to note card
           document.getElementById("pm-area-fill-color").value = pin.fillColor || "";
           document.getElementById("pm-area-border-color").value = pin.borderColor || "";
           document.getElementById("pm-area-border-width").value = pin.borderWidth || 2;
           document.getElementById("pm-area-text-color").value = pin.textColor || "";
           document.getElementById("pm-area-icon-color").value = pin.iconColor || "";
+
+          // Update pin display
+          updateAreaPinDisplay(pin.icon || "▤");
+
+          // Handle size slider
+          const sizeSlider = document.getElementById("pm-area-size");
+          const sizeValue = document.getElementById("pm-area-size-value");
+          const currentSize = Math.max(pin.width || 200, pin.height || 200);
+          sizeSlider.value = currentSize;
+          sizeValue.textContent = currentSize + "px";
+
+          // Update size value display when slider changes
+          sizeSlider.oninput = function() {
+            sizeValue.textContent = this.value + "px";
+          };
+
+          // Set up pin selector
+          const pinSelector = document.getElementById("pm-area-pin");
+          pinSelector.onchange = function() {
+            updateAreaPinDisplay(this.value);
+          };
         } else {
           areaFields.style.display = "none";
         }
 
         modalPinIndex = index;
         pinModalBackdrop.style.display = "flex";
+
+        // Set up color picker synchronization
+        setupColorPickerSync();
+
         pmTitle.focus();
         pmTitle.select();
         closeRadialMenu(); // Close radial menu when modal opens
@@ -2537,6 +2684,222 @@
         modalPinIndex = null;
         pinModalBackdrop.style.display = "none";
       }
+
+      function setupColorPickerSync() {
+        // Sync color pickers with text inputs and vice versa
+        const colorPairs = [
+          { input: "pm-color", picker: "pm-color-picker" },
+          { input: "pm-area-fill-color", picker: "pm-area-fill-color-picker" },
+          { input: "pm-area-border-color", picker: "pm-area-border-color-picker" },
+          { input: "pm-area-text-color", picker: "pm-area-text-color-picker" },
+          { input: "pm-area-icon-color", picker: "pm-area-icon-color-picker" }
+        ];
+
+        colorPairs.forEach(pair => {
+          const inputEl = document.getElementById(pair.input);
+          const pickerEl = document.getElementById(pair.picker);
+
+          if (inputEl && pickerEl) {
+            // Set initial picker value from input, or use a default
+            if (inputEl.value && /^#[0-9A-F]{6,8}$/i.test(inputEl.value)) {
+              // For color picker, use only the 6-digit RGB part (picker doesn't support alpha)
+              pickerEl.value = inputEl.value.substring(0, 7);
+            } else if (inputEl.id.includes('fill')) {
+              // Default fill color
+              pickerEl.value = '#58a6ff';
+              if (!inputEl.value) inputEl.value = '#58a6ff40'; // With alpha
+            } else if (inputEl.id.includes('border') || inputEl.id.includes('icon')) {
+              // Default border/icon color
+              pickerEl.value = '#58a6ff';
+              if (!inputEl.value) inputEl.value = '#58a6ff';
+            } else if (inputEl.id.includes('text')) {
+              // Default text color
+              pickerEl.value = '#ffffff';
+              if (!inputEl.value) inputEl.value = '#ffffff';
+            } else {
+              // Default color
+              pickerEl.value = '#58a6ff';
+              if (!inputEl.value) inputEl.value = '#58a6ff';
+            }
+
+            // Sync picker to input
+            pickerEl.oninput = function() {
+              if (inputEl.id.includes('fill')) {
+                // For fill colors, add alpha if not present
+                inputEl.value = this.value + (inputEl.value.length > 7 ? inputEl.value.substring(7) : '40');
+              } else {
+                inputEl.value = this.value;
+              }
+            };
+
+            // Sync input to picker (when user types)
+            inputEl.oninput = function() {
+              if (this.value && /^#[0-9A-F]{6}/i.test(this.value)) {
+                pickerEl.value = this.value.substring(0, 7);
+              }
+            };
+          }
+        });
+      }
+
+function updateAreaPinDisplay(pinType) {
+  const displayEl = document.getElementById("pm-area-pin-display");
+  if (displayEl) {
+    if (!pinType) {
+      // No pin selected - show default circle pin
+      displayEl.innerHTML = '<div style="width:20px;height:20px;border-radius:50%;background:#58a6ff;margin:10px auto;border:1px solid #fff;"></div>';
+    } else {
+      // Show miniature canvas rendering of the selected pin type
+      displayEl.innerHTML = getMiniaturePinCanvas(pinType);
+    }
+  }
+}
+
+function getMiniaturePinCanvas(pinIcon) {
+  // Find the NODE_TYPE that matches this icon
+  const nodeType = NODE_TYPES.find(t => t.icon === pinIcon);
+  if (!nodeType) {
+    return '<div style="font-size:16px;margin:12px auto;text-align:center;">' + pinIcon + '</div>';
+  }
+
+  // Create a unique ID for this canvas
+  const canvasId = 'mini-pin-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+  // Create canvas element
+  const canvas = document.createElement('canvas');
+  canvas.id = canvasId;
+  canvas.width = 40;
+  canvas.height = 40;
+  canvas.style.margin = '5px auto';
+  canvas.style.display = 'block';
+
+  // Draw the pin on the canvas
+  const ctx = canvas.getContext('2d');
+  drawMiniaturePin(ctx, nodeType, canvas.width, canvas.height);
+
+  return canvas.outerHTML;
+}
+
+function drawMiniaturePin(ctx, nodeType, canvasWidth, canvasHeight) {
+  // Create a mock pin object for drawing
+  const mockPin = {
+    color: '#58a6ff',
+    typeId: nodeType.id,
+    width: 30,
+    height: 24,
+    label: '' // No label for miniatures
+  };
+
+  // Get pin metrics
+  const metrics = getPinMetrics(mockPin);
+
+  // Center the pin in the canvas
+  const scr = { x: canvasWidth / 2, y: canvasHeight / 2 };
+
+  // Use scale for miniature rendering
+  const scale = 0.8;
+
+  // Clear canvas
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  // Draw based on shape
+  if (metrics.shape === "circle") {
+    // Circle pin
+    const r = metrics.radius * scale;
+    const x = scr.x;
+    const y = scr.y;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath();
+    ctx.arc(x + 2, y + 2, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Main circle
+    ctx.fillStyle = mockPin.color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+  } else if (metrics.shape === "rect" || metrics.shape === "pill") {
+    // Square/Pill pin
+    const w = metrics.width * scale;
+    const h = metrics.height * scale;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const r = metrics.shape === "pill" ? h / 2 : 4;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    roundRectPath(ctx, x + 2, y + 2, w, h, r);
+    ctx.fill();
+
+    // Main shape
+    ctx.fillStyle = mockPin.color;
+    roundRectPath(ctx, x, y, w, h, r);
+    ctx.fill();
+
+  } else if (metrics.shape === "card") {
+    // Card
+    const w = metrics.width * scale;
+    const h = metrics.height * scale;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    roundRectPath(ctx, x + 2, y + 2, w, h, 4);
+    ctx.fill();
+
+    // Main card body
+    ctx.fillStyle = mockPin.color;
+    roundRectPath(ctx, x, y, w, h, 4);
+    ctx.fill();
+
+    // Card variants
+    if (nodeType.variant === "document") {
+      // Document header
+      ctx.fillStyle = "rgba(0,0,0,0.16)";
+      roundRectPath(ctx, x + 2, y + 2, w - 4, h * 0.25, 2);
+      ctx.fill();
+    } else if (nodeType.variant === "folder") {
+      // Folder tab
+      const tabW = w * 0.4;
+      const tabH = h * 0.3;
+      ctx.fillStyle = lightenColor(mockPin.color, 12);
+      roundRectPath(ctx, x + 3, y - tabH * 0.5, tabW, tabH, 2);
+      ctx.fill();
+    }
+  }
+}
+
+// Helper function for rounded rectangles (same as in drawing.js)
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// Helper function to lighten colors (same as in drawing.js)
+function lightenColor(color, percent) {
+  // Simple color lightening
+  const num = parseInt(color.replace("#", ""), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = (num >> 16) + amt;
+  const G = (num >> 8 & 0x00FF) + amt;
+  const B = (num & 0x0000FF) + amt;
+  return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+    (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+    (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+}
 
       pinModalClose.onclick = closePinModal;
       pmCancel.onclick = closePinModal;
@@ -2565,16 +2928,19 @@
         if (pin.typeId && pin.typeId.startsWith("area:")) {
           const areaTitle = document.getElementById("pm-area-title").value.trim();
           const areaDescription = document.getElementById("pm-area-description").value.trim();
-          const areaIcon = document.getElementById("pm-area-icon").value.trim();
+          const areaPin = document.getElementById("pm-area-pin").value.trim();
           const fillColor = document.getElementById("pm-area-fill-color").value.trim();
           const borderColor = document.getElementById("pm-area-border-color").value.trim();
           const borderWidth = parseInt(document.getElementById("pm-area-border-width").value) || 2;
           const textColor = document.getElementById("pm-area-text-color").value.trim();
           const iconColor = document.getElementById("pm-area-icon-color").value.trim();
+          const areaSize = parseInt(document.getElementById("pm-area-size").value) || 200;
 
           pin.title = areaTitle;
           pin.description = areaDescription;
-          pin.icon = areaIcon;
+          pin.icon = areaPin;
+          pin.width = areaSize;
+          pin.height = areaSize; // Keep square for now, could be made rectangular later
           if (fillColor && /^#[0-9A-F]{6,8}$/i.test(fillColor)) pin.fillColor = fillColor;
           if (borderColor && /^#[0-9A-F]{6}$/i.test(borderColor)) pin.borderColor = borderColor;
           pin.borderWidth = Math.max(1, Math.min(10, borderWidth));
@@ -3681,10 +4047,12 @@
 
           // Only create area if dragged a minimum distance
           if (dx > 10 || dy > 10) {
-            const centerX = (areaDragStart.x + areaDragCurrent.x) / 2;
-            const centerY = (areaDragStart.y + areaDragCurrent.y) / 2;
-            const width = Math.max(dx * 2, 50); // Minimum width
-            const height = Math.max(dy * 2, 50); // Minimum height
+            // Keep center fixed at initial click position
+            const centerX = areaDragStart.x;
+            const centerY = areaDragStart.y;
+            // Size based on distance from center to current drag position
+            const width = Math.max(dx * 2, 50); // Use actual drag distance * 2, minimum 50
+            const height = Math.max(dy * 2, 50); // Use actual drag distance * 2, minimum 50
 
             const previousIndex = selectedPinIndex; // Capture current selection
 
@@ -3705,7 +4073,7 @@
               borderColor: selectedColor,
               borderWidth: 2,
               textColor: window._currentThemeTextColor || "#FFFFFF",
-              icon: "",
+              icon: "▤", // Default to note card center pin
               iconColor: selectedColor,
               containedPins: [], // Array to track pins within this area
             };
@@ -3723,7 +4091,8 @@
               });
             }
             setSelectedPin(newIndex);
-            saveState();
+            saveHistory(); // Save to undo history
+            saveState(); // Save to localStorage
           }
         }
 
@@ -4329,10 +4698,12 @@
           const dy = Math.abs(currentScreen.y - startScreen.y);
 
           if (dx > 10 || dy > 10) {
-            const centerX = (startScreen.x + currentScreen.x) / 2;
-            const centerY = (startScreen.y + currentScreen.y) / 2;
-            const width = dx * 2;
-            const height = dy * 2;
+            // Keep center fixed at initial click position
+            const centerX = startScreen.x;
+            const centerY = startScreen.y;
+            // Size based on distance from center to current drag position
+            const width = Math.max(dx * 2, 50); // Match the creation logic
+            const height = Math.max(dy * 2, 50); // Match the creation logic
 
             const x = centerX - width / 2;
             const y = centerY - height / 2;
@@ -5059,6 +5430,19 @@
       }
 
       window.addEventListener("keydown", (e) => {
+        // Don't process keyboard shortcuts when user is typing in input fields
+        const activeElement = document.activeElement;
+        const isInputFocused = activeElement &&
+          (activeElement.tagName === 'INPUT' ||
+           activeElement.tagName === 'TEXTAREA' ||
+           activeElement.tagName === 'SELECT' ||
+           activeElement.contentEditable === 'true');
+
+        if (isInputFocused) {
+          // Allow normal typing behavior, don't intercept keyboard shortcuts
+          return;
+        }
+
         if ((e.ctrlKey || e.metaKey) && e.key === "z") {
           e.preventDefault();
           undo();

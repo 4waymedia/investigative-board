@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Speech Bubble with Perimeter Tail</title>
+    <style>
+      canvas {
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="800" height="600"></canvas>
+    <script>
+      const canvas = document.getElementById("myCanvas");
+      const ctx = canvas.getContext("2d");
+
+      // Bubble object
+      let bubble = {
+        x: 200,
+        y: 150,
+        width: 300,
+        height: 150,
+        text: "Hello! This is an interactive speech bubble with draggable tail around the perimeter.",
+        tailAngle: 45, // Degrees
+        tailLength: 50,
+        tailWidth: 15, // Half-width for base
+        colors: {
+          background: "#ffffff",
+          stroke: "#000000",
+          shadow: "rgba(0,0,0,0.3)",
+          text: "#333333",
+        },
+      };
+
+      // State for dragging
+      let isDraggingBubble = false;
+      let isDraggingTail = false;
+      let prevMouseX = 0;
+      let prevMouseY = 0;
+
+      // Build Bezier segments for the egg shape
+      function buildSegments(bub) {
+        const k = 0.5522848; // Kappa for circle approximation
+        const ox = (bub.width / 2) * k;
+        // Adjusted for more curvature: top more pointed, bottom more rounded
+        const oyTop = (bub.height / 4) * k; // Smaller top for pointier
+        const oyBottom = ((bub.height * 3) / 4) * k; // Larger bottom for curvier
+        const xm = bub.x + bub.width / 2;
+        const ym = bub.y + bub.height / 2;
+        const xe = bub.x + bub.width;
+        const ye = bub.y + bub.height;
+
+        return [
+          // Segment 0: left top
+          {
+            p0x: bub.x,
+            p0y: ym,
+            p1x: bub.x,
+            p1y: ym - oyTop,
+            p2x: xm - ox / 2,
+            p2y: bub.y,
+            p3x: xm,
+            p3y: bub.y,
+          },
+          // Segment 1: right top
+          {
+            p0x: xm,
+            p0y: bub.y,
+            p1x: xm + ox / 2,
+            p1y: bub.y,
+            p2x: xe,
+            p2y: ym - oyTop,
+            p3x: xe,
+            p3y: ym,
+          },
+          // Segment 2: right bottom
+          {
+            p0x: xe,
+            p0y: ym,
+            p1x: xe,
+            p1y: ym + oyBottom,
+            p2x: xm + ox,
+            p2y: ye,
+            p3x: xm,
+            p3y: ye,
+          },
+          // Segment 3: left bottom
+          {
+            p0x: xm,
+            p0y: ye,
+            p1x: xm - ox,
+            p1y: ye,
+            p2x: bub.x,
+            p2y: ym + oyBottom,
+            p3x: bub.x,
+            p3y: ym,
+          },
+        ];
+      }
+
+      // Get point on Bezier at t [0,1]
+      function getPoint(t, segments) {
+        const seg = Math.floor(t * 4);
+        const u = t * 4 - seg;
+        const s = segments[seg];
+        const a = 1 - u;
+        const x =
+          a * a * a * s.p0x +
+          3 * a * a * u * s.p1x +
+          3 * a * u * u * s.p2x +
+          u * u * u * s.p3x;
+        const y =
+          a * a * a * s.p0y +
+          3 * a * a * u * s.p1y +
+          3 * a * u * u * s.p2y +
+          u * u * u * s.p3y;
+        return { x, y };
+      }
+
+      // Get tangent vector at t [0,1]
+      function getTangent(t, segments) {
+        const seg = Math.floor(t * 4);
+        const u = t * 4 - seg;
+        const s = segments[seg];
+        const a = 1 - u;
+        const dx =
+          3 * a * a * (s.p1x - s.p0x) +
+          6 * a * u * (s.p2x - s.p1x) +
+          3 * u * u * (s.p3x - s.p2x);
+        const dy =
+          3 * a * a * (s.p1y - s.p0y) +
+          6 * a * u * (s.p2y - s.p1y) +
+          3 * u * u * (s.p3y - s.p2y);
+        return { dx, dy };
+      }
+
+      // Find best t for attachment in given direction (udx, udy)
+      function findAttachmentT(udx, udy, segments, cx, cy, numSamples = 200) {
+        let maxProj = -Infinity;
+        let bestT = 0;
+        for (let i = 0; i < numSamples; i++) {
+          const t = i / (numSamples - 1);
+          const p = getPoint(t, segments);
+          const pdx = p.x - cx;
+          const pdy = p.y - cy;
+          const proj = pdx * udx + pdy * udy;
+          if (proj > maxProj) {
+            maxProj = proj;
+            bestT = t;
+          }
+        }
+        return { t: bestT, proj: maxProj };
+      }
+
+      /**
+       * Draws the speech bubble.
+       * @param {CanvasRenderingContext2D} ctx - Context.
+       * @param {Object} bub - Bubble object.
+       * @returns {Object} Tail end point {x, y}.
+       */
+      function drawSpeechBubble(ctx, bub) {
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const segments = buildSegments(bub);
+        const rad = (bub.tailAngle * Math.PI) / 180;
+        const udx = Math.cos(rad);
+        const udy = Math.sin(rad);
+
+        // Find attachment
+        const attachInfo = findAttachmentT(udx, udy, segments, cx, cy);
+        const attach = getPoint(attachInfo.t, segments);
+
+        // Tail end
+        const tailEndX = attach.x + udx * bub.tailLength;
+        const tailEndY = attach.y + udy * bub.tailLength;
+
+        // Base points using perpendicular to tangent
+        const tang = getTangent(attachInfo.t, segments);
+        let tlen = Math.sqrt(tang.dx ** 2 + tang.dy ** 2);
+        if (tlen < 0.001) tlen = 1;
+        let perpx = -tang.dy / tlen;
+        let perpy = tang.dx / tlen;
+        const base1X = attach.x + perpx * bub.tailWidth;
+        const base1Y = attach.y + perpy * bub.tailWidth;
+        const base2X = attach.x - perpx * bub.tailWidth;
+        const base2Y = attach.y - perpy * bub.tailWidth;
+
+        ctx.save();
+
+        // Shadow
+        if (bub.colors.shadow) {
+          ctx.shadowColor = bub.colors.shadow;
+          ctx.shadowBlur = 5;
+          ctx.shadowOffsetX = 2;
+          ctx.shadowOffsetY = 2;
+        }
+
+        // Draw egg shape using Bezier
+        ctx.beginPath();
+        const k = 0.5522848;
+        const ox = (bub.width / 2) * k;
+        const oyTop = (bub.height / 4) * k; // Adjusted for better curve
+        const oyBottom = ((bub.height * 3) / 4) * k;
+        const xm = bub.x + bub.width / 2;
+        const ym = bub.y + bub.height / 2;
+        const xe = bub.x + bub.width;
+        const ye = bub.y + bub.height;
+
+        ctx.moveTo(bub.x, ym);
+        ctx.bezierCurveTo(bub.x, ym - oyTop, xm - ox / 2, bub.y, xm, bub.y);
+        ctx.bezierCurveTo(xm + ox / 2, bub.y, xe, ym - oyTop, xe, ym);
+        ctx.bezierCurveTo(xe, ym + oyBottom, xm + ox, ye, xm, ye);
+        ctx.bezierCurveTo(xm - ox, ye, bub.x, ym + oyBottom, bub.x, ym);
+        ctx.closePath();
+
+        ctx.fillStyle = bub.colors.background || "#fff";
+        ctx.fill();
+        ctx.strokeStyle = bub.colors.stroke || "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw tail triangle
+        ctx.beginPath();
+        ctx.moveTo(base1X, base1Y);
+        ctx.lineTo(tailEndX, tailEndY);
+        ctx.lineTo(base2X, base2Y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Text
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = bub.colors.text || "#000";
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(bub.text, cx, cy);
+
+        ctx.restore();
+
+        return { x: tailEndX, y: tailEndY };
+      }
+
+      // Redraw
+      function redraw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawSpeechBubble(ctx, bubble);
+      }
+
+      // Approx ellipse for hit test
+      function isPointInBubble(mx, my, bub) {
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const dx = (mx - cx) / (bub.width / 2);
+        const dy = (my - cy) / (bub.height / 2);
+        return dx * dx + dy * dy <= 1;
+      }
+
+      // Near tail tip
+      function isNearTailTip(mx, my, bub) {
+        const tailEnd = getTailEnd(bub);
+        const dx = mx - tailEnd.x;
+        const dy = my - tailEnd.y;
+        return Math.sqrt(dx * dx + dy * dy) < 15;
+      }
+
+      // Get tail end
+      function getTailEnd(bub) {
+        const cx = bub.x + bub.width / 2;
+        const cy = bub.y + bub.height / 2;
+        const segments = buildSegments(bub);
+        const rad = (bub.tailAngle * Math.PI) / 180;
+        const udx = Math.cos(rad);
+        const udy = Math.sin(rad);
+        const attachInfo = findAttachmentT(udx, udy, segments, cx, cy);
+        const attach = getPoint(attachInfo.t, segments);
+        return {
+          x: attach.x + udx * bub.tailLength,
+          y: attach.y + udy * bub.tailLength,
+        };
+      }
+
+      // Event listeners
+      canvas.addEventListener("mousedown", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        prevMouseX = e.clientX - rect.left;
+        prevMouseY = e.clientY - rect.top;
+
+        if (isPointInBubble(prevMouseX, prevMouseY, bubble)) {
+          isDraggingBubble = true;
+        } else if (isNearTailTip(prevMouseX, prevMouseY, bubble)) {
+          isDraggingTail = true;
+        }
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
+        if (!isDraggingBubble && !isDraggingTail) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const dx = mx - prevMouseX;
+        const dy = my - prevMouseY;
+
+        if (isDraggingBubble) {
+          bubble.x += dx;
+          bubble.y += dy;
+        } else if (isDraggingTail) {
+          const cx = bubble.x + bubble.width / 2;
+          const cy = bubble.y + bubble.height / 2;
+          const currentTailEnd = getTailEnd(bubble);
+          const newTailEndX = currentTailEnd.x + dx;
+          const newTailEndY = currentTailEnd.y + dy;
+          let tdx = newTailEndX - cx;
+          let tdy = newTailEndY - cy;
+          let dist = Math.sqrt(tdx * tdx + tdy * tdy);
+          if (dist < 1) return; // Too close to center
+          const udx = tdx / dist;
+          const udy = tdy / dist;
+          const segments = buildSegments(bubble);
+          const attachInfo = findAttachmentT(udx, udy, segments, cx, cy);
+          let newLength = dist - attachInfo.proj;
+          if (newLength < 0) newLength = 0;
+          bubble.tailAngle = (Math.atan2(udy, udx) * 180) / Math.PI;
+          bubble.tailLength = newLength;
+        }
+
+        prevMouseX = mx;
+        prevMouseY = my;
+        redraw();
+      });
+
+      canvas.addEventListener("mouseup", () => {
+        isDraggingBubble = false;
+        isDraggingTail = false;
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        isDraggingBubble = false;
+        isDraggingTail = false;
+      });
+
+      // Initial draw
+      redraw();
+    </script>
+  </body>
+</html>
