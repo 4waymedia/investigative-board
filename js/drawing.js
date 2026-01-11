@@ -40,6 +40,66 @@ function roundRectPath(ctx, x, y, w, h, r) {
  * @param {Object} metrics - Shape metrics
  * @param {number} index - Pin index
  */
+
+/**
+ * Draws a center pin for area pins based on the pin.icon
+ * @param {Object} areaPin - The area pin object
+ * @param {Object} centerPos - Screen position for center {x, y}
+ */
+function drawCenterPin(areaPin, centerPos) {
+  // Ensure areaPin exists and has required properties
+  if (!areaPin || typeof areaPin.x !== 'number' || typeof areaPin.y !== 'number') {
+    console.warn('drawCenterPin: Invalid areaPin', areaPin);
+    return;
+  }
+
+  // Map icon to card type (default to note card if no icon)
+  let cardTypeId = 'card:card'; // Default
+  if (areaPin.icon) {
+    switch(areaPin.icon) {
+      case '▤':
+        cardTypeId = 'card:card';
+        break;
+      case '📄':
+        cardTypeId = 'card:doc';
+        break;
+      case '📁':
+        cardTypeId = 'card:folder';
+        break;
+    }
+  }
+
+  // Create temporary pin object for center pin
+  const centerPin = {
+    x: areaPin.x || 0, // Same position as area
+    y: areaPin.y || 0,
+    color: areaPin.color || '#58a6ff',
+    typeId: cardTypeId,
+    label: areaPin.title || '', // Use title as label for center pin
+    title: areaPin.title || '', // Use area's title
+    description: areaPin.description || '' // Use area's description
+  };
+
+  // Ensure centerPin has required properties
+  if (!centerPin.typeId) {
+    console.warn('Center pin missing typeId:', centerPin);
+    return;
+  }
+
+  // Get metrics for the center pin
+  const centerMetrics = getPinMetrics(centerPin);
+
+  // Temporarily modify the center position for drawing
+  const originalWorldToScreen = window.worldToScreen;
+  window.worldToScreen = () => centerPos;
+
+  // Draw the center pin
+  drawPinShape(centerPin, centerMetrics, -1); // -1 means not selectable
+
+  // Restore original function
+  window.worldToScreen = originalWorldToScreen;
+}
+
 function drawPinShape(pin, metrics, index) {
   const scr = worldToScreen(pin.x, pin.y);
   const m = metrics;
@@ -209,6 +269,9 @@ function drawPinShape(pin, metrics, index) {
     const borderColor = pin.borderColor || pin.color;
     const textColor = pin.textColor || (window._currentThemeTextColor || "#FFFFFF");
 
+    // Draw center pin using drawPinShape
+    drawCenterPin(pin, scr);
+
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.2)";
     ctx.beginPath();
@@ -245,33 +308,17 @@ function drawPinShape(pin, metrics, index) {
       ctx.stroke();
     }
 
-    // Icon (if specified)
-    if (pin.icon) {
-      ctx.font = `${Math.min(24 * s, r * 0.4)}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = pin.iconColor || textColor;
-      ctx.fillText(pin.icon, scr.x, scr.y - r * 0.1);
-    }
+    // Note: Area pins use center pins for visual representation, no HTML icon needed
 
-    // Title
-    if (pin.label || pin.title) {
-      const title = pin.title || pin.label;
-      ctx.font = `bold ${16 * s}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillText(title, scr.x, scr.y + r + 8 * s);
-      ctx.fillStyle = textColor;
-      ctx.fillText(title, scr.x, scr.y + r + 6 * s);
-    }
-
-    // Description (smaller text below title)
+    // Description (below the area - center pin shows title above)
+    // @TODO description goes below the pin
     if (pin.description) {
       ctx.font = `${12 * s}px system-ui`;
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillText(pin.description, scr.x, scr.y + r + 22 * s);
+      ctx.fillText(pin.description, scr.x - 15 * s, scr.y + r + 22 * s);
       ctx.fillStyle = textColor + "CC"; // Slightly transparent
-      ctx.fillText(pin.description, scr.x, scr.y + r + 20 * s);
+      ctx.fillText(pin.description, scr.x - 15 * s, scr.y + r + 20 * s);
     }
   } else if (m.shape === "area-rect") {
     // --- Logic for Area Rectangle/Square (Scaled) ---
@@ -284,6 +331,9 @@ function drawPinShape(pin, metrics, index) {
     const fillColor = pin.fillColor || pin.color + "40"; // Default semi-transparent
     const borderColor = pin.borderColor || pin.color;
     const textColor = pin.textColor || (window._currentThemeTextColor || "#FFFFFF");
+
+    // Draw center pin using drawPinShape
+    drawCenterPin(pin, scr);
 
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.2)";
@@ -316,33 +366,16 @@ function drawPinShape(pin, metrics, index) {
       ctx.stroke();
     }
 
-    // Icon (if specified)
-    if (pin.icon) {
-      ctx.font = `${Math.min(24 * s, Math.min(w, h) * 0.25)}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = pin.iconColor || textColor;
-      ctx.fillText(pin.icon, scr.x, scr.y - h * 0.15);
-    }
+    // Note: Area pins use center pins for visual representation, no HTML icon needed
 
-    // Title
-    if (pin.label || pin.title) {
-      const title = pin.title || pin.label;
-      ctx.font = `bold ${16 * s}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillText(title, scr.x, scr.y + h/2 + 8 * s);
-      ctx.fillStyle = textColor;
-      ctx.fillText(title, scr.x, scr.y + h/2 + 6 * s);
-    }
-
-    // Description (smaller text below title)
+    // Description (below the area - center pin shows title above)
     if (pin.description) {
       ctx.font = `${12 * s}px system-ui`;
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillText(pin.description, scr.x, scr.y + h/2 + 22 * s);
+      ctx.fillText(pin.description, scr.x - 15 * s, scr.y + h/2 + 22 * s);
       ctx.fillStyle = textColor + "CC"; // Slightly transparent
-      ctx.fillText(pin.description, scr.x, scr.y + h/2 + 20 * s);
+      ctx.fillText(pin.description, scr.x - 15 * s, scr.y + h/2 + 20 * s);
     }
   } else {
     // Circle pins (original logic)
