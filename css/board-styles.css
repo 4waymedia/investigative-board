@@ -705,3 +705,41 @@ canvas {
 .radial-item.delete:hover {
   background: #f85149;
 }
+
+/* --- MODAL TABS --- */
+#modal-tabs {
+  display: flex;
+  border-bottom: 1px solid #30363d;
+  margin-bottom: 16px;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  background: #161b22;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s, color 0.2s;
+}
+
+.tab-button:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.tab-button.active {
+  background: #30363d;
+  color: #e6edf3;
+  border-bottom: 2px solid #58a6ff;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}

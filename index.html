@@ -42,177 +42,200 @@
           <div id="pin-modal-title">Edit Pin</div>
           <div id="pin-modal-close">✕</div>
         </div>
-        <div class="modal-field">
-          <div class="modal-label">Title</div>
-          <input
-            id="pm-title"
-            class="modal-input"
-            type="text"
-            placeholder="Pin title"
-          />
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Color (hex)</div>
-          <div class="color-input-wrapper">
-            <input
-              id="pm-color"
-              class="modal-input color-input"
-              type="text"
-              placeholder="#58a6ff"
-            />
-            <input
-              id="pm-color-picker"
-              class="color-picker"
-              type="color"
-              value="#58a6ff"
-            />
-          </div>
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Description / Notes</div>
-          <textarea
-            id="pm-description"
-            class="modal-textarea"
-            placeholder="What does this pin represent?"
-          ></textarea>
-        </div>
-        <div class="modal-field">
-          <div class="modal-label">Date</div>
-          <input
-            id="pm-date"
-            class="modal-input"
-            type="text"
-            placeholder="e.g. 1958, Jul 1947, 1963-11-22"
-          />
+
+        <!-- Tab Navigation -->
+        <div id="modal-tabs">
+          <div class="tab-button active" data-tab="info">Info</div>
+          <div class="tab-button" data-tab="style">Style</div>
+          <div class="tab-button" data-tab="settings">Settings</div>
         </div>
 
-        <!-- Area-specific fields (shown only for area pins) -->
-        <div id="area-fields" style="display: none">
-          <div class="modal-field">
-            <div class="modal-label">Area Title</div>
-            <input
-              id="pm-area-title"
-              class="modal-input"
-              type="text"
-              placeholder="Area title"
-            />
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Description</div>
-            <input
-              id="pm-area-description"
-              class="modal-input"
-              type="text"
-              placeholder="Area description"
-            />
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Pin Shape</div>
-            <div class="icon-selector-wrapper">
-              <div id="pm-area-pin-display" class="icon-display">▤</div>
-              <select id="pm-area-pin" class="icon-selector">
-                <option value="">None</option>
-                <optgroup label="Center Pin Types">
-                  <option value="▤">▤ Note Card</option>
-                  <option value="📄">📄 Document Card</option>
-                  <option value="📁">📁 Folder Card</option>
-                </optgroup>
-              </select>
-            </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Fill Color (hex)</div>
-            <div class="color-input-wrapper">
+
+        <!-- Tab Content -->
+        <div id="modal-content">
+          <!-- Info Tab -->
+          <div class="tab-content active" id="info-tab">
+            <div class="modal-field">
+              <div class="modal-label">Title</div>
               <input
-                id="pm-area-fill-color"
-                class="modal-input color-input"
+                id="pm-title"
+                class="modal-input"
                 type="text"
-                placeholder="#58a6ff40"
-              />
-              <input
-                id="pm-area-fill-color-picker"
-                class="color-picker"
-                type="color"
-                value="#58a6ff"
+                placeholder="Pin title"
               />
             </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Border Color (hex)</div>
-            <div class="color-input-wrapper">
+            <div class="modal-field">
+              <div class="modal-label">Description / Notes</div>
+              <textarea
+                id="pm-description"
+                class="modal-textarea"
+                placeholder="What does this pin represent?"
+              ></textarea>
+            </div>
+            <div class="modal-field">
+              <div class="modal-label">Date</div>
               <input
-                id="pm-area-border-color"
-                class="modal-input color-input"
+                id="pm-date"
+                class="modal-input"
                 type="text"
-                placeholder="#58a6ff"
-              />
-              <input
-                id="pm-area-border-color-picker"
-                class="color-picker"
-                type="color"
-                value="#58a6ff"
+                placeholder="e.g. 1958, Jul 1947, 1963-11-22"
               />
             </div>
+
+            <!-- Area-specific info fields -->
+            <div id="area-info-fields" style="display: none;">
+              <div class="modal-field">
+                <div class="modal-label">Area Title</div>
+                <input
+                  id="pm-area-title"
+                  class="modal-input"
+                  type="text"
+                  placeholder="Area title"
+                />
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Area Description</div>
+                <input
+                  id="pm-area-description"
+                  class="modal-input"
+                  type="text"
+                  placeholder="Area description"
+                />
+              </div>
+            </div>
+
           </div>
-          <div class="modal-field">
-            <div class="modal-label">Border Width</div>
-            <input
-              id="pm-area-border-width"
-              class="modal-input"
-              type="number"
-              min="1"
-              max="10"
-              step="1"
-              placeholder="2"
-            />
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Text Color (hex)</div>
-            <div class="color-input-wrapper">
-              <input
-                id="pm-area-text-color"
-                class="modal-input color-input"
-                type="text"
-                placeholder="#ffffff"
-              />
-              <input
-                id="pm-area-text-color-picker"
-                class="color-picker"
-                type="color"
-                value="#ffffff"
-              />
+
+          <!-- Style Tab -->
+          <div class="tab-content" id="style-tab">
+            <!-- Regular pin color -->
+            <div class="modal-field" id="pin-color-field">
+              <div class="modal-label">Pin Color (hex)</div>
+              <div class="color-input-wrapper">
+                <input
+                  id="pm-color"
+                  class="modal-input color-input"
+                  type="text"
+                  placeholder="#58a6ff"
+                />
+                <input
+                  id="pm-color-picker"
+                  class="color-picker"
+                  type="color"
+                  value="#58a6ff"
+                />
+              </div>
+            </div>
+
+            <!-- Area-specific style fields -->
+            <div id="area-style-fields" style="display: none;">
+              <div class="modal-field">
+                <div class="modal-label">Fill Color (hex)</div>
+                <div class="color-input-wrapper">
+                  <input
+                    id="pm-area-fill-color"
+                    class="modal-input color-input"
+                    type="text"
+                    placeholder="#58a6ff40"
+                  />
+                  <input
+                    id="pm-area-fill-color-picker"
+                    class="color-picker"
+                    type="color"
+                    value="#58a6ff"
+                  />
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Border Color (hex)</div>
+                <div class="color-input-wrapper">
+                  <input
+                    id="pm-area-border-color"
+                    class="modal-input color-input"
+                    type="text"
+                    placeholder="#58a6ff"
+                  />
+                  <input
+                    id="pm-area-border-color-picker"
+                    class="color-picker"
+                    type="color"
+                    value="#58a6ff"
+                  />
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Text Color (hex)</div>
+                <div class="color-input-wrapper">
+                  <input
+                    id="pm-area-text-color"
+                    class="modal-input color-input"
+                    type="text"
+                    placeholder="#ffffff"
+                  />
+                  <input
+                    id="pm-area-text-color-picker"
+                    class="color-picker"
+                    type="color"
+                    value="#ffffff"
+                  />
+                </div>
+              </div>
             </div>
           </div>
-          <div class="modal-field">
-            <div class="modal-label">Icon Color (hex)</div>
-            <div class="color-input-wrapper">
-              <input
-                id="pm-area-icon-color"
-                class="modal-input color-input"
-                type="text"
-                placeholder="#58a6ff"
-              />
-              <input
-                id="pm-area-icon-color-picker"
-                class="color-picker"
-                type="color"
-                value="#58a6ff"
-              />
-            </div>
-          </div>
-          <div class="modal-field">
-            <div class="modal-label">Area Size</div>
-            <div class="size-slider-wrapper">
-              <input
-                id="pm-area-size"
-                class="size-slider"
-                type="range"
-                min="50"
-                max="1000"
-                step="10"
-                value="200"
-              />
-              <span id="pm-area-size-value" class="size-value">200px</span>
+
+
+          <!-- Settings Tab -->
+          <div class="tab-content" id="settings-tab">
+            <!-- Area-specific settings fields -->
+            <div id="area-settings-fields" style="display: none;">
+              <div class="modal-field">
+                <div class="modal-label">Pin Shape</div>
+                <div class="icon-selector-wrapper">
+                  <div id="pm-area-pin-display" class="icon-display">▤</div>
+                  <select id="pm-area-pin" class="icon-selector">
+                    <option value="">None</option>
+                    <optgroup label="Center Pin Types">
+                      <option value="▤">▤ Note Card</option>
+                      <option value="📄">📄 Document Card</option>
+                      <option value="📁">📁 Folder Card</option>
+                    </optgroup>
+                  </select>
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Border Width</div>
+                <input
+                  id="pm-area-border-width"
+                  class="modal-input"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value="2"
+                />
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Center Pin Scale</div>
+                <div class="size-slider-wrapper">
+                  <input id="pm-area-pin-scale" class="size-slider" type="range" min="0.5" max="3" step="0.1" value="1" />
+                  <span id="pm-area-pin-scale-value" class="size-value">1.0x</span>
+                </div>
+              </div>
+              <div class="modal-field">
+                <div class="modal-label">Area Size</div>
+                <div class="size-slider-wrapper">
+                  <input
+                    id="pm-area-size"
+                    class="size-slider"
+                    type="range"
+                    min="50"
+                    max="1000"
+                    step="10"
+                    value="200"
+                  />
+                  <span id="pm-area-size-value" class="size-value">200px</span>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -729,11 +752,132 @@
               },
             };
 
-            // ============================================================================
-            // UTILITY FUNCTIONS
-            // ============================================================================
-            function getNodeType(id) {
-              return NODE_TYPES.find((t) => t.id === id) || NODE_TYPES[0];
+
+          // Only apply pinScale to non-area pins in fallback too
+          const fallbackPinScale = (!typeId.startsWith('area:')) ? (pin.pinScale || 1) : 1;
+          return {
+            shape: fallbackBase.shape,
+            baseRadius: fallbackBase.baseRadius,
+            variant: fallbackTypeDetail.variant,
+            radius: (pin.radius || fallbackBase.baseRadius) * fallbackPinScale,
+            width: (pin.width || fallbackBase.baseWidth) * fallbackPinScale,
+            height: (pin.height || fallbackBase.baseHeight) * fallbackPinScale,
+          };
+        }
+
+        // 2. Get the full type details (from NODE_TYPES)
+        const typeDetail = getNodeType(typeId);
+
+        // 3. Define the core metrics object
+        // Only apply pinScale to non-area pins (area pins use pinScale for center pin scaling)
+        const pinScale = (!typeId.startsWith('area:')) ? (pin.pinScale || 1) : 1;
+        const metrics = {
+          shape: base.shape,
+          baseRadius: base.baseRadius,
+          variant: typeDetail.variant, // <--- CRITICAL FIX: Attach the variant
+          // Use pin.radius/width/height if they exist (for dynamic sizing), otherwise use base
+          radius: (pin.radius || base.baseRadius) * pinScale,
+          width: (pin.width || base.baseWidth) * pinScale,
+          height: (pin.height || base.baseHeight) * pinScale,
+        };
+
+        // If the pin has been resized by the user, we ensure the metrics reflect that
+        if (pin.width && pin.height) {
+          metrics.width = pin.width * pinScale;
+          metrics.height = pin.height * pinScale;
+
+          // For area-circle, update radius to fit the rectangle
+          if (base.shape === "area-circle") {
+            metrics.radius = Math.min(pin.width, pin.height) / 2 * pinScale;
+          }
+        }
+
+        return metrics;
+      }
+
+      function isPointInArea(pointX, pointY, areaPin) {
+        const metrics = getPinMetrics(pins.indexOf(areaPin));
+        const areaX = areaPin.x;
+        const areaY = areaPin.y;
+
+        if (metrics.shape === "area-circle") {
+          const distance = Math.sqrt((pointX - areaX) ** 2 + (pointY - areaY) ** 2);
+          return distance <= metrics.radius;
+        } else if (metrics.shape === "area-rect") {
+          const halfWidth = metrics.width / 2;
+          const halfHeight = metrics.height / 2;
+          return pointX >= areaX - halfWidth && pointX <= areaX + halfWidth &&
+                 pointY >= areaY - halfHeight && pointY <= areaY + halfHeight;
+        } else {
+          // Fallback: treat as rectangular area
+          console.warn(`Unknown area shape "${metrics.shape}", treating as rectangle`);
+          const halfWidth = metrics.width / 2;
+          const halfHeight = metrics.height / 2;
+          return pointX >= areaX - halfWidth && pointX <= areaX + halfWidth &&
+                 pointY >= areaY - halfHeight && pointY <= areaY + halfHeight;
+        }
+      }
+
+      function updateAreaContainment() {
+        // Reset all area containment
+        pins.forEach(pin => {
+          if (pin.typeId && pin.typeId.startsWith("area:")) {
+            pin.containedPins = [];
+          }
+        });
+
+        // Find pins within areas
+        pins.forEach((pin, pinIndex) => {
+          if (pin.typeId && pin.typeId.startsWith("area:")) {
+            // This is an area, check which other pins are within it
+            pins.forEach((otherPin, otherIndex) => {
+              if (otherIndex !== pinIndex && !otherPin.typeId?.startsWith("area:")) {
+                if (isPointInArea(otherPin.x, otherPin.y, pin)) {
+                  pin.containedPins.push(otherIndex);
+                }
+              }
+            });
+          }
+        });
+      }
+
+      // Coordinate Transformations
+      function worldToScreen(x, y) {
+        return { x: x * scale + offsetX, y: y * scale + offsetY };
+      }
+      window.worldToScreen = worldToScreen;
+
+      function screenToWorld(sx, sy) {
+        return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
+      }
+
+      // ============================================================================
+      // PERSISTENCE (LocalStorage)
+      // ============================================================================
+
+
+
+      // ============================================================================
+      // WEB WORKER (Force-Directed Layout)
+      // ============================================================================
+      if (window.Worker) {
+        var layoutWorker = new Worker("js/layoutWorker.js");
+        var isLayoutSimulating = false;
+      } else {
+        var layoutWorker = null;
+        var isLayoutSimulating = false;
+        console.warn(
+          "Web Workers not supported. Force layout will run synchronously on the main thread and may cause jank."
+        );
+      }
+
+      if (layoutWorker) {
+        layoutWorker.onmessage = (e) => {
+          try {
+            // Validate message structure - silently ignore invalid messages (likely from extensions)
+            if (!e.data || typeof e.data !== "object" || !e.data.command) {
+              return; // Silently ignore invalid messages
+>>>>>>> refactor-2
             }
 
             function getConnectionCount(index) {
@@ -2796,21 +2940,72 @@
         // Use scale for miniature rendering
         const scale = 0.8;
 
-        // Clear canvas
-        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-        // Draw based on shape
-        if (metrics.shape === "circle") {
-          // Circle pin
-          const r = metrics.radius * scale;
-          const x = scr.x;
-          const y = scr.y;
+      function switchTab(tabName) {
+        // Hide all tab content
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabContents.forEach(content => content.classList.remove('active'));
+
+        // Remove active class from all tab buttons
+        const tabButtons = document.querySelectorAll('.tab-button');
+        tabButtons.forEach(button => button.classList.remove('active'));
+
+        // Show selected tab content
+        const selectedContent = document.getElementById(tabName + '-tab');
+        if (selectedContent) {
+          selectedContent.classList.add('active');
+        }
+
+        // Activate selected tab button
+        const selectedButton = document.querySelector(`[data-tab="${tabName}"]`);
+        if (selectedButton) {
+          selectedButton.classList.add('active');
+        }
+      }
+
+      function setupTabSwitching() {
+        const tabButtons = document.querySelectorAll('.tab-button');
+        tabButtons.forEach(button => {
+          button.addEventListener('click', function() {
+            const tabName = this.getAttribute('data-tab');
+            switchTab(tabName);
+          });
+        });
+      }
+
+      function openPinModal(index) {
+        const pin = pins[index];
+        const card =
+          pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
 
           // Shadow
           ctx.fillStyle = "rgba(0,0,0,0.4)";
           ctx.beginPath();
           ctx.arc(x + 2, y + 2, r, 0, Math.PI * 2);
           ctx.fill();
+        // Handle area-specific fields
+        const isArea = pin.typeId && pin.typeId.startsWith("area:");
+        const areaInfoFields = document.getElementById("area-info-fields");
+        const areaStyleFields = document.getElementById("area-style-fields");
+        const areaSettingsFields = document.getElementById("area-settings-fields");
+        const pinColorField = document.getElementById("pin-color-field");
+
+        if (isArea) {
+          // Show area-specific fields in their respective tabs
+          areaInfoFields.style.display = "block";
+          areaStyleFields.style.display = "block";
+          areaSettingsFields.style.display = "block";
+          pinColorField.style.display = "none";
+          // Switch to settings tab for area pins (where most controls are)
+          switchTab('settings');
+          document.getElementById("pm-area-title").value = pin.title || "";
+          document.getElementById("pm-area-description").value = pin.description || "";
+          document.getElementById("pm-area-pin").value = pin.icon || "▤"; // Default to note card
+          document.getElementById("pm-area-fill-color").value = pin.fillColor || "";
+          document.getElementById("pm-area-border-color").value = pin.borderColor || "";
+          document.getElementById("pm-area-border-width").value = pin.borderWidth || 2;
+          document.getElementById("pm-area-text-color").value = pin.textColor || "";
+>>>>>>> refactor-2
 
           // Main circle
           ctx.fillStyle = mockPin.color;
@@ -2831,43 +3026,54 @@
           roundRectPath(ctx, x + 2, y + 2, w, h, r);
           ctx.fill();
 
-          // Main shape
-          ctx.fillStyle = mockPin.color;
-          roundRectPath(ctx, x, y, w, h, r);
-          ctx.fill();
 
-        } else if (metrics.shape === "card") {
-          // Card
-          const w = metrics.width * scale;
-          const h = metrics.height * scale;
-          const x = scr.x - w / 2;
-          const y = scr.y - h / 2;
+          // Handle pin scale slider
+          const pinScaleSlider = document.getElementById("pm-area-pin-scale");
+          const pinScaleValue = document.getElementById("pm-area-pin-scale-value");
 
-          // Shadow
-          ctx.fillStyle = "rgba(0,0,0,0.4)";
-          roundRectPath(ctx, x + 2, y + 2, w, h, 4);
-          ctx.fill();
+          // Calculate maximum pin scale based on area size to prevent center pin from extending beyond boundary
+          const areaSize = Math.max(pin.width || 200, pin.height || 200);
+          const maxPinScale = Math.min(3, areaSize / 60); // Assuming base pin size ~60px, limit to 3x or area-constrained
+          pinScaleSlider.max = Math.max(0.5, maxPinScale);
 
-          // Main card body
-          ctx.fillStyle = mockPin.color;
-          roundRectPath(ctx, x, y, w, h, 4);
-          ctx.fill();
+          const currentPinScale = Math.min(pin.pinScale || 1, maxPinScale);
+          pinScaleSlider.value = currentPinScale;
+          pinScaleValue.textContent = currentPinScale.toFixed(1) + "x";
 
-          // Card variants
-          if (nodeType.variant === "document") {
-            // Document header
-            ctx.fillStyle = "rgba(0,0,0,0.16)";
-            roundRectPath(ctx, x + 2, y + 2, w - 4, h * 0.25, 2);
-            ctx.fill();
-          } else if (nodeType.variant === "folder") {
-            // Folder tab
-            const tabW = w * 0.4;
-            const tabH = h * 0.3;
-            ctx.fillStyle = lightenColor(mockPin.color, 12);
-            roundRectPath(ctx, x + 3, y - tabH * 0.5, tabW, tabH, 2);
-            ctx.fill();
-          }
+          // Update pin scale value display when slider changes
+          pinScaleSlider.oninput = function() {
+            const value = parseFloat(this.value);
+            pinScaleValue.textContent = value.toFixed(1) + "x";
+          };
+
+          // Set up pin selector
+          const pinSelector = document.getElementById("pm-area-pin");
+          pinSelector.onchange = function() {
+            updateAreaPinDisplay(this.value);
+          };
+        } else {
+          // Hide area-specific fields, show regular pin color
+          areaInfoFields.style.display = "none";
+          areaStyleFields.style.display = "none";
+          areaSettingsFields.style.display = "none";
+          pinColorField.style.display = "block";
+          // Switch to info tab for regular pins
+          switchTab('info');
         }
+
+        modalPinIndex = index;
+        pinModalBackdrop.style.display = "flex";
+
+        // Set up tab switching
+        setupTabSwitching();
+
+        // Set up color picker synchronization
+        setupColorPickerSync();
+
+        pmTitle.focus();
+        pmTitle.select();
+        closeRadialMenu(); // Close radial menu when modal opens
+>>>>>>> refactor-2
       }
 
       // Helper function for rounded rectangles (same as in drawing.js)
@@ -2885,18 +3091,15 @@
         ctx.closePath();
       }
 
-      // Helper function to lighten colors (same as in drawing.js)
-      function lightenColor(color, percent) {
-        // Simple color lightening
-        const num = parseInt(color.replace("#", ""), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) + amt;
-        const G = (num >> 8 & 0x00FF) + amt;
-        const B = (num & 0x0000FF) + amt;
-        return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
-          (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
-          (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
-      }
+
+      function setupColorPickerSync() {
+        // Sync color pickers with text inputs and vice versa
+        const colorPairs = [
+          { input: "pm-color", picker: "pm-color-picker" },
+          { input: "pm-area-fill-color", picker: "pm-area-fill-color-picker" },
+          { input: "pm-area-border-color", picker: "pm-area-border-color-picker" },
+          { input: "pm-area-text-color", picker: "pm-area-text-color-picker" }
+        ];
 
             pinModalClose.onclick = closePinModal;
             pmCancel.onclick = closePinModal;
@@ -3468,9 +3671,482 @@
               indicesToDelete.forEach((removedIndex) => {
                 const removedPin = pins[removedIndex];
 
-                if (removedPin && removedPin.cardId != null) {
-                  const card = cards.find((c) => c.id === removedPin.cardId);
-                  if (card) card.used = false;
+
+  return canvas.outerHTML;
+}
+
+function drawMiniaturePin(ctx, nodeType, canvasWidth, canvasHeight) {
+  // Create a mock pin object for drawing
+  const mockPin = {
+    color: '#58a6ff',
+    typeId: nodeType.id,
+    width: 30,
+    height: 24,
+    label: '' // No label for miniatures
+  };
+
+  // Get pin metrics
+  const metrics = getPinMetrics(mockPin);
+
+  // Center the pin in the canvas
+  const scr = { x: canvasWidth / 2, y: canvasHeight / 2 };
+
+  // Use scale for miniature rendering
+  const scale = 0.8;
+
+  // Clear canvas
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  // Draw based on shape
+  if (metrics.shape === "circle") {
+    // Circle pin
+    const r = metrics.radius * scale;
+    const x = scr.x;
+    const y = scr.y;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath();
+    ctx.arc(x + 2, y + 2, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Main circle
+    ctx.fillStyle = mockPin.color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+  } else if (metrics.shape === "rect" || metrics.shape === "pill") {
+    // Square/Pill pin
+    const w = metrics.width * scale;
+    const h = metrics.height * scale;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const r = metrics.shape === "pill" ? h / 2 : 4;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    roundRectPath(ctx, x + 2, y + 2, w, h, r);
+    ctx.fill();
+
+    // Main shape
+    ctx.fillStyle = mockPin.color;
+    roundRectPath(ctx, x, y, w, h, r);
+    ctx.fill();
+
+  } else if (metrics.shape === "card") {
+    // Card
+    const w = metrics.width * scale;
+    const h = metrics.height * scale;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+
+    // Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    roundRectPath(ctx, x + 2, y + 2, w, h, 4);
+    ctx.fill();
+
+    // Main card body
+    ctx.fillStyle = mockPin.color;
+    roundRectPath(ctx, x, y, w, h, 4);
+    ctx.fill();
+
+    // Card variants
+    if (nodeType.variant === "document") {
+      // Document header
+      ctx.fillStyle = "rgba(0,0,0,0.16)";
+      roundRectPath(ctx, x + 2, y + 2, w - 4, h * 0.25, 2);
+      ctx.fill();
+    } else if (nodeType.variant === "folder") {
+      // Folder tab
+      const tabW = w * 0.4;
+      const tabH = h * 0.3;
+      ctx.fillStyle = lightenColor(mockPin.color, 12);
+      roundRectPath(ctx, x + 3, y - tabH * 0.5, tabW, tabH, 2);
+      ctx.fill();
+    }
+  }
+}
+
+// Helper function for rounded rectangles (same as in drawing.js)
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// Helper function to lighten colors (same as in drawing.js)
+function lightenColor(color, percent) {
+  // Simple color lightening
+  const num = parseInt(color.replace("#", ""), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = (num >> 16) + amt;
+  const G = (num >> 8 & 0x00FF) + amt;
+  const B = (num & 0x0000FF) + amt;
+  return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+    (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+    (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+}
+
+      pinModalClose.onclick = closePinModal;
+      pmCancel.onclick = closePinModal;
+      pinModalBackdrop.addEventListener("click", (e) => {
+        if (e.target === pinModalBackdrop) closePinModal();
+      });
+
+      pmSave.onclick = () => {
+        if (modalPinIndex === null) return;
+
+        saveHistory();
+
+        const pin = pins[modalPinIndex];
+
+        const title = pmTitle.value.trim();
+        const color = pmColor.value.trim();
+        const note = pmDescription.value.trim();
+        const date = pmDate.value.trim();
+
+        if (title) pin.label = title;
+        if (color && /^#[0-9A-F]{6}$/i.test(color)) pin.color = color;
+        pin.note = note;
+        pin.date = date || "";
+
+        // Save area-specific properties
+        if (pin.typeId && pin.typeId.startsWith("area:")) {
+          const areaTitle = document.getElementById("pm-area-title").value.trim();
+          const areaDescription = document.getElementById("pm-area-description").value.trim();
+          const areaPin = document.getElementById("pm-area-pin").value.trim();
+          const fillColor = document.getElementById("pm-area-fill-color").value.trim();
+          const borderColor = document.getElementById("pm-area-border-color").value.trim();
+          const borderWidth = parseInt(document.getElementById("pm-area-border-width").value) || 2;
+          const textColor = document.getElementById("pm-area-text-color").value.trim();
+          const pinScale = parseFloat(document.getElementById("pm-area-pin-scale").value) || 1;
+          const areaSize = parseInt(document.getElementById("pm-area-size").value) || 200;
+
+          pin.title = areaTitle;
+          pin.description = areaDescription;
+          pin.icon = areaPin;
+          pin.width = areaSize;
+          pin.height = areaSize; // Keep square for now, could be made rectangular later
+          if (fillColor && /^#[0-9A-F]{6,8}$/i.test(fillColor)) pin.fillColor = fillColor;
+          if (borderColor && /^#[0-9A-F]{6}$/i.test(borderColor)) pin.borderColor = borderColor;
+          pin.borderWidth = Math.max(1, Math.min(10, borderWidth));
+          if (textColor && /^#[0-9A-F]{6}$/i.test(textColor)) pin.textColor = textColor;
+          // Constrain pin scale based on area size to prevent center pin from extending beyond boundary
+          const maxAllowedScale = Math.min(3, areaSize / 60);
+          pin.pinScale = Math.max(0.5, Math.min(maxAllowedScale, pinScale));
+        }
+
+        setSelectedPin(modalPinIndex);
+        closePinModal();
+        saveState(); // Save state after editing pin
+      };
+
+      // ============================================================================
+      // LOAD MODAL (Mermaid Diagram Loader)
+      // ============================================================================
+      function openLoadModal() {
+        loadMermaidInput.value = "";
+        loadModalBackdrop.style.display = "flex";
+        loadMermaidInput.focus();
+      }
+
+      function closeLoadModal() {
+        loadModalBackdrop.style.display = "none";
+      }
+
+      loadModalClose.onclick = closeLoadModal;
+      loadCancel.onclick = closeLoadModal;
+      loadModalBackdrop.addEventListener("click", (e) => {
+        if (e.target === loadModalBackdrop) closeLoadModal();
+      });
+
+      // Mermaid parser function
+      function parseMermaidDiagram(mermaidCode) {
+        // Remove graph declaration and comments
+        const lines = mermaidCode
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith("%%") && !l.match(/^graph\s+/i));
+
+        const nodes = new Map(); // nodeId -> {label, color, class}
+        const edges = []; // {from, to, label, style}
+        const classDefs = new Map(); // className -> {fill, stroke, etc}
+
+        // Parse class definitions (more flexible regex)
+        lines.forEach((line) => {
+          const classMatch = line.match(/classDef\s+(\w+)\s+(.+)/);
+          if (classMatch) {
+            const [, className, props] = classMatch;
+            // Extract fill color - match hex colors (#rrggbb) or color names
+            // Handle format: fill:#ff0000 or fill: #ff0000
+            const fillMatch = props.match(/fill:\s*([^,]+?)(?=,|$)/);
+            const strokeMatch = props.match(/stroke:\s*([^,]+?)(?=,|$)/);
+            const fillColor = fillMatch ? fillMatch[1].trim() : null;
+            const strokeColor = strokeMatch ? strokeMatch[1].trim() : null;
+
+            if (fillColor || strokeColor) {
+              classDefs.set(className, {
+                fill: fillColor,
+                stroke: strokeColor,
+              });
+              // classDef parsed successfully
+            }
+          }
+        });
+
+
+        // Parse nodes and edges
+        lines.forEach((line) => {
+          // Skip classDef, class assignment, and comment lines
+          if (
+            line.startsWith("classDef") ||
+            line.startsWith("class ") ||
+            line.startsWith("%%")
+          )
+            return;
+
+          // Skip Legend nodes (they're just for display, not connections)
+          if (line.includes("Legend[Legend:")) return;
+
+          // First, extract ALL node definitions from the line (can appear multiple times)
+          // Pattern: NodeID[Label]:::className (triple colon for class)
+          // Match nodes anywhere in the line, even after edges
+          const nodeDefRegex =
+            /(\w+)\[([^\]]+)\](?:::(.+?))?(?=\s*(?:[-.]->|$|\s|:::))/g;
+          let nodeMatch;
+          while ((nodeMatch = nodeDefRegex.exec(line)) !== null) {
+            const [, nodeId, labelText, colorClass] = nodeMatch;
+            const label = labelText.replace(/<br\s*\/?>/gi, "\n");
+            // Clean up className - remove any leading colons or whitespace
+            const className = colorClass ? colorClass.trim().replace(/^:+/, '') : null;
+            nodes.set(nodeId, {
+              label,
+              className: className,
+              inlineColorClass: className,
+            });
+          }
+
+          // Then, parse edges (which connect nodes)
+          // Extract node IDs that appear before and after arrows
+          // Pattern: NodeA[Label]:::class -->|label| NodeB[Label]:::class
+          // We need to match the node ID before the arrow and after the arrow
+          const edgeWithLabelRegex =
+            /(\w+)(?:\[[^\]]+\](?:::[^\s]+)?)?\s+(-?\.?->)\|([^|]+)\|\s*(\w+)(?:\[[^\]]+\](?:::[^\s]+)?)?/;
+          const edgeMatch = line.match(edgeWithLabelRegex);
+          if (edgeMatch) {
+            const [, from, arrow, label, to] = edgeMatch;
+            const isDashed = arrow.includes(".");
+            edges.push({
+              from: from.trim(),
+              to: to.trim(),
+              label: label.trim(),
+              style: isDashed ? "dashed" : "solid",
+            });
+          } else {
+            // Pattern: NodeA[Label]:::class --> NodeB[Label]:::class (no label)
+            const edgeNoLabelRegex =
+              /(\w+)(?:\[[^\]]+\](?:::[^\s]+)?)?\s+(-?\.?->)\s+(\w+)(?:\[[^\]]+\](?:::[^\s]+)?)?/;
+            const edgeMatchNoLabel = line.match(edgeNoLabelRegex);
+            if (edgeMatchNoLabel) {
+              const [, from, arrow, to] = edgeMatchNoLabel;
+              const isDashed = arrow.includes(".");
+              edges.push({
+                from: from.trim(),
+                to: to.trim(),
+                label: "",
+                style: isDashed ? "dashed" : "solid",
+              });
+            }
+          }
+        });
+
+        // Parse class assignments separately (after nodes are defined)
+        lines.forEach((line) => {
+          const classAssignMatch = line.match(/^class\s+(\w+)\s+(\w+)$/);
+          if (classAssignMatch) {
+            const [, nodeId, className] = classAssignMatch;
+            if (nodes.has(nodeId)) {
+              nodes.get(nodeId).className = className;
+            }
+          }
+        });
+
+        return { nodes, edges, classDefs };
+      }
+
+      function loadMermaidData(mermaidCode) {
+        try {
+          const { nodes, edges, classDefs } = parseMermaidDiagram(mermaidCode);
+
+          if (nodes.size === 0) {
+            alert("No nodes found in the Mermaid diagram.");
+            return;
+          }
+
+          saveHistory();
+
+          // Clear existing data (optional - you might want to append instead)
+          const shouldClear = confirm(
+            "This will replace all current data. Continue?"
+          );
+          if (!shouldClear) return;
+
+          pins = [];
+          connections = [];
+          selectedPinIndex = null;
+          selectedPins = [];
+
+          // Build adjacency lists for hierarchical layout
+          const incomingEdges = new Map(); // nodeId -> [edge, ...]
+          const outgoingEdges = new Map(); // nodeId -> [edge, ...]
+          
+          edges.forEach((edge) => {
+            if (!incomingEdges.has(edge.to)) {
+              incomingEdges.set(edge.to, []);
+            }
+            incomingEdges.get(edge.to).push(edge);
+            
+            if (!outgoingEdges.has(edge.from)) {
+              outgoingEdges.set(edge.from, []);
+            }
+            outgoingEdges.get(edge.from).push(edge);
+          });
+
+          // Find root nodes (nodes with no incoming edges, or nodes that are sources but not targets)
+          const rootNodes = [];
+          nodes.forEach((nodeData, nodeId) => {
+            if (!incomingEdges.has(nodeId) || incomingEdges.get(nodeId).length === 0) {
+              rootNodes.push(nodeId);
+            }
+          });
+          
+          // If no root nodes found, use nodes with most outgoing edges as roots
+          if (rootNodes.length === 0) {
+            const outgoingCounts = new Map();
+            nodes.forEach((nodeData, nodeId) => {
+              outgoingCounts.set(nodeId, outgoingEdges.get(nodeId)?.length || 0);
+            });
+            const maxOutgoing = Math.max(...Array.from(outgoingCounts.values()));
+            nodes.forEach((nodeData, nodeId) => {
+              if (outgoingCounts.get(nodeId) === maxOutgoing) {
+                rootNodes.push(nodeId);
+              }
+            });
+          }
+
+          const nodeIdToIndex = new Map();
+
+          // Layout constants
+          const viewportCenter = screenToWorld(
+            canvas.width / 2,
+            canvas.height / 2
+          );
+          const levelHeight = 200; // Vertical spacing between levels
+          const horizontalSpacing = 250; // Horizontal spacing between nodes at same level
+          const childBaseDistance = 180; // Base distance from parent
+          const childDistanceVariation = 40; // Variation in distance
+          const childVerticalSpacing = 80; // Vertical spacing for alternating positions
+
+          // Hierarchical layout: assign levels to nodes using BFS
+          const nodeLevels = new Map(); // nodeId -> level (0 = root, 1 = first children, etc.)
+          const nodePositions = new Map(); // nodeId -> {x, y}
+          const processedNodes = new Set();
+          
+          // Initialize root nodes at level 0
+          rootNodes.forEach((nodeId) => {
+            nodeLevels.set(nodeId, 0);
+          });
+          
+          // BFS to assign levels to all nodes
+          const queue = [...rootNodes];
+          while (queue.length > 0) {
+            const currentNodeId = queue.shift();
+            if (processedNodes.has(currentNodeId)) continue;
+            processedNodes.add(currentNodeId);
+            
+            const currentLevel = nodeLevels.get(currentNodeId) || 0;
+            const children = outgoingEdges.get(currentNodeId) || [];
+            
+            children.forEach((edge) => {
+              const childId = edge.to;
+              if (!nodeLevels.has(childId)) {
+                // Assign level: one more than the deepest parent
+                const parentLevels = (incomingEdges.get(childId) || [])
+                  .map((e) => nodeLevels.get(e.from) || 0);
+                const maxParentLevel = parentLevels.length > 0 ? Math.max(...parentLevels) : -1;
+                nodeLevels.set(childId, maxParentLevel + 1);
+              }
+              if (!processedNodes.has(childId)) {
+                queue.push(childId);
+              }
+            });
+          }
+          
+          // Assign levels to any remaining nodes (orphans)
+          nodes.forEach((nodeData, nodeId) => {
+            if (!nodeLevels.has(nodeId)) {
+              nodeLevels.set(nodeId, 999); // Place orphans at the end
+            }
+          });
+          
+          // Group nodes by level
+          const nodesByLevel = new Map();
+          nodes.forEach((nodeData, nodeId) => {
+            const level = nodeLevels.get(nodeId);
+            if (!nodesByLevel.has(level)) {
+              nodesByLevel.set(level, []);
+            }
+            nodesByLevel.get(level).push(nodeId);
+          });
+          
+          // Position nodes level by level
+          const sortedLevels = Array.from(nodesByLevel.keys()).sort((a, b) => a - b);
+          
+          sortedLevels.forEach((level) => {
+            const levelNodes = nodesByLevel.get(level);
+            const startY = viewportCenter.y - 400 + (level * levelHeight);
+            
+            // Calculate positions for nodes at this level
+            levelNodes.forEach((nodeId, idx) => {
+              const parents = (incomingEdges.get(nodeId) || []).map((e) => e.from);
+              
+              let x, y;
+              
+              if (parents.length === 0) {
+                // Root node or orphan - position horizontally
+                const totalWidth = (levelNodes.length - 1) * horizontalSpacing;
+                const startX = viewportCenter.x - totalWidth / 2;
+                x = startX + idx * horizontalSpacing;
+                y = startY;
+              } else if (parents.length === 1) {
+                // Single parent - position below parent with variation
+                const parentPos = nodePositions.get(parents[0]);
+                if (parentPos) {
+                  const side = idx % 2 === 0 ? -1 : 1; // Alternate left/right
+                  const distance = childBaseDistance + (idx % 3) * childDistanceVariation;
+                  x = parentPos.x + side * distance;
+                  
+                  // Alternate above/below base line for this level
+                  const verticalOffset = idx % 2 === 0 
+                    ? -childVerticalSpacing / 2 
+                    : childVerticalSpacing / 2;
+                  y = startY + verticalOffset;
+                } else {
+                  // Parent not positioned yet, use default
+                  const totalWidth = (levelNodes.length - 1) * horizontalSpacing;
+                  const startX = viewportCenter.x - totalWidth / 2;
+                  x = startX + idx * horizontalSpacing;
+                  y = startY;
+>>>>>>> refactor-2
                 }
 
                 // Remove pin
