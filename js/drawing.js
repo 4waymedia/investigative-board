@@ -2,50 +2,36 @@
 // DRAWING MODULE - Refactored 2025/2026 style
 // ============================================================================
 
+// Utilities are available globally from js/utilities.js via window.DrawingUtils
 
-// ── Utility functions ────────────────────────────────────────────────────
+// ============================================================================
+// COORDINATE TRANSFORMATION UTILITIES
+// ============================================================================
 
-function roundRectPath(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+/**
+ * Convert world coordinates to screen coordinates
+ * @param {number} wx - World X coordinate
+ * @param {number} wy - World Y coordinate
+ * @returns {Object} Screen coordinates {x, y}
+ */
+function worldToScreen(wx, wy) {
+  return {
+    x: wx * scale + offsetX,
+    y: wy * scale + offsetY,
+  };
 }
 
-function lightenColor(color, percent) {
-  // Simple color lightening
-  const num = parseInt(color.replace("#", ""), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = (num >> 16) + amt;
-  const G = ((num >> 8) & 0x00ff) + amt;
-  const B = (num & 0x0000ff) + amt;
-  return (
-    "#" +
-    (
-      0x1000000 +
-      (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-      (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-      (B < 255 ? (B < 1 ? 0 : B) : 255)
-    )
-      .toString(16)
-      .slice(1)
-  );
-}
-
-function darkenColor(hex, percent) {
-  const num = parseInt(hex.slice(1), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, Math.min(255, (num >> 16) - amt));
-  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) - amt));
-  const B = Math.max(0, Math.min(255, (num & 0x0000ff) - amt));
-  return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+/**
+ * Convert screen coordinates to world coordinates
+ * @param {number} sx - Screen X coordinate
+ * @param {number} sy - Screen Y coordinate
+ * @returns {Object} World coordinates {x, y}
+ */
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - offsetX) / scale,
+    y: (sy - offsetY) / scale,
+  };
 }
 
 // ── Global drawing phases ────────────────────────────────────────────────
@@ -115,14 +101,17 @@ function drawCenterPin(areaPin, centerPos) {
 
   const pinScale = areaPin.pinScale || 1;
 
+  const title = areaPin.title || "";
+  const description = areaPin.description || "";
+
   const centerPin = {
     x: areaPin.x || 0,
     y: areaPin.y || 0,
     color: areaPin.color || "#58a6ff",
     typeId: cardTypeId,
-    label: areaPin.title || "",
-    title: areaPin.title || "",
-    description: areaPin.description || "",
+    label: title,
+    title: title,
+    description: description,
     pinScale: pinScale,
   };
 
@@ -178,7 +167,7 @@ function defaultDrawShadow(ctx, pin, metrics, scr, s) {
     const r = (m.baseRadius || 6) * s;
 
     ctx.fillStyle = "rgba(0,0,0,0.35)";
-    roundRectPath(ctx, x + 3 * s, y + 4 * s, w, h, r);
+    window.DrawingUtils.roundRectPath(ctx, x + 3 * s, y + 4 * s, w, h, r);
     ctx.fill();
     return;
   }
@@ -213,7 +202,7 @@ function defaultDrawBackground(ctx, pin, metrics, scr, s) {
     const r = (m.baseRadius || 6) * s;
 
     ctx.fillStyle = pin.color || "#58a6ff";
-    roundRectPath(ctx, x - 4 * s, y - 4 * s, w + 8 * s, h + 8 * s, r + 4 * s);
+    window.DrawingUtils.roundRectPath(ctx, x - 4 * s, y - 4 * s, w + 8 * s, h + 8 * s, r + 4 * s);
     ctx.fill();
   }
 
@@ -253,7 +242,7 @@ function defaultDrawMain(ctx, pin, metrics, scr, s) {
     const cornerRadius = (m.baseRadius || 6) * s;
 
     ctx.fillStyle = color;
-    roundRectPath(ctx, x, y, w, h, cornerRadius);
+    window.DrawingUtils.roundRectPath(ctx, x, y, w, h, cornerRadius);
     ctx.fill();
     return;
   }
@@ -292,7 +281,7 @@ function defaultDrawSelection(
     const x = scr.x - w / 2,
       y = scr.y - h / 2;
     const r = m.baseRadius * s || 6 * s;
-    roundRectPath(ctx, x - 6 * s, y - 6 * s, w + 12 * s, h + 12 * s, r + 4 * s);
+    window.DrawingUtils.roundRectPath(ctx, x - 6 * s, y - 6 * s, w + 12 * s, h + 12 * s, r + 4 * s);
     ctx.stroke();
   }
   ctx.restore();
@@ -347,7 +336,7 @@ registerShape("card", {
       ? "rgba(0,255,65,0.25)"
       : "rgba(0,0,0,0.4)";
 
-    roundRectPath(
+    window.DrawingUtils.roundRectPath(
       ctx,
       x + 4 * s,
       y + 4 * s,
@@ -365,7 +354,7 @@ registerShape("card", {
       y = scr.y - h / 2;
 
     ctx.fillStyle = pin.color || "#58a6ff";
-    roundRectPath(ctx, x, y, w, h, 6 * s);
+    window.DrawingUtils.roundRectPath(ctx, x, y, w, h, 6 * s);
     ctx.fill();
   },
 
@@ -377,13 +366,13 @@ registerShape("card", {
 
     if (m.variant === "document") {
       ctx.fillStyle = "rgba(0,0,0,0.16)";
-      roundRectPath(ctx, x + 4 * s, y + 4 * s, w - 8 * s, h * 0.25, 4 * s);
+      window.DrawingUtils.roundRectPath(ctx, x + 4 * s, y + 4 * s, w - 8 * s, h * 0.25, 4 * s);
       ctx.fill();
     } else if (m.variant === "folder") {
       const tabW = w * 0.4,
         tabH = h * 0.3;
-      ctx.fillStyle = lightenColor(pin.color || "#58a6ff", 12);
-      roundRectPath(ctx, x + 6 * s, y - tabH * 0.5, tabW, tabH, 4 * s);
+      ctx.fillStyle = window.DrawingUtils.lightenColor(pin.color || "#58a6ff", 12);
+      window.DrawingUtils.roundRectPath(ctx, x + 6 * s, y - tabH * 0.5, tabW, tabH, 4 * s);
       ctx.fill();
     }
 
@@ -462,7 +451,7 @@ registerShape("area-rect", {
     const y = scr.y - h / 2;
 
     ctx.fillStyle = "rgba(0,0,0,0.2)";
-    roundRectPath(ctx, x + 4 * s, y + 4 * s, w, h, 8 * s);
+    window.DrawingUtils.roundRectPath(ctx, x + 4 * s, y + 4 * s, w, h, 8 * s);
     ctx.fill();
   },
 
@@ -479,7 +468,7 @@ registerShape("area-rect", {
 
     // Fill
     ctx.fillStyle = pin.fillColor || pin.color + "40";
-    roundRectPath(ctx, fillX, fillY, fillW, fillH, Math.max(0, 6 * s - bw / 2));
+    window.DrawingUtils.roundRectPath(ctx, fillX, fillY, fillW, fillH, Math.max(0, 6 * s - bw / 2));
     ctx.fill();
 
     // Border
@@ -507,6 +496,11 @@ registerShape("area-circle", {
     };
   },
 
+  drawLabel(ctx, pin, m, scr, s) {
+    // Area pins don't show their own labels - everything is handled by center pin
+    return;
+  },
+
   drawShadow(ctx, pin, m, scr, s) {
     const r = m.radius * s;
     ctx.fillStyle = "rgba(0,0,0,0.2)";
@@ -518,20 +512,20 @@ registerShape("area-circle", {
   drawMain(ctx, pin, m, scr, s) {
     const r = m.radius * s;
     const bw = Math.min(m.borderWidth * s, r * 0.8);
-    const fillR = Math.max(r - bw / 2, 1);
+    const fillR = Math.max(r - bw, 1); // Leave full border width for fill area
 
-    // Fill
+    // Fill (smaller circle)
     ctx.fillStyle = pin.fillColor || pin.color + "40";
     ctx.beginPath();
     ctx.arc(scr.x, scr.y, fillR, 0, Math.PI * 2);
     ctx.fill();
 
-    // Border
+    // Border (full size circle)
     if (bw > 0.1) {
       ctx.strokeStyle = pin.borderColor || pin.color;
       ctx.lineWidth = bw;
       ctx.beginPath();
-      ctx.arc(scr.x, scr.y, fillR, 0, Math.PI * 2);
+      ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
       ctx.stroke();
     }
   },
@@ -563,7 +557,7 @@ registerShape("rect", {
     const r = (m.baseRadius || 6) * s;
 
     ctx.fillStyle = pin.color || "#58a6ff";
-    roundRectPath(ctx, x, y, w, h, r);
+    window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
     ctx.fill();
   },
 });
@@ -586,7 +580,7 @@ registerShape("pill", {
     const r = Math.min(w, h) / 2; // Fully rounded - pill shape
 
     ctx.fillStyle = pin.color || "#58a6ff";
-    roundRectPath(ctx, x, y, w, h, r);
+    window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
     ctx.fill();
   },
 });
@@ -612,10 +606,10 @@ registerShape("diamond", {
 
     ctx.fillStyle = pin.color || "#c084fc";
     ctx.beginPath();
-    ctx.moveTo(scr.x, scr.y - halfH);     // Top
-    ctx.lineTo(scr.x + halfW, scr.y);     // Right
-    ctx.lineTo(scr.x, scr.y + halfH);     // Bottom
-    ctx.lineTo(scr.x - halfW, scr.y);     // Left
+    ctx.moveTo(scr.x, scr.y - halfH); // Top
+    ctx.lineTo(scr.x + halfW, scr.y); // Right
+    ctx.lineTo(scr.x, scr.y + halfH); // Bottom
+    ctx.lineTo(scr.x - halfW, scr.y); // Left
     ctx.closePath();
     ctx.fill();
   },
@@ -648,20 +642,20 @@ registerShape("person", {
     // Work with metrics from getPinMetrics: width, height, radius
     // For person pins: width=20*pinScale, height=32*pinScale, radius=6*pinScale
 
-    const pinWidth = m.width * s;  // Apply zoom scale
+    const pinWidth = m.width * s; // Apply zoom scale
     const pinHeight = m.height * s; // Apply zoom scale
 
     // Person icon proportions scaled to fit pin dimensions
     const headRadius = Math.min(pinWidth, pinHeight) * 0.25; // Head radius
-    const bodyWidth = pinWidth * 0.7;   // Body width
+    const bodyWidth = pinWidth * 0.7; // Body width
     const bodyHeight = pinHeight * 0.4; // Body height
 
     // Position elements within the pin bounds
     const headY = scr.y - pinHeight * 0.15 - 10 * s; // Head center above pin center (raised by 10)
-    const bodyY = scr.y + pinHeight * 0.1 - 10 * s;  // Body top below pin center (raised by 10)
+    const bodyY = scr.y + pinHeight * 0.1 - 10 * s; // Body top below pin center (raised by 10)
 
     const fillColor = pin.color || "#6366f1"; // Head color
-    const bodyColor = darkenColor(fillColor, 40); // Darker body color based on pin color
+    const bodyColor = window.DrawingUtils.darkenColor(fillColor, 40); // Darker body color based on pin color
 
     // --- 1. DRAW THE HEAD (Circle) ---
     ctx.fillStyle = fillColor;
@@ -718,7 +712,6 @@ registerShape("person", {
   },
 });
 
-
 // ── Business Building ──────────────────────────────────────────────────────────
 registerShape("business-building", {
   getMetrics(pin, scale) {
@@ -736,7 +729,7 @@ registerShape("business-building", {
     const y = scr.y - h / 2;
 
     const buildingColor = pin.color || "#475569"; // slate-600 default
-    const accentColor = darkenColor(buildingColor, 25);
+    const accentColor = window.DrawingUtils.darkenColor(buildingColor, 25);
 
     // Main building structure (rectangular base)
     ctx.fillStyle = buildingColor;
@@ -801,18 +794,66 @@ registerShape("business-building", {
 
     // Door handle
     ctx.fillStyle = "#ffd700"; // gold
-    ctx.fillRect(doorX + doorW * 0.8, doorY + doorH * 0.4, doorW * 0.05, doorH * 0.2);
+    ctx.fillRect(
+      doorX + doorW * 0.8,
+      doorY + doorH * 0.4,
+      doorW * 0.05,
+      doorH * 0.2
+    );
   },
 
   drawLabel(ctx, pin, m, scr, s) {
-    if (pin.label) {
+    // Debug center pins
+    if (pin.typeId && pin.typeId.startsWith("card:")) {
+      console.log("🎴 Drawing center card label:", {
+        typeId: pin.typeId,
+        label: pin.label,
+        description: pin.description,
+        scale: s,
+        position: scr,
+        metrics: m
+      });
+    }
+
+    let textToShow = pin.label;
+    let descriptionOffset = 0;
+
+    // If there's a description and no label, show description
+    if (!textToShow && pin.description) {
+      textToShow = pin.description;
+    }
+
+    if (textToShow) {
       const offset = (m.height / 2 + 12) * s;
       ctx.font = `bold ${Math.round(14 * s)}px system-ui`;
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.65)";
-      ctx.fillText(pin.label, scr.x, scr.y + offset + 2 * s);
+      ctx.fillText(textToShow, scr.x, scr.y + offset + 2 * s);
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(pin.label, scr.x, scr.y + offset);
+      ctx.fillText(textToShow, scr.x, scr.y + offset);
+      descriptionOffset = 18 * s; // Space for next line
+    }
+
+    // Show description on second line if both exist
+    if (pin.label && pin.description) {
+      const offset = (m.height / 2 + 12) * s + descriptionOffset;
+      ctx.font = `${Math.round(11 * s)}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0,0,0,0.8)";
+      ctx.fillText(pin.description, scr.x, scr.y + offset + 2 * s);
+      ctx.fillStyle = "#aaaaaa";
+      ctx.fillText(pin.description, scr.x, scr.y + offset);
+    }
+
+    // Show description on first line if only description exists
+    if (!pin.label && pin.description) {
+      const offset = (m.height / 2 + 12) * s;
+      ctx.font = `bold ${Math.round(14 * s)}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillText(pin.description, scr.x, scr.y + offset + 2 * s);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(pin.description, scr.x, scr.y + offset);
     }
   },
 });
@@ -852,15 +893,8 @@ function drawPinShape(pin, metrics, index) {
   ctx.restore();
 }
 
-// ── Usage in your main draw function ─────────────────────────────────────
-
-pins.forEach((pin, i) => {
-  const metrics = getPinMetrics(i); // Get metrics using pin index
-  drawPinShape(pin, metrics, i);
-});
-
 // ── Draw Text Elements ───────────────────────────────────────────────────
-function drawTextElements() {
+function drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBottom, margin) {
   if (!textElements) return;
 
   textElements.forEach((textEl, index) => {
@@ -896,7 +930,7 @@ function drawTextElements() {
     const bubbleY = scr.y - bubbleHeight / 2;
 
     // Draw rounded rectangle background
-    roundRectPath(ctx, bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8 * s);
+    window.DrawingUtils.roundRectPath(ctx, bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8 * s);
     ctx.fill();
     ctx.stroke();
 

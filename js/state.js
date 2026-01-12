@@ -291,3 +291,51 @@ function updateAreaContainment() {
   // Implementation depends on specific area logic - placeholder for now
   // This function would recalculate which pins are contained within area pins
 }
+
+// ============================================================================
+// APPSTATE INTEGRATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Save AppState instance to localStorage
+ * @param {AppState} appState - The AppState instance to save
+ */
+function saveAppState(appState) {
+  if (!appState) {
+    console.warn("No appState provided to saveAppState");
+    return;
+  }
+
+  const stateData = appState.toSerializable();
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateData));
+    console.log("AppState saved successfully to localStorage.");
+  } catch (e) {
+    console.error("Failed to save AppState to localStorage:", e);
+  }
+}
+
+/**
+ * Load state from localStorage into AppState instance
+ * @param {AppState} appState - The AppState instance to load into
+ */
+function loadAppState(appState) {
+  if (!appState) {
+    console.warn("No appState provided to loadAppState");
+    return false;
+  }
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const stateData = JSON.parse(stored);
+      appState.fromSerializable(stateData);
+      console.log("AppState loaded successfully from localStorage.");
+      return true;
+    }
+  } catch (e) {
+    console.error("Failed to load AppState from localStorage:", e);
+  }
+  return false;
+}

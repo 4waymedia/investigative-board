@@ -5,7 +5,11 @@
     <title>Investigative Board</title>
     <link rel="stylesheet" href="css/board-styles.css" />
     <script src="js/layoutWorker.js"></script>
-    <script src="js/state.js"></script>
+    <script src="js/utilities.js"></script>
+    <script src="js/domain/nodeTypes.js"></script>
+    <script src="js/domain/connections.js"></script>
+    <script src="js/domain/cards.js"></script>
+    <script src="js/core/state.js"></script>
     <script src="js/drawing.js"></script>
     <script src="js/text.js"></script>
   </head>
@@ -57,7 +61,7 @@
                 placeholder="Pin title"
               />
             </div>
-            <div class="modal-field">
+            <div class="modal-field" id="regular-description-field">
               <div class="modal-label">Description / Notes</div>
               <textarea
                 id="pm-description"
@@ -189,8 +193,6 @@
                       <option value="▤">▤ Note Card</option>
                       <option value="📄">📄 Document Card</option>
                       <option value="📁">📁 Folder Card</option>
-                      <option value="👤">👤 Person</option>
-                      <option value="🏢">🏢 Business</option>
                     </optgroup>
                   </select>
                 </div>
@@ -588,146 +590,27 @@
       canvas.style.marginTop = MENU_HEIGHT + "px";
 
       // ============================================================================
-      // APPLICATION STATE
+      // APPLICATION STATE - Now using AppState class
       // ============================================================================
-      // View/Camera State
-      let scale = 1;
-      let offsetX = 0;
-      let offsetY = 0;
 
-      // Data State
-      let pins = [];
-      let connections = [];
-      let cards = [];
-      let textElements = []; // Text elements on the board
-      let history = [];
-
-      // Selection State
-      let selectedPinIndex = null;
-      let selectedPins = []; // Multi-selection via marquee
-      let connectStartIndex = null; // For connection creation
-      let tempStartIndex = null; // Legacy, may be removable
-
-      // Marquee Selection State
-      let marqueeStart = null; // {x, y} in world coordinates
-      let marqueeEnd = null; // {x, y} in world coordinates
-
-      // Interaction State
-      let mouseScreenX = 0;
-      let mouseScreenY = 0;
-      let prevScreenX = 0;
-      let prevScreenY = 0;
-      let didDrag = false;
-      let time = 0; // Animation time counter
-      let animId = null; // Animation frame ID
-
-      // Timeline State
-      let timelineActive = false;
-      let timelinePins = [];
-      let timelineY = 0;
-      let timelineLeft = 0;
-      let timelineRight = 0;
+      // Create the main application state instance
+      const state = new window.AppState();
+      window.appState = state; // Make it globally accessible
 
       // ============================================================================
-      // NODE TYPE DEFINITIONS
+      // NODE TYPE DEFINITIONS (now loaded from js/domain/nodeTypes.js)
       // ============================================================================
-      const NODE_TYPES = [
-        {
-          id: "pin:circle",
-          label: "Circle Pin",
-          icon: "●",
-          family: "pin",
-          variant: "circle",
-        },
-        {
-          id: "pin:square",
-          label: "Square Pin",
-          icon: "■",
-          family: "pin",
-          variant: "square",
-        },
-        {
-          id: "pin:pill",
-          label: "Pill Pin",
-          icon: "▭",
-          family: "pin",
-          variant: "pill",
-        },
-        {
-          id: "pin:diamond",
-          label: "Diamond Pin",
-          icon: "◆",
-          family: "pin",
-          variant: "diamond",
-        },
-        {
-          id: "pin:person",
-          label: "Person Pin",
-          icon: "👤",
-          family: "pin",
-          variant: "person",
-        },
-        {
-          id: "pin:business-building",
-          label: "Business Building Pin",
-          icon: "🏢",
-          family: "pin",
-          variant: "business-building",
-        },
-        {
-          id: "card:card",
-          label: "Note Card",
-          icon: "▤",
-          family: "card",
-          variant: "card",
-        },
-        {
-          id: "card:doc",
-          label: "Doc Card",
-          icon: "📄",
-          family: "card",
-          variant: "document",
-        },
-        {
-          id: "card:folder",
-          label: "Folder Card",
-          icon: "📁",
-          family: "card",
-          variant: "folder",
-        },
-        {
-          id: "area:circle",
-          label: "Circle Area",
-          icon: "⭕",
-          family: "area",
-          variant: "circle",
-        },
-        {
-          id: "area:square",
-          label: "Square Area",
-          icon: "▢",
-          family: "area",
-          variant: "square",
-        },
-      ];
 
-      // Make NODE_TYPES globally accessible for miniature pin rendering
-      window.NODE_TYPES = NODE_TYPES;
+      // NODE_TYPES is now available via window.NodeTypesAPI.NODE_TYPES
 
-      // Type Selection State
-      let selectedTypeByFamily = {
-        pin: "pin:circle",
-        card: "card:card",
-        area: "area:circle",
-      };
-      let currentFamily = "pin";
-      let currentTypeId = selectedTypeByFamily.pin;
+      // Type Selection State (now managed by AppState)
+      // currentFamily and currentTypeId are aliases to state properties
 
       // ============================================================================
       // PIN/CARD SHAPE DEFINITIONS
       // ============================================================================
       const PIN_BASES = {
-        "pin:circle": { shape: "circle", baseRadius: 18 },
+        "pin:circle": { shape: "circle", baseRadius: 9 },
         "pin:square": {
           shape: "rect",
           baseRadius: 4,
@@ -754,9 +637,9 @@
         },
         "pin:business-building": {
           shape: "business-building",
-          baseRadius: 8,
-          baseWidth: 64,
-          baseHeight: 64,
+          baseRadius: 4,
+          baseWidth: 32,
+          baseHeight: 40,
         },
         "card:card": {
           shape: "card",
@@ -796,7 +679,7 @@
       // UTILITY FUNCTIONS
       // ============================================================================
       function getNodeType(id) {
-        return NODE_TYPES.find((t) => t.id === id) || NODE_TYPES[0];
+        return window.NodeTypesAPI.NODE_TYPES.find((t) => t.id === id) || window.NodeTypesAPI.NODE_TYPES[0];
       }
 
       function getConnectionCount(index) {
@@ -872,7 +755,7 @@
           };
         }
 
-        // 2. Get the full type details (from NODE_TYPES)
+        // 2. Get the full type details (from window.NodeTypesAPI.NODE_TYPES)
         const typeDetail = getNodeType(typeId);
 
         // 3. Define the core metrics object
@@ -1092,7 +975,7 @@
         isLayoutSimulating = !isLayoutSimulating;
 
         if (isLayoutSimulating) {
-          saveHistory();
+          state.saveHistory();
           document.getElementById("magic").classList.add("active");
 
           pins.forEach((p) => {
@@ -1103,13 +986,13 @@
         } else {
           document.getElementById("magic").classList.remove("active");
           isWorkerProcessing = false; // Reset flag when stopping
-          saveState(); // Save final positions after stopping simulation
+          saveAppState(state); // Save final positions after stopping simulation
         }
       }
       // ============================================================================
       // TOOL SYSTEM
       // ============================================================================
-      let currentTool = "pin"; // Current active tool: "pan", "select", "pin", or "text"
+      // Tool state variables are now in AppState
       let currentTextType = "plain"; // Text type: "plain", "rectangle", "comic", "title"
       let selectedTextIndex = null; // Currently selected text element
 
@@ -1358,8 +1241,7 @@
 
       let currentThemeId = "default";
       let palette = [...defaultColors];
-      let selectedColor = palette[0].value;
-      let connectionType = "straight"; // "straight" or "curved"
+      // selectedColor and connectionType are now in AppState
       let themeMenuEl = null;
 
       function renderTools() {
@@ -1410,7 +1292,7 @@
               e.stopPropagation();
               currentTextType = t.id;
               closeTypeMenu();
-              saveState();
+              saveAppState(state);
               renderMenu();
               draw();
             };
@@ -1420,9 +1302,9 @@
           // Handle pin/card types
           const currentId =
             selectedTypeByFamily[family] ||
-            NODE_TYPES.find((t) => t.family === family).id;
+            window.NodeTypesAPI.NODE_TYPES.find((t) => t.family === family).id;
 
-          NODE_TYPES.filter((t) => t.family === family).forEach((t) => {
+          window.NodeTypesAPI.NODE_TYPES.filter((t) => t.family === family).forEach((t) => {
             const item = document.createElement("button");
             item.className =
               "type-menu-item" + (t.id === currentId ? " active" : "");
@@ -1432,7 +1314,7 @@
               selectedTypeByFamily[family] = t.id;
               if (currentFamily === family) currentTypeId = t.id;
               closeTypeMenu();
-              saveState(); // Save menu preference
+              saveAppState(state); // Save menu preference
               renderMenu();
               draw();
             };
@@ -1459,9 +1341,9 @@
           currentFamily = family;
           currentTypeId =
             selectedTypeByFamily[family] ||
-            NODE_TYPES.find((t) => t.family === family).id;
+            window.NodeTypesAPI.NODE_TYPES.find((t) => t.family === family).id;
         }
-        saveState(); // Save menu preference
+        saveAppState(state); // Save menu preference
         renderMenu();
         draw();
       }
@@ -1495,7 +1377,7 @@
           } else {
             activeType = getNodeType(
               selectedTypeByFamily[f.id] ||
-                NODE_TYPES.find((t) => t.family === f.id).id
+                window.NodeTypesAPI.NODE_TYPES.find((t) => t.family === f.id).id
             );
           }
 
@@ -1536,10 +1418,6 @@
 
         menu.appendChild(renderTypeBar());
 
-        // Color options container
-        const colorContainer = document.createElement("div");
-        colorContainer.className = "color-container";
-
         palette.forEach((col) => {
           const el = document.createElement("div");
           el.className =
@@ -1547,11 +1425,11 @@
           el.innerHTML = `<div class="label">${col.name}</div><div class="swatch" style="background:${col.value}"></div>`;
           el.onclick = () => {
             selectedColor = col.value;
-            saveState();
+            saveAppState(state);
             renderMenu();
             draw();
           };
-          colorContainer.appendChild(el);
+          menu.appendChild(el);
         });
 
         const add = document.createElement("div");
@@ -1560,6 +1438,8 @@
         add.onclick = () => {
           openAddColorModal();
         };
+        menu.appendChild(add);
+
         // Connection Type Toggle
         const connTypeDiv = document.createElement("div");
         connTypeDiv.className = "color-option";
@@ -1569,17 +1449,15 @@
         }</div>`;
         connTypeDiv.onclick = () => {
           connectionType = connectionType === "curved" ? "straight" : "curved";
-          saveState();
+          saveAppState(state);
           renderMenu();
           draw();
         };
         connTypeDiv.title = `Connection Type: ${connectionType} (Press 'T' to toggle)`;
-        colorContainer.appendChild(connTypeDiv);
+        menu.appendChild(connTypeDiv);
 
         // Theme Selector
-        colorContainer.appendChild(renderThemeSelector());
-
-        menu.appendChild(colorContainer);
+        menu.appendChild(renderThemeSelector());
       }
 
       function closeThemeMenu() {
@@ -1708,7 +1586,7 @@
           renderCardColorPicker();
         }
 
-        saveState();
+        saveAppState(state);
         renderMenu();
         draw();
       }
@@ -2176,10 +2054,55 @@
         },
       ];
 
-      // Initialize cards (load from storage or use defaults)
-      if (!loadState()) {
-        cards = defaultCards;
+      // Load state from localStorage
+      const stateLoaded = loadAppState(state);
+
+      // Initialize cards with defaults if no state was loaded
+      if (!stateLoaded) {
+        state.cards = defaultCards;
       }
+
+      // Create variable aliases AFTER state is loaded
+      // Legacy variable aliases for gradual migration (will be removed)
+      let scale = state.scale;
+      let offsetX = state.offsetX;
+      let offsetY = state.offsetY;
+      let pins = state.pins;
+      let connections = state.connections;
+      let cards = state.cards;
+      let textElements = state.textElements;
+      let history = state.history;
+      let selectedPinIndex = state.selectedPinIndex;
+      let selectedPins = state.selectedPins;
+      let connectStartIndex = state.connectStartIndex;
+      let marqueeStart = state.marqueeStart;
+      let marqueeEnd = state.marqueeEnd;
+      let mouseScreenX = state.mouseScreenX;
+      let mouseScreenY = state.mouseScreenY;
+      let didDrag = state.didDrag;
+      let time = state.time;
+      let timelineActive = state.timelineActive;
+      let timelinePins = state.timelinePins;
+      let timelineY = state.timelineY;
+      let timelineLeft = state.timelineLeft;
+      let timelineRight = state.timelineRight;
+
+      // Tool state
+      let currentTool = state.currentTool;
+      let currentFamily = state.currentFamily;
+      let currentTypeId = state.currentTypeId;
+      let selectedColor = state.selectedColor;
+      let connectionType = state.connectionType;
+      let selectedTypeByFamily = state.selectedTypeByFamily;
+
+      // Variables not yet in AppState (will be added later)
+      let tempStartIndex = null; // Legacy, may be removable
+      let prevScreenX = 0;
+      let prevScreenY = 0;
+      let animId = null; // Animation frame ID
+
+      // Render cards with loaded state
+      renderCards();
       // Ensure nextId is at least the highest ID used + 1
       if (cards.length > 0) {
         const maxId = cards.reduce((max, card) => Math.max(max, card.id), -1);
@@ -2230,13 +2153,11 @@
           }
 
           renderMenu();
-          renderCards();
           draw(); // Redraw with the correct theme background
         })
         .catch(() => {
           // If themes fail to load, still render menu with default theme
           renderMenu();
-          renderCards();
         });
 
       // ============================================================================
@@ -2398,7 +2319,7 @@
                   value: colorValue.toLowerCase(),
                 });
                 selectedColor = colorValue.toLowerCase();
-                saveState();
+                saveAppState(state);
                 renderMenu();
               } else {
                 // If exists, just select it
@@ -2534,7 +2455,7 @@
           return;
         }
 
-        saveHistory();
+        state.saveHistory();
 
         if (modalCardId !== null) {
           // Edit existing card
@@ -2572,7 +2493,7 @@
 
         closeCardModal();
         renderCards();
-        saveState();
+        saveAppState(state);
         draw();
       };
 
@@ -2738,6 +2659,7 @@
       // PIN MODAL (Edit Dialog)
       // ============================================================================
       let modalPinIndex = null;
+      let currentModalListeners = []; // Store current modal event listeners for cleanup
 
       function switchTab(tabName) {
         // Hide all tab content
@@ -2785,34 +2707,42 @@
         }
 
         // Title input
-        pmTitle.addEventListener("input", () => {
+        const titleHandler = () => {
           const title = pmTitle.value.trim();
           if (title) pin.label = title;
           else delete pin.label;
-          console.log("Updated pin.label to:", pin.label);
           draw();
-        });
+        };
+        pmTitle.addEventListener("input", titleHandler);
+        currentModalListeners.push({element: pmTitle, event: "input", handler: titleHandler});
+        console.log("Added title listener for", pmTitle.id);
 
         // Color input
-        pmColor.addEventListener("input", () => {
+        const colorHandler = () => {
           const color = pmColor.value.trim();
           if (color && /^#?[0-9A-F]{6}$/i.test(color)) {
             pin.color = color.startsWith("#") ? color : "#" + color;
           }
           draw();
-        });
+        };
+        pmColor.addEventListener("input", colorHandler);
+        currentModalListeners.push({element: pmColor, event: "input", handler: colorHandler});
 
         // Description textarea
-        pmDescription.addEventListener("input", () => {
+        const descHandler = () => {
           pin.note = pmDescription.value.trim();
           draw();
-        });
+        };
+        pmDescription.addEventListener("input", descHandler);
+        currentModalListeners.push({element: pmDescription, event: "input", handler: descHandler});
 
         // Date input
-        pmDate.addEventListener("input", () => {
+        const dateHandler = () => {
           pin.date = pmDate.value.trim() || "";
           draw();
-        });
+        };
+        pmDate.addEventListener("input", dateHandler);
+        currentModalListeners.push({element: pmDate, event: "input", handler: dateHandler});
 
         // Area-specific controls
         if (pin.typeId && pin.typeId.startsWith("area:")) {
@@ -2831,16 +2761,25 @@
           const areaSizeSlider = document.getElementById("pm-area-size");
 
           // Area title
-          areaTitleInput.addEventListener("input", () => {
-            pin.title = areaTitleInput.value.trim();
+          const titleHandler = (e) => {
+            const newTitle = areaTitleInput.value.trim();
+            console.log("AREA TITLE HANDLER: Setting pin.title to:", JSON.stringify(newTitle), "for pin at index", modalPinIndex);
+            pin.title = newTitle;
+            console.log("AREA TITLE HANDLER: pin.title is now:", JSON.stringify(pin.title));
             draw();
-          });
+          };
+          areaTitleInput.addEventListener("input", titleHandler);
+          currentModalListeners.push({element: areaTitleInput, event: "input", handler: titleHandler});
+          console.log("Added area title listener for", areaTitleInput.id);
 
           // Area description
-          areaDescInput.addEventListener("input", () => {
-            pin.description = areaDescInput.value.trim();
+          const descHandler = () => {
+            const newDesc = areaDescInput.value.trim();
+            pin.description = newDesc;
             draw();
-          });
+          };
+          areaDescInput.addEventListener("input", descHandler);
+          currentModalListeners.push({element: areaDescInput, event: "input", handler: descHandler});
 
           // Pin shape selector
           pinSelector.addEventListener("change", () => {
@@ -2849,39 +2788,27 @@
             draw();
           });
 
-          // Fill color
-          fillColorInput.addEventListener("input", () => {
-            const color = fillColorInput.value.trim();
-            if (color && /^#?[0-9A-F]{6,8}$/i.test(color)) {
-              pin.fillColor = color.startsWith("#") ? color : "#" + color;
-            }
-            draw();
-          });
-
-          // Border color
-          borderColorInput.addEventListener("input", () => {
-            const color = borderColorInput.value.trim();
-            if (color && /^#?[0-9A-F]{6}$/i.test(color)) {
-              pin.borderColor = color.startsWith("#") ? color : "#" + color;
-            }
-            draw();
-          });
+          // Color handling is now integrated into the sync system above
 
           // Border width
-          borderWidthInput.addEventListener("input", () => {
+          const borderWidthHandler = () => {
             const width = parseInt(borderWidthInput.value) || 2;
             pin.borderWidth = Math.max(1, Math.min(10, width));
             draw();
-          });
+          };
+          borderWidthInput.addEventListener("input", borderWidthHandler);
+          currentModalListeners.push({element: borderWidthInput, event: "input", handler: borderWidthHandler});
 
           // Text color
-          textColorInput.addEventListener("input", () => {
+          const textColorHandler = () => {
             const color = textColorInput.value.trim();
             if (color && /^#?[0-9A-F]{6}$/i.test(color)) {
               pin.textColor = color.startsWith("#") ? color : "#" + color;
             }
             draw();
-          });
+          };
+          textColorInput.addEventListener("input", textColorHandler);
+          currentModalListeners.push({element: textColorInput, event: "input", handler: textColorHandler});
 
           // Pin scale
           pinScaleSlider.addEventListener("input", () => {
@@ -2913,8 +2840,9 @@
 
       function openPinModal(index) {
         // Save history state when modal opens (for cancel functionality)
-        saveHistory();
+        state.saveHistory();
 
+        modalPinIndex = index; // Set the current pin index
         const pin = pins[index];
         const card =
           pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
@@ -2923,6 +2851,14 @@
         pmColor.value = pin.color || selectedColor;
         pmDescription.value = pin.note || "";
         pmDate.value = pin.date || (card ? card.date : "");
+
+        // Clear any existing modal listeners before setting up new ones
+        console.log("Cleaning up", currentModalListeners.length, "existing modal listeners");
+        currentModalListeners.forEach(listener => {
+          listener.element.removeEventListener(listener.event, listener.handler);
+        });
+        currentModalListeners = [];
+        console.log("Modal listeners cleared");
 
         // Handle area-specific fields
         const isArea = pin.typeId && pin.typeId.startsWith("area:");
@@ -2934,6 +2870,10 @@
         const pinColorField = document.getElementById("pin-color-field");
 
         if (isArea) {
+          // Hide regular pin fields that shouldn't be shown for area pins
+          const regularDescField = document.getElementById("regular-description-field");
+          if (regularDescField) regularDescField.style.display = "none";
+
           // Show area-specific fields in their respective tabs
           areaInfoFields.style.display = "block";
           areaStyleFields.style.display = "block";
@@ -3031,23 +2971,34 @@
             }
 
             // Sync picker to input
-            pickerEl.oninput = function () {
+            pickerEl.oninput = pickerEl.onchange = function () {
               if (inputEl.id.includes("fill")) {
                 // For fill colors, add alpha if not present
-                inputEl.value =
-                  this.value +
-                  (inputEl.value.length > 7
-                    ? inputEl.value.substring(7)
-                    : "40");
+                const newValue = this.value + (inputEl.value.length > 7 ? inputEl.value.substring(7) : "40");
+                inputEl.value = newValue;
+                console.log("Set fill input to:", newValue);
               } else {
                 inputEl.value = this.value;
+                console.log("Set border/text input to:", this.value);
               }
+              // Trigger the input handler to update pin properties
+              inputEl.oninput();
             };
 
-            // Sync input to picker (when user types)
+            // Sync input to picker (when user types) and update pin properties
             inputEl.oninput = function () {
-              if (this.value && /^#[0-9A-F]{6}/i.test(this.value)) {
-                pickerEl.value = this.value.substring(0, 7);
+              const color = this.value.trim();
+              if (color && /^#?[0-9A-F]{6,8}$/i.test(color)) {
+                const processedColor = color.startsWith("#") ? color : "#" + color;
+                if (this.id.includes("fill")) {
+                  pin.fillColor = processedColor;
+                } else if (this.id.includes("border")) {
+                  pin.borderColor = processedColor;
+                }
+                if (this.value && /^#[0-9A-F]{6}/i.test(this.value)) {
+                  pickerEl.value = this.value.substring(0, 7);
+                }
+                draw();
               }
             };
           }
@@ -3070,7 +3021,7 @@
 
       function getMiniaturePinCanvas(pinIcon) {
         // Find the NODE_TYPE that matches this icon
-        const nodeType = NODE_TYPES.find((t) => t.icon === pinIcon);
+        const nodeType = window.NodeTypesAPI.NODE_TYPES.find((t) => t.icon === pinIcon);
         if (!nodeType) {
           return (
             '<div style="font-size:16px;margin:12px auto;text-align:center;">' +
@@ -3303,41 +3254,7 @@
         }
       }
 
-      // Helper function for rounded rectangles (same as in drawing.js)
-      function roundRectPath(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
-      }
-
-      // Helper function to lighten colors (same as in drawing.js)
-      function lightenColor(color, percent) {
-        // Simple color lightening
-        const num = parseInt(color.replace("#", ""), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) + amt;
-        const G = ((num >> 8) & 0x00ff) + amt;
-        const B = (num & 0x0000ff) + amt;
-        return (
-          "#" +
-          (
-            0x1000000 +
-            (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-            (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-            (B < 255 ? (B < 1 ? 0 : B) : 255)
-          )
-            .toString(16)
-            .slice(1)
-        );
-      }
+      // Utility functions are now loaded from js/utilities.js
 
       pinModalClose.onclick = closePinModal;
       pmCancel.onclick = () => {
@@ -3349,7 +3266,7 @@
       pinModalBackdrop.addEventListener("click", (e) => {
         if (e.target === pinModalBackdrop) {
           // Save history when closing modal normally (for undo functionality)
-          saveHistory();
+          state.saveHistory();
           closePinModal();
         }
       });
@@ -3497,7 +3414,7 @@
             return;
           }
 
-          saveHistory();
+          state.saveHistory();
 
           // Clear existing data (optional - you might want to append instead)
           const shouldClear = confirm(
@@ -3852,7 +3769,7 @@
 
           // Parsing complete
 
-          saveState();
+          saveAppState(state);
           draw();
           closeLoadModal();
 
@@ -3880,7 +3797,7 @@
       function deleteSelectedPin() {
         if (selectedPinIndex === null && selectedPins.length === 0) return;
 
-        saveHistory();
+        state.saveHistory();
 
         // Determine which indices to delete: single selectedPinIndex or the whole selectedPins array
         const indicesToDelete =
@@ -3945,7 +3862,7 @@
 
         closeRadialMenu();
         renderCards(); // Update cards after deletion
-        saveState(); // Save state after deletion
+        saveAppState(state); // Save state after deletion
 
         draw();
       }
@@ -3967,7 +3884,7 @@
         const targets = getTargetPins();
         if (targets.length < 1) return;
 
-        saveHistory();
+        state.saveHistory();
 
         let cx = 0,
           cy = 0;
@@ -4015,7 +3932,7 @@
         const targets = getTargetPins();
         if (targets.length < 2) return;
 
-        saveHistory();
+        state.saveHistory();
 
         const groups = {};
         targets.forEach((pin) => {
@@ -4086,7 +4003,7 @@
           return;
         }
 
-        saveHistory();
+        state.saveHistory();
 
         timedPins.forEach((tp) => (tp.timestamp = parseDate(tp.dateStr)));
         timedPins.sort((a, b) => a.timestamp - b.timestamp);
@@ -4156,8 +4073,8 @@
           }
         });
 
-        saveHistory();
-        saveState();
+        state.saveHistory();
+        saveAppState(state);
         renderCards();
         draw();
       }
@@ -4331,7 +4248,7 @@
             scale = 1.5;
             offsetX = canvas.width / 2 - screen.x;
             offsetY = canvas.height / 2 - screen.y;
-            saveState(); // Save new camera state
+            saveAppState(state); // Save new camera state
             break;
           case "toggleConnectionType":
             // Toggle connection type for all connections to/from this pin
@@ -4339,12 +4256,12 @@
               (c) => c.startIndex === pinIndex || c.endIndex === pinIndex
             );
             if (pinConnections.length > 0) {
-              saveHistory();
+              state.saveHistory();
               pinConnections.forEach((conn) => {
                 const currentType = conn.type || connectionType;
                 conn.type = currentType === "curved" ? "straight" : "curved";
               });
-              saveState();
+              saveAppState(state);
               draw();
             }
             break;
@@ -4372,7 +4289,7 @@
           isUserInteracting = true;
           offsetX += dx;
           offsetY += dy;
-          saveState();
+          saveAppState(state);
         } else if (isDraggingPin && dragPinIndex !== null) {
           isUserInteracting = true;
           const worldDelta = { x: dx / scale, y: dy / scale };
@@ -4460,7 +4377,7 @@
           textElements.push(newText);
           const newIndex = textElements.length - 1;
           selectedTextIndex = newIndex;
-          saveState();
+          saveAppState(state);
         }
 
         // Handle area drag finalization
@@ -4490,8 +4407,8 @@
               width: width,
               height: height,
               // Add area-specific default properties
-              title: "",
-              description: "",
+              title: "", // Each pin gets its own empty string
+              description: "", // Each pin gets its own empty string
               fillColor: selectedColor + "40", // Semi-transparent fill
               borderColor: selectedColor,
               borderWidth: 2,
@@ -4501,11 +4418,27 @@
               containedPins: [], // Array to track pins within this area
             };
 
+            console.log("Created new area pin with title:", JSON.stringify(newPin.title), "at position:", newPin.x, newPin.y);
+
             pins.push(newPin);
             const newIndex = pins.length - 1;
 
-            // Auto-connect to previously selected pin if available
-            if (previousIndex !== null && connectStartIndex === null) {
+            // Auto-connect to selected pin or connection start pin
+            if (connectStartIndex !== null) {
+              // Connect to the pin that was right-clicked (connection mode)
+              connections.push({
+                startIndex: connectStartIndex,
+                endIndex: newIndex,
+                color: selectedColor,
+                type: connectionType,
+              });
+              // Keep connection mode active for area pins - allow multiple connections to same parent
+              // Only reset if this is NOT an area pin (regular pins reset after one connection)
+              if (!currentTypeId.startsWith("area:")) {
+                connectStartIndex = null; // Reset connection mode for regular pins
+              }
+            } else if (previousIndex !== null) {
+              // Connect to previously selected pin
               connections.push({
                 startIndex: previousIndex,
                 endIndex: newIndex,
@@ -4514,8 +4447,8 @@
               });
             }
             setSelectedPin(newIndex);
-            saveHistory(); // Save to undo history
-            saveState(); // Save to localStorage
+            state.saveHistory(); // Save to undo history
+            saveAppState(state); // Save to localStorage
           }
         }
 
@@ -4533,23 +4466,21 @@
         if (!didDrag && (e.altKey || e.metaKey)) {
           const hitConn = hitTestConnection(sx, sy);
           if (hitConn !== -1) {
-            saveHistory();
+            state.saveHistory();
             connections.splice(hitConn, 1);
-            saveState();
+            saveAppState(state);
             draw();
             return; // Stop here, don't treat as pin click
           }
         }
 
         // Handle connection creation or selection
-        console.log(`Connection check: clickedPinIndex=${clickedPinIndex}, selectedPinIndex=${selectedPinIndex}, didDrag=${didDrag}, dragPinIndex=${dragPinIndex}, connectStartIndex=${connectStartIndex}`);
         if (clickedPinIndex !== null) {
           // Case 1: connectStartIndex is set (from radial menu "connect" action)
           if (
             connectStartIndex !== null &&
             connectStartIndex !== clickedPinIndex
           ) {
-            console.log(`Case 1: Creating connection from connectStartIndex ${connectStartIndex} to ${clickedPinIndex}`);
             finalizeConnection(clickedPinIndex);
             // Keep the original pin selected, don't change selection
           }
@@ -4560,7 +4491,6 @@
             dragPinIndex !== clickedPinIndex
           ) {
             // Dragged from one pin to another - create connection
-            console.log(`Case 2: Creating connection from dragPinIndex ${dragPinIndex} to ${clickedPinIndex}`);
             finalizeConnection(clickedPinIndex);
             setSelectedPin(clickedPinIndex);
           }
@@ -4571,29 +4501,19 @@
             selectedPinIndex !== clickedPinIndex
           ) {
             // Left-click on different pin: create connection
-            console.log(`Case 3: Creating connection from selectedPinIndex ${selectedPinIndex} to ${clickedPinIndex}`);
             finalizeConnection(clickedPinIndex);
             setSelectedPin(clickedPinIndex); // Select the target pin after connecting
           }
-          else {
-            // Case 3b: Selected text and clicked pin - create connection
-            if (!didDrag && selectedTextIndex !== null) {
-              console.log(`Case 3b: Creating connection from selected text to pin ${clickedPinIndex}`);
-              finalizeConnection(clickedPinIndex);
-              setSelectedPin(clickedPinIndex);
-              selectedTextIndex = null;
-            }
-            // Case 4: No connection in progress, just select and show menu (if no drag)
-            else if (!didDrag) {
-              console.log(`Case 4: Selecting pin ${clickedPinIndex} and opening menu`);
-              setSelectedPin(clickedPinIndex);
-              openRadialMenu(clickedPinIndex, e.clientX, e.clientY);
-            }
-            else {
-              // No special case, just select the clicked pin
-              console.log(`Selecting clicked pin ${clickedPinIndex}`);
-              setSelectedPin(clickedPinIndex);
-            }
+          // Case 3b: Selected text and clicked pin - create connection
+          else if (!didDrag && selectedTextIndex !== null) {
+            finalizeConnection(clickedPinIndex);
+            setSelectedPin(clickedPinIndex);
+            selectedTextIndex = null;
+          }
+          // Case 4: No connection in progress, just select and show menu (if no drag)
+          else if (!didDrag) {
+            setSelectedPin(clickedPinIndex);
+            openRadialMenu(clickedPinIndex, e.clientX, e.clientY);
           }
         } else {
           // Clicked on empty space
@@ -4608,8 +4528,8 @@
 
         // Save history after dragging
         if (didDrag && (isDraggingPin || isDraggingText || isPanning)) {
-          saveHistory();
-          saveState();
+          state.saveHistory();
+          saveAppState(state);
         }
 
         // Reset drag states
@@ -4641,36 +4561,6 @@
       // ============================================================================
       // DRAWING & RENDERING
       // ============================================================================
-      function lightenColor(hex, percent) {
-        const num = parseInt(hex.slice(1), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) + amt;
-        const G = ((num >> 8) & 0x00ff) + amt;
-        const B = (num & 0x0000ff) + amt;
-        return (
-          "#" +
-          (
-            0x1000000 +
-            (R < 255 ? R : 255) * 0x10000 +
-            (G < 255 ? G : 255) * 0x100 +
-            (B < 255 ? B : 255)
-          )
-            .toString(16)
-            .slice(1)
-        );
-      }
-
-      function darkenColor(hex, percent) {
-        const num = parseInt(hex.slice(1), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = Math.max(0, Math.min(255, (num >> 16) - amt));
-        const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) - amt));
-        const B = Math.max(0, Math.min(255, (num & 0x0000ff) - amt));
-        return (
-          "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)
-        );
-      }
-
       // Generate color variants: light, contrast (medium), and dark
       function generateColorVariants(hex) {
         return {
@@ -4678,6 +4568,17 @@
           contrast: hex, // Original color as contrast/medium
           dark: darkenColor(hex, 30), // Dark variant (30% darker)
         };
+      }
+
+      function getTextFont(type) {
+        switch (type) {
+          case "title":
+            return "bold 24px system-ui";
+          case "comic":
+            return "18px system-ui";
+          default:
+            return "16px system-ui";
+        }
       }
 
       function getTextHeight(type) {
@@ -5008,7 +4909,7 @@
         });
 
         // Draw text elements (with viewport culling)
-        drawTextElements();
+        drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBottom, margin);
 
         // Draw timeline (if active)
         drawTimeline();
@@ -5216,26 +5117,6 @@
       let lastPinchDist = 0;
 
       // Helper function to find pin at world coordinates
-      function findNearbyPin(wx, wy, minDistance) {
-        if (typeof wx !== "number" || typeof wy !== "number" || typeof minDistance !== "number") {
-          return null;
-        }
-
-        for (let i = pins.length - 1; i >= 0; i--) {
-          const pin = pins[i];
-          if (!pin || typeof pin.x !== "number" || typeof pin.y !== "number") {
-            continue;
-          }
-
-          const distance = Math.hypot(wx - pin.x, wy - pin.y);
-          if (distance < minDistance) {
-            return i;
-          }
-        }
-
-        return null;
-      }
-
       function findPinAt(wx, wy) {
         if (typeof wx !== "number" || typeof wy !== "number") {
           return null;
@@ -5410,7 +5291,7 @@
             if (e.deltaY !== 0) {
               offsetY -= e.deltaY * panAmount * scale;
             }
-            saveState();
+            saveAppState(state);
             draw();
             return;
           }
@@ -5441,7 +5322,7 @@
           offsetX = screenX - wx * scale;
           offsetY = screenY - wy * scale;
 
-          saveState();
+          saveAppState(state);
           draw();
         },
         { passive: false }
@@ -5522,18 +5403,14 @@
             textCreateCurrent = { x: world.x, y: world.y };
             draw(); // Draw the initial drag preview
           } else if (!hit && currentTool === "pin") {
-            // Additional check: if too close to existing pin, select it instead of creating new one
-            // This prevents accidental overlapping pin creation
-            const minPinDistance = 60; // Minimum distance in world units between pins
-            const nearbyPin = findNearbyPin(world.x, world.y, minPinDistance);
-            if (nearbyPin !== null) {
-              // Too close to an existing pin, select it instead of creating a new one
-              setSelectedPin(nearbyPin);
+            // Pin creation on empty space ONLY (defensive check - ensure no pin at location)
+            const pinAtLocation = findPinAt(world.x, world.y);
+            if (pinAtLocation !== null) {
+              // Actually clicked on a pin, select it instead of creating a new one
+              setSelectedPin(pinAtLocation);
               draw();
               return;
             }
-
-            // Pin creation on empty space - no nearby pins found, so create new pin
 
             const previousIndex = selectedPinIndex; // Capture current selection
 
@@ -5574,8 +5451,8 @@
 
             dragPinIndex = newIndex;
             isDraggingPin = true;
-            saveHistory();
-            saveState();
+            state.saveHistory();
+            saveAppState(state);
           }
         }
       };
@@ -5630,8 +5507,8 @@
             const screen = worldToScreen(pin.x, pin.y);
             openRadialMenu(dragPinIndex, screen.x, screen.y + MENU_HEIGHT);
           } else {
-            saveHistory();
-            saveState();
+            state.saveHistory();
+            saveAppState(state);
           }
         }
 
@@ -5754,14 +5631,14 @@
         );
 
         if (!exists) {
-          saveHistory();
+          state.saveHistory();
           connections.push({
             startIndex: startIdx,
             endIndex: endIndex,
             color: selectedColor,
             type: connectionType, // Save the current connection type
           });
-          saveState();
+          saveAppState(state);
           draw();
         }
       }
@@ -5776,7 +5653,7 @@
         const card = cards.find((c) => c.id === cardId);
 
         if (card && !card.used) {
-          saveHistory();
+          state.saveHistory();
           const previousIndex = selectedPinIndex;
           const rect = canvas.getBoundingClientRect();
           const canvasX = e.clientX - rect.left;
@@ -5819,7 +5696,7 @@
             setSelectedPin(newIndex);
           }
 
-          saveState();
+          saveAppState(state);
           draw();
         }
       };
@@ -5879,17 +5756,17 @@
           setTool("pin");
         }
         // Keep the last selected variant for this family, or default to first
-        const fallback = NODE_TYPES.find((t) => t.family === family);
+        const fallback = window.NodeTypesAPI.NODE_TYPES.find((t) => t.family === family);
         currentTypeId =
           selectedTypeByFamily[family] ||
-          (fallback ? fallback.id : NODE_TYPES[0].id);
-        saveState(); // Save menu preference
+          (fallback ? fallback.id : window.NodeTypesAPI.NODE_TYPES[0].id);
+        saveAppState(state); // Save menu preference
         renderMenu();
         draw();
       }
 
       function cycleVariantInCurrentFamily() {
-        const variants = NODE_TYPES.filter((t) => t.family === currentFamily);
+        const variants = window.NodeTypesAPI.NODE_TYPES.filter((t) => t.family === currentFamily);
         if (variants.length <= 1) return;
 
         const currentId = currentTypeId;
@@ -5900,7 +5777,7 @@
         selectedTypeByFamily[currentFamily] = nextType.id;
         currentTypeId = nextType.id;
 
-        saveState();
+        saveAppState(state);
         renderMenu();
         draw();
       }
@@ -5926,7 +5803,8 @@
         }
         if (
           (selectedPinIndex !== null || selectedPins.length > 0) &&
-          (e.key === "Delete" || e.key === "Backspace")
+          (e.key === "Delete" || e.key === "Backspace") &&
+          !pinModalBackdrop.style.display
         ) {
           e.preventDefault();
           deleteSelectedPin();
@@ -5938,10 +5816,10 @@
           !textModalBackdrop().style.display
         ) {
           e.preventDefault();
-          saveHistory();
+          state.saveHistory();
           textElements.splice(selectedTextIndex, 1);
           selectedTextIndex = null;
-          saveState();
+          saveAppState(state);
           draw();
         }
 
@@ -5991,7 +5869,7 @@
             );
             const nextIndex = (currentIndex + 1) % TEXT_TYPES.length;
             currentTextType = TEXT_TYPES[nextIndex].id;
-            saveState();
+            saveAppState(state);
             renderMenu();
             draw();
           } else {
@@ -5999,20 +5877,80 @@
           }
         }
 
+
+        // Shift + 1: Cycle pin icons (when pin-type pin is selected)
+        if (e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === "1" || e.code === "Digit1")) {
+          e.preventDefault();
+          if (selectedPinIndex !== null && pins[selectedPinIndex]) {
+            const pin = pins[selectedPinIndex];
+            if (pin.typeId && pin.typeId.startsWith("pin:")) {
+              // Cycle through available pin types
+              const pinTypes = ["pin:circle", "pin:square", "pin:pill", "pin:diamond", "pin:person", "pin:business-building"];
+              const currentIndex = pinTypes.indexOf(pin.typeId);
+              const nextIndex = (currentIndex + 1) % pinTypes.length;
+              pin.typeId = pinTypes[nextIndex];
+              state.saveHistory();
+              saveAppState(state);
+              draw();
+            }
+          }
+        }
+
+        // Shift + 2: Cycle card icons (when card-type pin is selected)
+        if (e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === "2" || e.code === "Digit2")) {
+          e.preventDefault();
+          if (selectedPinIndex !== null && pins[selectedPinIndex]) {
+            const pin = pins[selectedPinIndex];
+            if (pin.typeId && pin.typeId.startsWith("card:")) {
+              // Cycle through available card types
+              const cardTypes = ["card:card", "card:doc", "card:folder"];
+              const currentIndex = cardTypes.indexOf(pin.typeId);
+              const nextIndex = (currentIndex + 1) % cardTypes.length;
+              pin.typeId = cardTypes[nextIndex];
+              state.saveHistory();
+              saveAppState(state);
+              draw();
+            }
+          }
+        }
+
+
+        // Shift + 3: Cycle area pin icons (when area pin is selected)
+        if (e.shiftKey && !e.altKey && !e.ctrlKey && (e.key === "3" || e.key === "#" || e.code === "Digit3")) {
+          console.log("Shift+3 pressed - cycling area pin icon");
+          e.preventDefault();
+          if (selectedPinIndex !== null && pins[selectedPinIndex]) {
+            const pin = pins[selectedPinIndex];
+            if (pin.typeId && pin.typeId.startsWith("area:")) {
+              // Cycle through available area pin icons
+              const areaIcons = ["▤", "📄", "📁"];
+              const currentIcon = pin.icon || "▤";
+              const currentIndex = areaIcons.indexOf(currentIcon);
+              const nextIndex = (currentIndex + 1) % areaIcons.length;
+              pin.icon = areaIcons[nextIndex];
+              console.log("Changed area pin icon from", currentIcon, "to", pin.icon);
+              state.saveHistory();
+              saveAppState(state);
+              draw();
+            }
+          }
+        }
+
+        // F: Frame all (fit everything in view)
+        if (e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          frameAllPins();
+        }
+
         // Shift + Number: Quick color selection (1-9)
         if (e.shiftKey && e.key >= "1" && e.key <= "9") {
           e.preventDefault();
           const colorIndex = parseInt(e.key) - 1; // Convert "1" to index 0, "2" to index 1, etc.
-          console.log(`Shift+${e.key} pressed. Color index: ${colorIndex}, Palette length: ${palette.length}`);
-          console.log('Palette:', palette.map((c, i) => `${i}: ${c.name} (${c.value})`));
           if (colorIndex < palette.length) {
-            console.log(`Selecting color: ${palette[colorIndex].name} (${palette[colorIndex].value})`);
             selectedColor = palette[colorIndex].value;
-            saveState();
+            saveAppState(state);
             renderMenu();
             draw();
-          } else {
-            console.log(`Color index ${colorIndex} is out of range`);
           }
         }
 
@@ -6035,11 +5973,76 @@
         if (e.key === "t" || e.key === "T") {
           e.preventDefault();
           connectionType = connectionType === "curved" ? "straight" : "curved";
-          saveState();
+          saveAppState(state);
           renderMenu();
           draw();
         }
       });
+
+      // ============================================================================
+      // FRAME ALL FUNCTION (fit everything in view)
+      // ============================================================================
+
+      function frameAllPins() {
+        if (pins.length === 0) return; // Nothing to frame
+
+        // Find bounding box of all pins
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        pins.forEach(pin => {
+          // Use a reasonable bounding box for each pin type
+          let pinWidth = 50, pinHeight = 50; // Default dimensions
+
+          if (pin.typeId) {
+            if (pin.typeId.startsWith("area:")) {
+              // Area pins have custom dimensions
+              pinWidth = pin.width || 100;
+              pinHeight = pin.height || 100;
+            } else if (pin.typeId.includes("card")) {
+              pinWidth = 80;
+              pinHeight = 60;
+            }
+            // Regular pins use default 50x50
+          }
+
+          minX = Math.min(minX, pin.x - pinWidth/2);
+          maxX = Math.max(maxX, pin.x + pinWidth/2);
+          minY = Math.min(minY, pin.y - pinHeight/2);
+          maxY = Math.max(maxY, pin.y + pinHeight/2);
+        });
+
+        // Add some padding (10% margin)
+        const contentWidth = maxX - minX;
+        const contentHeight = maxY - minY;
+        const padding = 0.1;
+        minX -= contentWidth * padding;
+        maxX += contentWidth * padding;
+        minY -= contentHeight * padding;
+        maxY += contentHeight * padding;
+
+        // Calculate center of content
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        // Calculate scale to fit content in canvas
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const scaleX = canvasWidth / (maxX - minX);
+        const scaleY = canvasHeight / (maxY - minY);
+        const newScale = Math.min(scaleX, scaleY, MAX_SCALE); // Don't exceed max zoom
+
+        // Apply minimum scale limit
+        state.scale = Math.max(newScale, MIN_SCALE);
+
+        // Center the view on the content
+        state.offsetX = canvasWidth / 2 - centerX * state.scale;
+        state.offsetY = canvasHeight / 2 - centerY * state.scale;
+
+        // Save state and redraw
+        saveAppState(state);
+        draw();
+      }
 
       // ============================================================================
       // INITIALIZATION
