@@ -2,6 +2,38 @@
 // UI MODULE - Modal dialogs and UI management functions
 // ============================================================================
 
+console.log("🎯 Loading ui.js...");
+
+// ============================================================================
+// GLOBAL VARIABLE DECLARATIONS
+// ============================================================================
+
+// Global modal close buttons
+let pinModalClose,
+  cardModalClose,
+  addColorModalClose,
+  loadModalClose,
+  textModalClose;
+
+// Global modal backdrop elements
+let addColorModalBackdrop,
+  cardModalBackdrop,
+  pinModalBackdrop,
+  loadModalBackdrop;
+
+// Global form elements
+let pmTitle, pmSubtitle, pmDescription, pmNote, pmDate, pmIcon, pmSave, pmDelete;
+let cmTitle, cmSubtitle, cmDate, cmIcon, cmSave;
+let loadMermaidInput;
+
+// Global variable for radial menu element
+let radialMenuEl;
+
+// Global variable for radial menu click-outside handler
+let radialMenuOutsideClickHandler;
+
+// Global form elements already declared above
+
 // ============================================================================
 // ADD COLOR MODAL
 // ============================================================================
@@ -59,7 +91,9 @@ function openCardModal(cardId = null) {
 
   renderCardColorPicker();
   if (cardModalBackdrop) cardModalBackdrop.style.display = "flex";
-  cmTitle.focus();
+  const cardModal = document.getElementById("card-modal");
+  if (cardModal) cardModal.style.display = "block";
+  if (cmTitle) cmTitle.focus();
 }
 
 /**
@@ -85,7 +119,7 @@ function openPinModal(index) {
   const pin = window.app.appState.pins[index];
   if (!pin) return;
 
-  modalPinIndex = index;
+  window.modalPinIndex = index;
 
   // Get form field elements
   const pmTitle = document.getElementById("pm-title");
@@ -117,10 +151,14 @@ function openPinModal(index) {
     if (pmAreaTitle) pmAreaTitle.value = pin.title || "";
     if (pmAreaDescription) pmAreaDescription.value = pin.description || "";
     if (pmAreaIcon) pmAreaIcon.value = pin.icon || "";
-    if (pmAreaFillColor) pmAreaFillColor.value = pin.fillColor || pin.color + "40";
-    if (pmAreaBorderColor) pmAreaBorderColor.value = pin.borderColor || pin.color;
+    if (pmAreaFillColor)
+      pmAreaFillColor.value = pin.fillColor || pin.color + "40";
+    if (pmAreaBorderColor)
+      pmAreaBorderColor.value = pin.borderColor || pin.color;
     if (pmAreaBorderWidth) pmAreaBorderWidth.value = pin.borderWidth || 2;
-    if (pmAreaTextColor) pmAreaTextColor.value = pin.textColor || window._currentThemeTextColor || "#FFFFFF";
+    if (pmAreaTextColor)
+      pmAreaTextColor.value =
+        pin.textColor || window._currentThemeTextColor || "#FFFFFF";
     if (pmAreaIconColor) pmAreaIconColor.value = pin.iconColor || pin.color;
   }
 
@@ -142,7 +180,7 @@ function openPinModal(index) {
  */
 function closePinModal() {
   console.log("🔒 Closing pin modal...");
-  modalPinIndex = null;
+  window.modalPinIndex = null;
 
   const pinModal = document.getElementById("pin-modal");
   if (pinModal) {
@@ -193,37 +231,38 @@ function closeLoadModal() {
  * @param {number} screenX - Screen X coordinate
  * @param {number} screenY - Screen Y coordinate
  */
-// Global variable for radial menu element
-let radialMenuEl;
-
-// Global variable for pin modal save button
-let pmSave;
-
-// Global variable for radial menu click-outside handler
-let radialMenuOutsideClickHandler;
-
-// Global modal backdrop elements
-let addColorModalBackdrop;
-let cardModalBackdrop;
-let pinModalBackdrop;
-let loadModalBackdrop;
-
-// Global form elements
-let loadMermaidInput;
-let cmTitle, cmSubtitle, cmDate, cmIcon, cmCancel, cmSave;
 
 function openRadialMenu(pinIndex, screenX, screenY) {
+  console.log("🎯 openRadialMenu called with pinIndex:", pinIndex);
+
+  // Check if app is available
+  if (!window.app) {
+    console.error("❌ window.app not available - app not initialized yet");
+    return;
+  }
+
   // Create radial menu element if it doesn't exist
   if (!radialMenuEl) {
-    radialMenuEl = document.createElement('div');
-    radialMenuEl.id = 'radial-menu';
-    radialMenuEl.className = 'radial-menu';
+    radialMenuEl = document.createElement("div");
+    radialMenuEl.id = "radial-menu";
+    radialMenuEl.className = "radial-menu";
+
+    // Prevent context menu on radial menu
+    radialMenuEl.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    });
+
     document.body.appendChild(radialMenuEl);
+    console.log("✅ Created radial menu element with context menu prevention");
   }
 
   closeRadialMenu();
   window.app.setSelectedPin(pinIndex);
   const pin = window.app.appState.pins[pinIndex];
+
+  console.log("🎯 Opening radial menu for pin:", pin);
 
   // NEW LOGIC FOR CENTERING:
   // 1. Define the size of the radial menu container.
@@ -311,7 +350,7 @@ function openRadialMenu(pinIndex, screenX, screenY) {
 
   // Add the listener after a short delay to avoid immediate closing
   setTimeout(() => {
-    document.addEventListener('click', radialMenuOutsideClickHandler);
+    document.addEventListener("click", radialMenuOutsideClickHandler);
   }, 10);
 }
 
@@ -319,13 +358,15 @@ function openRadialMenu(pinIndex, screenX, screenY) {
  * Close the radial menu
  */
 function closeRadialMenu() {
+  if (!radialMenuEl) return; // Guard against null
+
   radialMenuEl.innerHTML = "";
   radialMenuEl.style.display = "none";
   radialMenuEl.onclick = null;
 
   // Remove the click-outside handler
   if (radialMenuOutsideClickHandler) {
-    document.removeEventListener('click', radialMenuOutsideClickHandler);
+    document.removeEventListener("click", radialMenuOutsideClickHandler);
     radialMenuOutsideClickHandler = null;
   }
 }
@@ -345,13 +386,12 @@ function executeRadialAction(action, pinIndex) {
       break;
     case "delete":
       if (confirm("Delete this pin?")) {
-        // Delete selected pins from app state
-        if (window.app.appState.selectedPinIndex !== null) {
-          window.app.appState.pins.splice(window.app.appState.selectedPinIndex, 1);
-          window.app.setSelectedPin(null);
-          window.app.saveAppState(window.app.appState);
-          window.draw();
-        }
+        // Delete the pin the radial menu was opened for
+        window.app.appState.pins.splice(pinIndex, 1);
+        window.app.setSelectedPin(null);
+        closeRadialMenu();
+        window.app.saveAppState(window.app.appState);
+        window.draw();
       }
       break;
     case "focus":
@@ -523,7 +563,6 @@ function renderCardColorPicker() {
   });
 }
 
-
 // ============================================================================
 // UI EVENT HANDLERS SETUP
 // ============================================================================
@@ -532,53 +571,60 @@ function renderCardColorPicker() {
  * Render the card list in the sidebar
  */
 function renderCards() {
-    cardList.innerHTML = '';
-    cards.forEach((c, index) => {
-        const div = document.createElement('div');
-        div.className = 'card' + (c.used ? ' used' : '');
-        div.draggable = true;
-        div.style.borderLeftColor = c.color;
-        div.innerHTML = `
+  cardList.innerHTML = "";
+  cards.forEach((c, index) => {
+    const div = document.createElement("div");
+    div.className = "card" + (c.used ? " used" : "");
+    div.draggable = true;
+    div.style.borderLeftColor = c.color;
+    div.innerHTML = `
             <div class="card-icon">${c.icon}</div>
             <div class="card-title">${c.title}</div>
             <div class="card-subtitle">${c.subtitle}</div>
             <div class="card-date">${c.date}</div>
         `;
-        div.ondragstart = e => {
-            e.dataTransfer.setData('cardId', c.id);
-            div.style.opacity = '0.5';
-        };
-        div.ondragend = () => div.style.opacity = '1';
-        div.ondblclick = () => {
-            const pinIdx = pins.findIndex(p => p.cardId === c.id);
-            if (pinIdx !== -1) window.app.setSelectedPin(pinIdx);
-            div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        };
-        cardList.appendChild(div);
-    });
-    // + button for new card
-    const add = document.createElement('div');
-    add.className = 'card';
-    add.style.borderLeftColor = '#666';
-    add.innerHTML = '<div style="font-size:48px;color:#666;display:grid;place-items:center;height:100%">+</div>';
-    add.onclick = () => {
-        const title = prompt('New card title:') || 'Untitled';
-        const subtitle = prompt('Subtitle:') || '';
-        const date = prompt('Date/Number:') || '';
-        const color = window.app.appState.selectedColor;
-        cards.push({id: nextId++, title, subtitle, date, icon: '📄', color, category: 'note', used: false});
-        renderCards();
-        window.app.saveAppState(window.app.appState);
+    div.ondragstart = (e) => {
+      e.dataTransfer.setData("cardId", c.id);
+      div.style.opacity = "0.5";
     };
-    cardList.appendChild(add);
+    div.ondragend = () => (div.style.opacity = "1");
+    div.ondblclick = () => {
+      const pinIdx = pins.findIndex((p) => p.cardId === c.id);
+      if (pinIdx !== -1) window.app.setSelectedPin(pinIdx);
+      div.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    cardList.appendChild(div);
+  });
+  // + button for new card
+  const add = document.createElement("div");
+  add.className = "card";
+  add.style.borderLeftColor = "#666";
+  add.innerHTML =
+    '<div style="font-size:48px;color:#666;display:grid;place-items:center;height:100%">+</div>';
+  add.onclick = () => {
+    const title = prompt("New card title:") || "Untitled";
+    const subtitle = prompt("Subtitle:") || "";
+    const date = prompt("Date/Number:") || "";
+    const color = window.app.appState.selectedColor;
+    cards.push({
+      id: nextId++,
+      title,
+      subtitle,
+      date,
+      icon: "📄",
+      color,
+      category: "note",
+      used: false,
+    });
+    renderCards();
+    window.app.saveAppState(window.app.appState);
+  };
+  cardList.appendChild(add);
 }
 
 // ============================================================================
-// GLOBAL VARIABLES
+// UI EVENT HANDLERS
 // ============================================================================
-
-// Global modal close buttons
-let pinModalClose, cardModalClose, addColorModalClose, loadModalClose, textModalClose;
 
 /**
  * Set up UI event handlers
@@ -586,7 +632,7 @@ let pinModalClose, cardModalClose, addColorModalClose, loadModalClose, textModal
 function setupUIHandlers() {
   console.log("🔧 Setting up UI handlers...");
 
-  // Initialize modal close buttons
+  // Initialize modal close buttons (variables declared at top of file)
   pinModalClose = document.getElementById("pin-modal-close");
   console.log("🎯 pinModalClose element:", pinModalClose);
   if (!pinModalClose) {
@@ -604,6 +650,23 @@ function setupUIHandlers() {
   pinModalBackdrop = document.getElementById("pin-modal-backdrop");
   loadModalBackdrop = document.getElementById("load-modal-backdrop");
 
+  // Initialize pin modal elements
+  pmTitle = document.getElementById("pm-title");
+  pmSubtitle = document.getElementById("pm-subtitle");
+  pmDate = document.getElementById("pm-date");
+  pmIcon = document.getElementById("pm-icon");
+  pmSave = document.getElementById("pm-save");
+  pmCancel = document.getElementById("pm-cancel");
+
+  // Initialize load modal elements
+  loadMermaidInput = document.getElementById("load-mermaid-input");
+
+  // Initialize card modal elements
+  cmTitle = document.getElementById("cm-title");
+  cmSubtitle = document.getElementById("cm-subtitle");
+  cmDate = document.getElementById("cm-date");
+  cmIcon = document.getElementById("cm-icon");
+  cmSave = document.getElementById("cm-save");
 
   // Add color modal handlers
   addColorModalClose.onclick = closeAddColorModal;
@@ -616,7 +679,6 @@ function setupUIHandlers() {
   cardModalBackdrop.addEventListener("click", (e) => {
     if (e.target === cardModalBackdrop) closeCardModal();
   });
-  cmCancel.onclick = closeCardModal;
 
   // Pin modal handlers
   console.log("🔧 Attaching pin modal close handlers...");
@@ -628,20 +690,14 @@ function setupUIHandlers() {
   pinModalBackdrop.addEventListener("click", (e) => {
     if (e.target === pinModalBackdrop) closePinModal();
   });
-  pmCancel.onclick = (e) => {
-    e.stopPropagation(); // Prevent event bubbling
-    closePinModal();
-  };
 
   // Load modal handlers
   loadModalClose.onclick = closeLoadModal;
   loadModalBackdrop.addEventListener("click", (e) => {
     if (e.target === loadModalBackdrop) closeLoadModal();
   });
-  loadCancel.onclick = closeLoadModal;
 
-  // Radial menu - close when clicking anywhere else
-  window.addEventListener("click", closeRadialMenu);
+  // Radial menu click-outside handler is set up in openRadialMenu
 
   // Card modal save handler
   cmSave.onclick = () => {
@@ -686,68 +742,141 @@ function setupUIHandlers() {
     window.app.saveAppState(window.app.appState);
   };
 
-  // Pin modal save handler
-  pmSave.onclick = () => {
-    const pin = window.app.appState.pins[modalPinIndex];
-    if (!pin) return;
+  // Pin modal auto-save handlers (save changes as user types)
+  const autoSaveFields = ['pm-title', 'pm-subtitle', 'pm-description', 'pm-note', 'pm-date', 'pm-color', 'pm-text-color', 'pm-scale'];
+  const areaAutoSaveFields = ['pm-area-title', 'pm-area-description', 'pm-area-icon', 'pm-area-fill-color', 'pm-area-border-color', 'pm-area-border-width', 'pm-area-text-color', 'pm-area-icon-color'];
 
-    // Get form field elements
-    const pmTitle = document.getElementById("pm-title");
-    const pmColor = document.getElementById("pm-color");
-    const pmDescription = document.getElementById("pm-description");
-    const pmDate = document.getElementById("pm-date");
+  // Regular fields auto-save
+  autoSaveFields.forEach(fieldId => {
+    const field = document.getElementById(fieldId);
+    if (field) {
+      field.addEventListener('input', () => {
+        const pin = window.app.appState.pins[window.modalPinIndex];
+        if (!pin) return;
 
-    window.app.appState.saveHistory();
+        // Save history before making changes
+        window.app.appState.saveHistory();
 
-    if (pmTitle) pin.label = pmTitle.value.trim();
-    if (pmColor) pin.color = pmColor.value;
-    if (pmDescription) pin.note = pmDescription.value.trim();
-    if (pmDate) pin.date = pmDate.value.trim();
+        // Update pin based on field
+        switch (fieldId) {
+          case 'pm-title':
+            pin.label = field.value.trim();
+            break;
+          case 'pm-subtitle':
+            pin.subtitle = field.value.trim();
+            break;
+          case 'pm-description':
+            pin.description = field.value.trim();
+            break;
+          case 'pm-note':
+            pin.note = field.value.trim();
+            break;
+          case 'pm-date':
+            pin.date = field.value;
+            break;
+          case 'pm-color':
+            pin.color = field.value;
+            break;
+          case 'pm-text-color':
+            pin.textColor = field.value;
+            break;
+          case 'pm-scale':
+            pin.pinScale = parseFloat(field.value) || 1;
+            break;
+        }
 
-    // Handle area-specific fields
-    if (pin.typeId.startsWith("area:")) {
-      const pmAreaTitle = document.getElementById("pm-area-title");
-      const pmAreaDescription = document.getElementById("pm-area-description");
-      const pmAreaIcon = document.getElementById("pm-area-icon");
-      const pmAreaFillColor = document.getElementById("pm-area-fill-color");
-      const pmAreaBorderColor = document.getElementById("pm-area-border-color");
-      const pmAreaBorderWidth = document.getElementById("pm-area-border-width");
-      const pmAreaTextColor = document.getElementById("pm-area-text-color");
-      const pmAreaIconColor = document.getElementById("pm-area-icon-color");
-
-      if (pmAreaTitle) pin.title = pmAreaTitle.value.trim();
-      if (pmAreaDescription) pin.description = pmAreaDescription.value.trim();
-      if (pmAreaIcon) pin.icon = pmAreaIcon.value.trim();
-      if (pmAreaFillColor) pin.fillColor = pmAreaFillColor.value;
-      if (pmAreaBorderColor) pin.borderColor = pmAreaBorderColor.value;
-      if (pmAreaBorderWidth) pin.borderWidth = parseInt(pmAreaBorderWidth.value) || 2;
-      if (pmAreaTextColor) pin.textColor = pmAreaTextColor.value;
-      if (pmAreaIconColor) pin.iconColor = pmAreaIconColor.value;
+        window.app.updatePinInfo();
+        window.app.saveAppState(window.app.appState);
+        window.draw();
+      });
     }
+  });
 
-    window.app.updatePinInfo();
-    closePinModal();
-    window.app.saveAppState(window.app.appState);
-    window.draw();
-  };
+  // Area-specific fields auto-save
+  areaAutoSaveFields.forEach(fieldId => {
+    const field = document.getElementById(fieldId);
+    if (field) {
+      field.addEventListener('input', () => {
+        const pin = window.app.appState.pins[window.modalPinIndex];
+        if (!pin) return;
+
+        // Save history before making changes
+        window.app.appState.saveHistory();
+
+        // Update pin based on field
+        switch (fieldId) {
+          case 'pm-area-title':
+            pin.title = field.value.trim();
+            break;
+          case 'pm-area-description':
+            pin.description = field.value.trim();
+            break;
+          case 'pm-area-icon':
+            pin.icon = field.value.trim();
+            break;
+          case 'pm-area-fill-color':
+            pin.fillColor = field.value;
+            break;
+          case 'pm-area-border-color':
+            pin.borderColor = field.value;
+            break;
+          case 'pm-area-border-width':
+            pin.borderWidth = parseInt(field.value) || 2;
+            break;
+          case 'pm-area-text-color':
+            pin.textColor = field.value;
+            break;
+          case 'pm-area-icon-color':
+            pin.iconColor = field.value;
+            break;
+        }
+
+        window.app.updatePinInfo();
+        window.app.saveAppState(window.app.appState);
+        window.draw();
+      });
+    }
+  });
+
+  // Pin modal delete handler
+  pmDelete = document.getElementById("pm-delete");
+  if (pmDelete) {
+    pmDelete.onclick = () => {
+      if (confirm('Are you sure you want to delete this pin?')) {
+        const pinIndex = window.modalPinIndex;
+        window.app.appState.saveHistory();
+
+        // Remove the pin
+        window.app.appState.pins.splice(pinIndex, 1);
+
+        // Clear selection and close modal
+        window.app.setSelectedPin(null);
+        closePinModal();
+
+        window.app.saveAppState(window.app.appState);
+        window.draw();
+      }
+    };
+  }
+
+  // Pin modal save handler (now just closes the modal since auto-save handles the saving)
+  if (pmSave) {
+    pmSave.onclick = () => {
+      closePinModal();
+    };
+  }
 
   // Load modal handlers
-  loadSubmit.onclick = () => {
-    const mermaidCode = loadMermaidInput.value.trim();
-    if (!mermaidCode) {
-      alert("Please enter Mermaid diagram code");
-      return;
-    }
-
-    try {
-      loadFromMermaid(mermaidCode);
-      closeLoadModal();
-    } catch (error) {
-      alert("Error loading diagram: " + error.message);
-    }
-  };
+  // Note: Load modal uses file input and example buttons, no submit button
 }
 
+// ============================================================================
+// FUNCTION EXPORTS
+// ============================================================================
+
 // Expose radial menu functions globally
+console.log("🎯 Exposing radial menu functions globally");
 window.openRadialMenu = openRadialMenu;
 window.closeRadialMenu = closeRadialMenu;
+console.log("✅ window.openRadialMenu:", typeof window.openRadialMenu);
+console.log("✅ window.closeRadialMenu:", typeof window.closeRadialMenu);

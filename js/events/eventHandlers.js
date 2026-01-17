@@ -11,6 +11,7 @@ console.log("Available globals:", {
 class EventHandlers {
   constructor(appState, canvas) {
     console.log("EventHandlers constructor called with:", typeof appState, typeof canvas);
+    console.log("Canvas element:", canvas, "id:", canvas ? canvas.id : "no id");
     if (!appState || !canvas) {
       throw new Error("EventHandlers constructor missing required parameters");
     }
@@ -77,7 +78,23 @@ class EventHandlers {
     this.canvas.addEventListener("mousemove", this.handleCanvasMouseMove.bind(this));
     this.canvas.addEventListener("mouseup", this.handleCanvasMouseUp.bind(this));
     this.canvas.addEventListener("dblclick", this.handleCanvasDoubleClick.bind(this));
+    console.log("🎯 Attaching context menu listener to canvas:", this.canvas);
     this.canvas.addEventListener("contextmenu", this.handleCanvasContextMenu.bind(this));
+
+    // Aggressive context menu prevention for entire document
+    document.addEventListener("contextmenu", (e) => {
+      // Prevent context menu on canvas, canvas container, and any child elements
+      const canvasContainer = document.getElementById("canvas-container");
+      if (e.target === this.canvas ||
+          (this.canvas && this.canvas.contains(e.target)) ||
+          (canvasContainer && (e.target === canvasContainer || canvasContainer.contains(e.target)))) {
+        console.log("🎯 Context menu prevented on canvas/container, target:", e.target.tagName, e.target.id);
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        return false;
+      }
+    }, true); // Use capture phase to catch events early
 
     // Drag and drop handlers for cards
     this.canvas.addEventListener("dragover", this.handleCanvasDragOver.bind(this));
@@ -92,7 +109,8 @@ class EventHandlers {
 
   // Canvas pointer move handler
   handleCanvasPointerMove(e) {
-    const rect = this.canvas.getBoundingClientRect();
+    const canvasContainer = document.getElementById("canvas-container");
+    const rect = canvasContainer.getBoundingClientRect();
     this.mouseScreenX = e.clientX - rect.left;
     this.mouseScreenY = e.clientY - rect.top;
 
@@ -130,7 +148,8 @@ class EventHandlers {
       this.isUserInteracting = true;
       // Convert mouse coordinates to canvas-relative
       const canvas = document.getElementById("board");
-      const rect = canvas.getBoundingClientRect();
+      const canvasContainer = document.getElementById("canvas-container");
+      const rect = canvasContainer.getBoundingClientRect();
       const canvasX = e.clientX - rect.left;
       const canvasY = e.clientY - rect.top;
       this.areaDragCurrent = this.screenToWorld(canvasX, canvasY);
@@ -138,7 +157,8 @@ class EventHandlers {
       this.isUserInteracting = true;
       // Convert mouse coordinates to canvas-relative
       const canvas = document.getElementById("board");
-      const rect = canvas.getBoundingClientRect();
+      const canvasContainer = document.getElementById("canvas-container");
+      const rect = canvasContainer.getBoundingClientRect();
       const canvasX = e.clientX - rect.left;
       const canvasY = e.clientY - rect.top;
       this.textCreateCurrent = this.screenToWorld(canvasX, canvasY);
@@ -146,7 +166,8 @@ class EventHandlers {
       this.isUserInteracting = true;
       // Convert mouse coordinates to canvas-relative
       const canvas = document.getElementById("board");
-      const rect = canvas.getBoundingClientRect();
+      const canvasContainer = document.getElementById("canvas-container");
+      const rect = canvasContainer.getBoundingClientRect();
       const canvasX = e.clientX - rect.left;
       const canvasY = e.clientY - rect.top;
       this.marqueeEnd = this.screenToWorld(canvasX, canvasY);
@@ -172,13 +193,19 @@ class EventHandlers {
       e.preventDefault();
     }
     // Convert mouse coordinates to canvas-relative
-    const canvas = document.getElementById("board");
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasContainer = document.getElementById("canvas-container");
+    const containerRect = canvasContainer.getBoundingClientRect();
+
+    // Simple approach: use container coordinates directly
+    const canvasX = e.clientX - containerRect.left;
+    const canvasY = e.clientY - containerRect.top;
+
     const mouseWorld = this.screenToWorld(canvasX, canvasY);
     const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
-    console.log(`🎯 Mouse down: screen(${canvasX}, ${canvasY}) -> world(${mouseWorld.x}, ${mouseWorld.y}), clickedPinIndex=${clickedPinIndex}, currentTool=${this.appState.currentTool}`);
+
+    console.log(`🎯 Mouse down: screen(${e.clientX}, ${e.clientY}) -> container(${canvasX}, ${canvasY}) -> world(${mouseWorld.x}, ${mouseWorld.y})`);
+    console.log(`   Container rect: (${containerRect.left}, ${containerRect.top}, ${containerRect.width}, ${containerRect.height})`);
+    console.log(`   App scale: ${this.appState.scale}, offset: (${this.appState.offsetX}, ${this.appState.offsetY})`);
 
     // Reset interaction flags
     this.isPanning = false;
@@ -255,23 +282,12 @@ class EventHandlers {
     console.log(`🎯 Right-click debug: clickedPin=${clickedPinIndex}, connectStartIndex=${this.appState.connectStartIndex}`);
 
     if (clickedPinIndex !== null) {
-      // Right-click on pin
-      if (e.ctrlKey || e.metaKey) {
-        // Ctrl+right-click on pin - set as hub/parent for multiple connections
-        console.log(`🎯 Ctrl+Right-click: Setting pin ${clickedPinIndex} as HUB for multiple connections`);
-        this.setSelectedPin(clickedPinIndex);
-        this.appState.connectStartIndex = clickedPinIndex;
-        this.appState.connectionMode = 'parent'; // Set parent/hub mode
-        this.draw(); // Update to show connection marquee
-      } else {
-        // Regular right-click on pin - show radial menu
-        console.log(`🎯 Right-click: Showing radial menu for pin ${clickedPinIndex}`);
-        if (typeof window.openRadialMenu === 'function') {
-          window.openRadialMenu(clickedPinIndex, e.clientX, e.clientY);
-        } else {
-          console.warn(`⚠️ openRadialMenu function not found`);
-        }
-      }
+      // Right-click on pin - set as hub/parent for multiple connections
+      console.log(`🎯 Right-click: Setting pin ${clickedPinIndex} as HUB for multiple connections`);
+      this.setSelectedPin(clickedPinIndex);
+      this.appState.connectStartIndex = clickedPinIndex;
+      this.appState.connectionMode = 'parent'; // Set parent/hub mode
+      this.draw(); // Update to show connection marquee
       return;
     }
 
@@ -288,17 +304,58 @@ class EventHandlers {
       return;
     }
 
-    // Right-click on empty canvas with no active connection - do nothing
-    console.log(`🎯 Right-click: Empty canvas, no active connection to cancel`);
+    // Right-click on empty canvas - create pin and set as hub
+    console.log(`🎯 Right-click: Creating pin on empty canvas and setting as HUB`);
+
+    // Look up the node type to get variant and other properties
+    const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
+
+    const newPin = {
+      x: mouseWorld.x,
+      y: mouseWorld.y,
+      color: this.appState.selectedColor,
+      label: "",
+      note: "",
+      date: "",
+      typeId: this.appState.currentTypeId,
+      variant: nodeType?.variant || "default", // Set variant from NODE_TYPES
+      pinScale: 1
+    };
+
+    // Add pin-specific properties based on type
+    if (this.appState.currentTypeId.startsWith("area:")) {
+      newPin.width = 100;
+      newPin.height = 100;
+      newPin.fillColor = this.appState.selectedColor + "40";
+      newPin.borderColor = this.appState.selectedColor;
+      newPin.borderWidth = 2;
+      newPin.textColor = window._currentThemeTextColor || "#ffffff";
+      newPin.icon = "▤";
+      newPin.iconColor = this.appState.selectedColor;
+      newPin.containedPins = [];
+    }
+
+    this.appState.pins.push(newPin);
+    const newIndex = this.appState.pins.length - 1;
+
+    // Set this pin as hub for subsequent connections
+    this.setSelectedPin(newIndex);
+    this.appState.connectStartIndex = newIndex;
+    this.appState.connectionMode = 'parent'; // Set parent/hub mode
+
+    console.log(`   Pin created at: (${newPin.x}, ${newPin.y}) and set as HUB`);
+    this.draw();
   }
 
   // Canvas mouse move handler
   handleCanvasMouseMove(e) {
     // Convert mouse coordinates to canvas-relative
-    const canvas = document.getElementById("board");
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasContainer = document.getElementById("canvas-container");
+    const containerRect = canvasContainer.getBoundingClientRect();
+
+    // Simple approach: use container coordinates directly
+    const canvasX = e.clientX - containerRect.left;
+    const canvasY = e.clientY - containerRect.top;
 
     // Accumulate movement for drag detection (moved from pointer handler)
     if (e.buttons !== 0) {
@@ -330,7 +387,8 @@ class EventHandlers {
     if (this.isDraggingPin && this.dragPinIndex !== null) {
       // Convert current mouse position to world coordinates
       const canvas = document.getElementById("board");
-      const rect = canvas.getBoundingClientRect();
+      const canvasContainer = document.getElementById("canvas-container");
+      const rect = canvasContainer.getBoundingClientRect();
       const canvasX = e.clientX - rect.left;
       const canvasY = e.clientY - rect.top;
       const mouseWorld = this.screenToWorld(canvasX, canvasY);
@@ -365,10 +423,12 @@ class EventHandlers {
   // Canvas mouse up handler
   handleCanvasMouseUp(e) {
     // Convert mouse coordinates to canvas-relative
-    const canvas = document.getElementById("board");
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasContainer = document.getElementById("canvas-container");
+    const containerRect = canvasContainer.getBoundingClientRect();
+
+    // Simple approach: use container coordinates directly
+    const canvasX = e.clientX - containerRect.left;
+    const canvasY = e.clientY - containerRect.top;
     const mouseWorld = this.screenToWorld(canvasX, canvasY);
 
 
@@ -462,6 +522,8 @@ class EventHandlers {
         this.appState.pins.push(newPin);
         const newIndex = this.appState.pins.length - 1;
 
+        console.log(`   Pin created at: (${newPin.x}, ${newPin.y})`);
+
         // Create connection if we have a connection source
         if (this.appState.connectStartIndex !== null) {
           const connection = {
@@ -522,10 +584,12 @@ class EventHandlers {
     console.log(`👆 Double-click detected at (${e.clientX}, ${e.clientY})`);
     e.preventDefault();
     // Convert mouse coordinates to canvas-relative
-    const canvas = document.getElementById("board");
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasContainer = document.getElementById("canvas-container");
+    const containerRect = canvasContainer.getBoundingClientRect();
+
+    // Simple approach: use container coordinates directly
+    const canvasX = e.clientX - containerRect.left;
+    const canvasY = e.clientY - containerRect.top;
     const mouseWorld = this.screenToWorld(canvasX, canvasY);
     const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
 
@@ -551,7 +615,10 @@ class EventHandlers {
 
   // Canvas context menu handler
   handleCanvasContextMenu(e) {
+    console.log("🎯 Context menu prevented at:", e.clientX, e.clientY, "target:", e.target);
     e.preventDefault(); // Prevent default context menu
+    e.stopPropagation(); // Stop event bubbling
+    e.stopImmediatePropagation(); // Stop other handlers
     return false; // Extra prevention for browser context menu
 
     // Right-click handling is done in mouseDown handler to set parent pins
@@ -576,10 +643,12 @@ class EventHandlers {
 
     // Get drop position
     // Convert mouse coordinates to canvas-relative
-    const canvas = document.getElementById("board");
-    const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasContainer = document.getElementById("canvas-container");
+    const containerRect = canvasContainer.getBoundingClientRect();
+
+    // Simple approach: use container coordinates directly
+    const canvasX = e.clientX - containerRect.left;
+    const canvasY = e.clientY - containerRect.top;
     const mouseWorld = this.screenToWorld(canvasX, canvasY);
 
 
@@ -627,6 +696,19 @@ class EventHandlers {
 
   // Keyboard handler
   handleKeyDown(e) {
+    // Don't process shortcuts when typing in input fields
+    const activeElement = document.activeElement;
+    const isInputField = activeElement && (
+      activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.contentEditable === 'true'
+    );
+
+    if (isInputField) {
+      // Allow normal typing behavior in input fields
+      return;
+    }
+
     // Handle tool selection (M, S, P, T)
     if (e.key === 'm' || e.key === 'M') {
       e.preventDefault();
@@ -679,13 +761,66 @@ class EventHandlers {
       // Frame all pins
       this.frameAllPins();
     } else if (e.key === 'Escape') {
-      // Deselect all and clear connection modes
-      this.setSelectedPin(null);
-      this.selectedPins = [];
-      this.appState.connectStartIndex = null;
-      this.appState.connectionMode = null;
-      console.log(`🎯 Escape: Cleared all selections and connection modes`);
-      this.draw();
+      // First check if any modals are open
+      const pinModal = document.getElementById("pin-modal");
+      const cardModal = document.getElementById("card-modal");
+      const addColorModal = document.getElementById("add-color-modal");
+      const loadModal = document.getElementById("load-modal");
+
+      let modalClosed = false;
+
+      // Close pin modal if open
+      if (pinModal && pinModal.style.display !== "none") {
+        if (typeof closePinModal === 'function') {
+          closePinModal();
+          modalClosed = true;
+          console.log(`🎯 Escape: Closed pin modal`);
+        }
+      }
+
+      // Close card modal if open
+      if (cardModal && cardModal.style.display !== "none") {
+        if (typeof closeCardModal === 'function') {
+          closeCardModal();
+          modalClosed = true;
+          console.log(`🎯 Escape: Closed card modal`);
+        }
+      }
+
+      // Close add color modal if open
+      if (addColorModal && addColorModal.style.display !== "none") {
+        if (typeof closeAddColorModal === 'function') {
+          closeAddColorModal();
+          modalClosed = true;
+          console.log(`🎯 Escape: Closed add color modal`);
+        }
+      }
+
+      // Close load modal if open
+      if (loadModal && loadModal.style.display !== "none") {
+        if (typeof closeLoadModal === 'function') {
+          closeLoadModal();
+          modalClosed = true;
+          console.log(`🎯 Escape: Closed load modal`);
+        }
+      }
+
+      // If no modal was closed, check for radial menu
+      if (!modalClosed) {
+        if (typeof closeRadialMenu === 'function' && typeof radialMenuEl !== 'undefined' &&
+            radialMenuEl && radialMenuEl.style.display !== 'none') {
+          console.log(`🎯 Escape: Closing radial menu`);
+          closeRadialMenu();
+        } else {
+          // Deselect all and clear connection modes
+          this.setSelectedPin(null);
+          this.selectedPins = [];
+          this.appState.connectStartIndex = null;
+          this.appState.connectionMode = null;
+          console.log(`🎯 Escape: Cleared all selections and connection modes`);
+          this.draw();
+        }
+      }
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       // Select all pins (Ctrl+A)
       e.preventDefault();
@@ -871,7 +1006,8 @@ class EventHandlers {
     const delta = e.deltaY > 0 ? 1 / zoomSpeed : zoomSpeed;
 
     // Get the mouse position relative to the canvas
-    const rect = this.canvas.getBoundingClientRect();
+    const canvasContainer = document.getElementById("canvas-container");
+    const rect = canvasContainer.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 

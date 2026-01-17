@@ -21,6 +21,30 @@ canvas {
   cursor: crosshair;
   background: transparent; /* Canvas is transparent, background is on container */
   pointer-events: auto;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+
+/* Explicitly disable context menus on canvas */
+canvas, #canvas-container {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Disable context menus on canvas and container */
+#canvas-container, canvas {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 #menu {
   position: fixed;
