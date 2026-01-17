@@ -696,7 +696,7 @@ class EventHandlers {
 
   // Keyboard handler
   handleKeyDown(e) {
-    // Don't process shortcuts when typing in input fields
+    // Don't process shortcuts when typing in input fields, but allow ESC
     const activeElement = document.activeElement;
     const isInputField = activeElement && (
       activeElement.tagName === 'INPUT' ||
@@ -704,8 +704,9 @@ class EventHandlers {
       activeElement.contentEditable === 'true'
     );
 
-    if (isInputField) {
-      // Allow normal typing behavior in input fields
+    // Allow ESC key even in input fields (it's a cancel action, not a shortcut)
+    if (isInputField && e.key !== 'Escape') {
+      // Allow normal typing behavior in input fields for non-ESC keys
       return;
     }
 
@@ -761,6 +762,8 @@ class EventHandlers {
       // Frame all pins
       this.frameAllPins();
     } else if (e.key === 'Escape') {
+      console.log(`🎯 ESC key pressed - checking for modals/marquee to cancel`);
+
       // First check if any modals are open
       const pinModal = document.getElementById("pin-modal");
       const cardModal = document.getElementById("card-modal");
@@ -811,16 +814,24 @@ class EventHandlers {
             radialMenuEl && radialMenuEl.style.display !== 'none') {
           console.log(`🎯 Escape: Closing radial menu`);
           closeRadialMenu();
-        } else {
-          // Deselect all and clear connection modes
-          this.setSelectedPin(null);
-          this.selectedPins = [];
-          this.appState.connectStartIndex = null;
-          this.appState.connectionMode = null;
-          console.log(`🎯 Escape: Cleared all selections and connection modes`);
-          this.draw();
         }
       }
+
+      // Always cancel marquee and deselect active pins
+      const hadActiveConnection = this.appState.connectStartIndex !== null;
+      const hadSelectedPin = this.appState.selectedPinIndex !== null;
+
+      this.setSelectedPin(null);
+      this.selectedPins = [];
+      this.appState.connectStartIndex = null;
+      this.appState.connectMousePos = null;
+      this.appState.connectionMode = null;
+
+      console.log(`🎯 Escape: Cleared selections and connection modes`);
+      if (hadActiveConnection) console.log(`   ↳ Cancelled active marquee/connection`);
+      if (hadSelectedPin) console.log(`   ↳ Deselected active pin`);
+
+      this.draw();
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       // Select all pins (Ctrl+A)
       e.preventDefault();

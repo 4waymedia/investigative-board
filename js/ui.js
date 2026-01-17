@@ -218,7 +218,7 @@ function closeLoadModal() {
   // Also hide the modal itself
   const loadModal = document.getElementById("load-modal");
   if (loadModal) loadModal.style.display = "none";
-  loadMermaidInput.value = "";
+  if (loadMermaidInput) loadMermaidInput.value = "";
 }
 
 // ============================================================================
