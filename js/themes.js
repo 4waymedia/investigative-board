@@ -404,3 +404,9 @@ function applyThemeBackground(theme) {
 
 // Export functions that might be called from other modules
 // These maintain backward compatibility
+
+// Global exports for theme functionality
+window.THEMES = THEMES;
+window.applyTheme = applyTheme;
+window.getCurrentTheme = getCurrentTheme;
+window.initializeThemes = initializeThemes;

@@ -164,3 +164,5 @@ window.CardsAPI = {
   attachCardToPin,
   detachCardFromPin
 };
+
+

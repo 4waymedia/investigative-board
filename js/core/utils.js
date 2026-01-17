@@ -2,24 +2,7 @@
 // UTILS MODULE - Utility functions for coordinate transforms and color manipulation
 // ============================================================================
 
-// Make utilities available globally
-window.DrawingUtils = {
-  // Coordinate transformation functions
-  worldToScreen,
-  screenToWorld,
-
-  // Color manipulation functions
-  lightenColor,
-  darkenColor,
-  generateColorVariants,
-
-  // Canvas drawing utilities
-  roundRectPath,
-
-  // Math utilities
-  clamp,
-  lerp,
-};
+// DrawingUtils will be exported at the end after all functions are defined
 
 // ============================================================================
 // COORDINATE TRANSFORMATION FUNCTIONS
@@ -32,7 +15,7 @@ window.DrawingUtils = {
  * @param {Object} state - Application state with scale, offsetX, offsetY
  * @returns {Object} Screen coordinates {x, y}
  */
-export function worldToScreen(wx, wy, state) {
+function worldToScreen(wx, wy, state) {
   return {
     x: wx * state.scale + state.offsetX,
     y: wy * state.scale + state.offsetY,
@@ -46,7 +29,7 @@ export function worldToScreen(wx, wy, state) {
  * @param {Object} state - Application state with scale, offsetX, offsetY
  * @returns {Object} World coordinates {x, y}
  */
-export function screenToWorld(sx, sy, state) {
+function screenToWorld(sx, sy, state) {
   return {
     x: (sx - state.offsetX) / state.scale,
     y: (sy - state.offsetY) / state.scale,
@@ -77,22 +60,13 @@ function lightenColor(color, percent) {
   );
 }
 
-function darkenColor(hex, percent) {
-  const num = parseInt(hex.slice(1), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, Math.min(255, (num >> 16) - amt));
-  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) - amt));
-  const B = Math.max(0, Math.min(255, (num & 0x0000ff) - amt));
-  return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-}
-
 /**
  * Darken a hex color by a percentage
  * @param {string} hex - Hex color string (e.g., "#ff0000")
  * @param {number} percent - Percentage to darken (0-100)
  * @returns {string} Darkened hex color
  */
-export function darkenColor(hex, percent) {
+function darkenColor(hex, percent) {
   const num = parseInt(hex.slice(1), 16);
   const amt = Math.round(2.55 * percent);
   const R = Math.max(0, Math.min(255, (num >> 16) - amt));
@@ -106,7 +80,7 @@ export function darkenColor(hex, percent) {
  * @param {string} hex - Base hex color
  * @returns {Object} Object with light, contrast, and dark variants
  */
-export function generateColorVariants(hex) {
+function generateColorVariants(hex) {
   return {
     light: lightenColor(hex, 40),
     contrast: hex,
@@ -152,7 +126,7 @@ function roundRectPath(ctx, x, y, w, h, r) {
  * @param {number} max - Maximum value
  * @returns {number} Clamped value
  */
-export function clamp(value, min, max) {
+function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
@@ -163,6 +137,98 @@ export function clamp(value, min, max) {
  * @param {number} t - Interpolation factor (0-1)
  * @returns {number} Interpolated value
  */
-export function lerp(a, b, t) {
+function lerp(a, b, t) {
   return a + (b - a) * t;
 }
+
+// ============================================================================
+// GLOBAL EXPORTS
+// ============================================================================
+
+// ============================================================================
+// PIN METRICS UTILITIES
+// ============================================================================
+
+/**
+ * Get metrics for a pin including shape, dimensions, and visual properties
+ * @param {Object} pin - Pin object with typeId, pinScale, etc.
+ * @returns {Object} Metrics object with shape, radius, width, height, etc.
+ */
+function getPinMetrics(pin) {
+  const typeId = pin.typeId || "pin:circle";
+  const base = window.PIN_BASES?.[typeId];
+
+  if (!base) {
+    return {
+      shape: "circle",
+      baseRadius: 9,
+      variant: "circle",
+      radius: 9,
+      width: 18,
+      height: 18,
+    };
+  }
+
+  // Get node type details
+  const typeDetail = window.NodeTypesAPI?.getNodeType(typeId) || { variant: "circle" };
+
+  // Area pins don't scale like regular pins
+  const pinScale = !typeId.startsWith("area:") ? (pin.pinScale || 1) : 1;
+
+  return {
+    shape: base.shape,
+    baseRadius: base.baseRadius,
+    variant: typeDetail.variant,
+    radius: (pin.radius || base.baseRadius) * pinScale,
+    width: (pin.width || base.baseRadius * 2) * pinScale,
+    height: (pin.height || base.baseRadius * 2) * pinScale,
+  };
+}
+
+/**
+ * Parse a date string into a timestamp
+ * @param {string} dateStr - Date string to parse
+ * @returns {number|null} Timestamp or null if invalid
+ */
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const yearMatch = dateStr.match(/\d{4}/);
+  if (yearMatch) return new Date(yearMatch[0], 0, 1).getTime();
+  const parsed = Date.parse(dateStr);
+  return isNaN(parsed) ? null : parsed;
+}
+
+// ============================================================================
+// GLOBAL EXPORTS
+// ============================================================================
+
+// Make utilities available globally
+window.DrawingUtils = {
+  // Coordinate transformation functions
+  worldToScreen,
+  screenToWorld,
+
+  // Color manipulation functions
+  lightenColor,
+  darkenColor,
+  generateColorVariants,
+
+  // Canvas drawing utilities
+  roundRectPath,
+
+  // Math utilities
+  clamp,
+  lerp,
+};
+
+// Individual exports for backward compatibility
+window.worldToScreen = worldToScreen;
+window.screenToWorld = screenToWorld;
+window.lightenColor = lightenColor;
+window.darkenColor = darkenColor;
+window.generateColorVariants = generateColorVariants;
+window.roundRectPath = roundRectPath;
+window.clamp = clamp;
+window.lerp = lerp;
+window.getPinMetrics = getPinMetrics;
+window.parseDate = parseDate;

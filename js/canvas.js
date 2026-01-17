@@ -451,8 +451,6 @@ canvas.addEventListener("pointerup", (e) => {
       if (dx > 10 || dy > 10) {
         const centerX = (areaDragStart.x + areaDragCurrent.x) / 2;
         const centerY = (areaDragStart.y + areaDragCurrent.y) / 2;
-        const width = Math.max(dx * 2, 50);
-        const height = Math.max(dy * 2, 50);
 
         const newPin = {
           x: centerX,
@@ -462,8 +460,6 @@ canvas.addEventListener("pointerup", (e) => {
           note: "",
           date: "",
           typeId: currentTypeId,
-          width: width,
-          height: height,
           title: "",
           description: "",
           fillColor: selectedColor + "40", // Semi-transparent fill
@@ -474,6 +470,19 @@ canvas.addEventListener("pointerup", (e) => {
           iconColor: selectedColor,
           containedPins: [], // Array to track pins within this area
         };
+
+        // Handle different area types
+        if (currentTypeId === "area:circle") {
+          // For circles, drag distance determines radius
+          const radius = Math.max(Math.sqrt(dx * dx + dy * dy), 25);
+          newPin.radius = radius;
+        } else {
+          // For rectangles, drag determines width/height
+          const width = Math.max(dx * 2, 50);
+          const height = Math.max(dy * 2, 50);
+          newPin.width = width;
+          newPin.height = height;
+        }
 
         pins.push(newPin);
         const newIndex = pins.length - 1;

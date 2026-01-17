@@ -114,3 +114,5 @@ console.log("\nDOM element check:");
 console.log("tmBubbleWidth exists:", !!tmBubbleWidth);
 console.log("tmBubbleHeight exists:", !!tmBubbleHeight);
 console.log("tmBubbleSizeAuto exists:", !!tmBubbleSizeAuto);
+
+

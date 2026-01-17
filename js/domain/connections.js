@@ -119,3 +119,5 @@ window.ConnectionsAPI = {
   getConnectionsForPin,
   cleanupConnectionsAfterDeletion
 };
+
+

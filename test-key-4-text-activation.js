@@ -77,3 +77,5 @@ console.log("\n--- Pressing '4' again (cycle back to plain) ---");
 handleKey4();
 
 console.log("\nFinal state:", { currentTool, currentFamily, currentTextType });
+
+

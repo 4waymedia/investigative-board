@@ -38,3 +38,5 @@ updateShadowColorFieldVisibility();
 console.log("Shadow field display:", tmShadowColorField().style.display);
 
 console.log("\nSUCCESS: Shadow color field reference works correctly!");
+
+

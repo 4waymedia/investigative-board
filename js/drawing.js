@@ -2,37 +2,16 @@
 // DRAWING MODULE - Refactored 2025/2026 style
 // ============================================================================
 
+
 // Utilities are available globally from js/utilities.js via window.DrawingUtils
 
 // ============================================================================
 // COORDINATE TRANSFORMATION UTILITIES
 // ============================================================================
 
-/**
- * Convert world coordinates to screen coordinates
- * @param {number} wx - World X coordinate
- * @param {number} wy - World Y coordinate
- * @returns {Object} Screen coordinates {x, y}
- */
-function worldToScreen(wx, wy) {
-  return {
-    x: wx * scale + offsetX,
-    y: wy * scale + offsetY,
-  };
-}
+// worldToScreen is provided globally by app.js
 
-/**
- * Convert screen coordinates to world coordinates
- * @param {number} sx - Screen X coordinate
- * @param {number} sy - Screen Y coordinate
- * @returns {Object} World coordinates {x, y}
- */
-function screenToWorld(sx, sy) {
-  return {
-    x: (sx - offsetX) / scale,
-    y: (sy - offsetY) / scale,
-  };
-}
+// screenToWorld is provided globally by app.js
 
 // ── Global drawing phases ────────────────────────────────────────────────
 const DRAW_PHASES = {
@@ -45,36 +24,217 @@ const DRAW_PHASES = {
   DEBUG: "debug", // optional overlay for development
 };
 
+// ── Base shape definitions ─────────────────────────────────────────────
+const baseShapes = {
+  circle: {
+    getMetrics: (pin, scale) => ({
+      shape: "circle",
+      radius: pin.radius || 9,
+    }),
+    drawShadow: defaultDrawShadow,
+    drawBackground: defaultDrawBackground,
+    drawMain: (ctx, pin, m, scr, s) => {
+      const r = m.radius * s;
+      ctx.save();
+      ctx.fillStyle = pin.color || "#58a6ff";
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2 * s;
+    ctx.stroke();
+    // White highlight dot (light reflection) - 15% size, top-left quadrant, inside circle
+    const highlightRadius = r * 0.15; // 15% of main circle radius
+    const highlightOffset = r * 0.4; // Position toward top-left, keeping highlight inside
+    ctx.fillStyle = "#FFFFFF";
+    ctx.beginPath();
+    ctx.arc(scr.x - highlightOffset, scr.y - highlightOffset, highlightRadius, 0, Math.PI * 2);
+    ctx.fill();
+      ctx.restore();
+    },
+    drawDecoration: () => {},
+    drawSelection: defaultDrawSelection,
+    drawLabel: defaultDrawLabel,
+  },
+
+  rect: {
+    getMetrics: (pin, scale) => ({
+      shape: "rect",
+      width: pin.width || 18,
+      height: pin.height || 18,
+      baseRadius: 3,
+    }),
+    drawShadow: defaultDrawShadow,
+    drawBackground: defaultDrawBackground,
+    drawMain: (ctx, pin, m, scr, s) => {
+      const w = m.width * s;
+      const h = m.height * s;
+      const x = scr.x - w / 2;
+      const y = scr.y - h / 2;
+      const r = (m.baseRadius || 3) * s;
+
+      ctx.save();
+      ctx.fillStyle = pin.color || "#58a6ff";
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+      ctx.fill();
+      ctx.restore();
+    },
+    drawDecoration: () => {},
+    drawSelection: defaultDrawSelection,
+    drawLabel: defaultDrawLabel,
+  },
+
+  areaCircle: {
+    getMetrics: (pin, scale) => ({
+      shape: "area-circle",
+      radius: pin.radius || 40,
+      borderWidth: pin.borderWidth || 2,
+    }),
+    drawShadow: (ctx, pin, m, scr, s) => {
+      const r = m.radius * s;
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.beginPath();
+      ctx.arc(scr.x + 4 * s, scr.y + 4 * s, r, 0, Math.PI * 2);
+      ctx.fill();
+    },
+    drawBackground: defaultDrawBackground,
+    drawMain: (ctx, pin, m, scr, s) => {
+      const r = m.radius * s;
+      const bw = Math.min(m.borderWidth * s, r * 0.8);
+      const fillR = Math.max(r - bw, 1);
+
+      ctx.fillStyle = pin.fillColor || pin.color + "40";
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, fillR, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (bw > 0.1) {
+        ctx.strokeStyle = pin.borderColor || pin.color;
+        ctx.lineWidth = bw;
+        ctx.beginPath();
+        ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    },
+    drawDecoration: () => {},
+    drawSelection: defaultDrawSelection,
+    drawLabel: () => {}, // Area pins don't show labels
+  },
+
+  areaRect: {
+    getMetrics: (pin, scale) => ({
+      shape: "area-rect",
+      width: pin.width || 100,
+      height: pin.height || 100,
+      borderWidth: pin.borderWidth || 2,
+      baseRadius: 6,
+    }),
+    drawShadow: (ctx, pin, m, scr, s) => {
+      const w = m.width * s;
+      const h = m.height * s;
+      const x = scr.x - w / 2;
+      const y = scr.y - h / 2;
+
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      window.DrawingUtils.roundRectPath(ctx, x + 4 * s, y + 4 * s, w, h, 8 * s);
+      ctx.fill();
+    },
+    drawBackground: defaultDrawBackground,
+    drawMain: (ctx, pin, m, scr, s) => {
+      const w = m.width * s;
+      const h = m.height * s;
+      const x = scr.x - w / 2;
+      const y = scr.y - h / 2;
+      const bw = Math.min(m.borderWidth * s, Math.min(w, h) * 0.8);
+      const fillW = Math.max(w - bw, 1);
+      const fillH = Math.max(h - bw, 1);
+      const fillX = scr.x - fillW / 2;
+      const fillY = scr.y - fillH / 2;
+
+      ctx.fillStyle = pin.fillColor || pin.color + "40";
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        fillX,
+        fillY,
+        fillW,
+        fillH,
+        Math.max(0, 6 * s - bw / 2)
+      );
+      ctx.fill();
+
+      if (bw > 0.1) {
+        ctx.strokeStyle = pin.borderColor || pin.color;
+        ctx.lineWidth = bw;
+        ctx.stroke();
+      }
+    },
+    drawDecoration: () => {},
+    drawSelection: defaultDrawSelection,
+    drawLabel: () => {}, // Area pins don't show labels
+  },
+};
+
+// Make baseShapes globally available
+window.baseShapes = baseShapes;
+
 // ── Shape renderers registry ─────────────────────────────────────────────
 const shapeRenderers = new Map();
+window.shapeRenderers = shapeRenderers; // Make immediately available globally
 
 /**
  * Register a new shape type
  * @param {string} shapeName
- * @param {Object} config
+ * @param {Object} config - Can reference baseShape or provide full implementation
  */
 function registerShape(shapeName, config) {
-  shapeRenderers.set(shapeName, {
-    getMetrics: config.getMetrics || defaultGetMetrics,
-    drawPhase: {
-      [DRAW_PHASES.SHADOW]: config.drawShadow || defaultDrawShadow,
-      [DRAW_PHASES.BACKGROUND]: config.drawBackground || defaultDrawBackground,
-      [DRAW_PHASES.MAIN]: config.drawMain || defaultDrawMain,
-      [DRAW_PHASES.DECORATION]: config.drawDecoration || (() => {}),
-      [DRAW_PHASES.SELECTION]: config.drawSelection || defaultDrawSelection,
-      [DRAW_PHASES.LABEL]: config.drawLabel || defaultDrawLabel,
-    },
-  });
+  try {
+
+    let rendererConfig;
+
+    // If referencing a base shape, inherit from it
+    if (config.baseShape && baseShapes[config.baseShape]) {
+      const baseShape = baseShapes[config.baseShape];
+      rendererConfig = {
+        baseShape: config.baseShape, // Store reference to base shape
+        getMetrics: config.getMetrics || baseShape.getMetrics,
+        drawPhase: {
+          shadow: config.drawShadow || baseShape.drawShadow,
+          background: config.drawBackground || baseShape.drawBackground,
+          main: config.drawMain || baseShape.drawMain,
+          decoration: config.drawDecoration || baseShape.drawDecoration,
+          selection: config.drawSelection || baseShape.drawSelection,
+          label: config.drawLabel || baseShape.drawLabel,
+        },
+      };
+    } else {
+      // Full custom implementation
+      rendererConfig = {
+        getMetrics: config.getMetrics || defaultGetMetrics,
+        drawPhase: {
+          shadow: config.drawShadow || defaultDrawShadow,
+          background: config.drawBackground || defaultDrawBackground,
+          main: config.drawMain || defaultDrawMain,
+          decoration: config.drawDecoration || (() => {}),
+          selection: config.drawSelection || defaultDrawSelection,
+          label: config.drawLabel || defaultDrawLabel,
+        },
+      };
+    }
+
+    shapeRenderers.set(shapeName, rendererConfig);
+
+  } catch (error) {
+    // Shape registration failed - silently continue
+  }
 }
 
 // Put this back near the top of the file, before shapeRenderers
-function drawCenterPin(areaPin, centerPos) {
+function drawCenterPin(ctx, areaPin, centerPos) {
   if (
     !areaPin ||
     typeof areaPin.x !== "number" ||
     typeof areaPin.y !== "number"
   ) {
-    console.warn("drawCenterPin: Invalid areaPin", areaPin);
     return;
   }
 
@@ -116,17 +276,32 @@ function drawCenterPin(areaPin, centerPos) {
   };
 
   if (!centerPin.typeId) {
-    console.warn("Center pin missing typeId:", centerPin);
     return;
   }
 
-  const centerMetrics = getPinMetrics(centerPin); // ← make sure this function exists!
+  const pinMetrics = getPinMetrics(centerPin); // Get base metrics
+
+  // Create full metrics object for drawPinShape
+  const centerMetrics = {
+    x: centerPin.x,
+    y: centerPin.y,
+    scale: centerPin.pinScale || 1,
+    color: centerPin.color,
+    typeId: centerPin.typeId,
+    shape: pinMetrics.shape,
+    isSelected: false, // Center pins are not selectable
+    isMarquee: false,
+    // Include dimensions from getPinMetrics
+    radius: pinMetrics.radius,
+    width: pinMetrics.width,
+    height: pinMetrics.height,
+  };
 
   // The tricky part: temporarily override worldToScreen
   const originalWorldToScreen = window.worldToScreen;
   window.worldToScreen = () => centerPos;
 
-  drawPinShape(centerPin, centerMetrics, -1); // -1 = not selectable
+  drawPinShape(ctx, centerPin, centerMetrics, -1); // -1 = not selectable
 
   // Very important: restore!
   window.worldToScreen = originalWorldToScreen;
@@ -202,7 +377,14 @@ function defaultDrawBackground(ctx, pin, metrics, scr, s) {
     const r = (m.baseRadius || 6) * s;
 
     ctx.fillStyle = pin.color || "#58a6ff";
-    window.DrawingUtils.roundRectPath(ctx, x - 4 * s, y - 4 * s, w + 8 * s, h + 8 * s, r + 4 * s);
+    window.DrawingUtils.roundRectPath(
+      ctx,
+      x - 4 * s,
+      y - 4 * s,
+      w + 8 * s,
+      h + 8 * s,
+      r + 4 * s
+    );
     ctx.fill();
   }
 
@@ -281,7 +463,14 @@ function defaultDrawSelection(
     const x = scr.x - w / 2,
       y = scr.y - h / 2;
     const r = m.baseRadius * s || 6 * s;
-    window.DrawingUtils.roundRectPath(ctx, x - 6 * s, y - 6 * s, w + 12 * s, h + 12 * s, r + 4 * s);
+    window.DrawingUtils.roundRectPath(
+      ctx,
+      x - 6 * s,
+      y - 6 * s,
+      w + 12 * s,
+      h + 12 * s,
+      r + 4 * s
+    );
     ctx.stroke();
   }
   ctx.restore();
@@ -317,12 +506,31 @@ function defaultDrawLabel(ctx, pin, metrics, scr, s) {
 // ── Card shape ───────────────────────────────────────────────────────────
 
 registerShape("card", {
+  baseShape: "rect",
   getMetrics(pin, scale) {
+    const variant = pin.variant || "card";
+
+    // Adjust dimensions based on variant (reduced by ~2.5x for proper sizing)
+    if (variant === "card") {
+      // Note card - wider
+      return { shape: "card", width: 72, height: 36, variant: variant, baseRadius: 3 };
+    } else if (variant === "document") {
+      // Document card - taller
+      return { shape: "card", width: 56, height: 48, variant: variant, baseRadius: 3 };
+    } else if (variant === "folder") {
+      // Folder card - slightly different proportions
+      return { shape: "card", width: 64, height: 44, variant: variant, baseRadius: 3 };
+    }
+
+    // Default fallback
+    return { shape: "card", width: 64, height: 40, variant: variant, baseRadius: 3 };
+
     return {
       shape: "card",
-      width: 160,
-      height: 100,
-      variant: pin.variant || "default", // 'default', 'document', 'folder'
+      width: width,
+      height: height,
+      variant: variant,
+      baseRadius: 3, // Cards have slightly rounded corners
     };
   },
 
@@ -354,8 +562,13 @@ registerShape("card", {
       y = scr.y - h / 2;
 
     ctx.fillStyle = pin.color || "#58a6ff";
-    window.DrawingUtils.roundRectPath(ctx, x, y, w, h, 6 * s);
-    ctx.fill();
+    try {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, 6 * s);
+      ctx.fill();
+    } catch (error) {
+      // Fallback to simple rect
+      ctx.fillRect(x, y, w, h);
+    }
   },
 
   drawDecoration(ctx, pin, m, scr, s) {
@@ -366,13 +579,29 @@ registerShape("card", {
 
     if (m.variant === "document") {
       ctx.fillStyle = "rgba(0,0,0,0.16)";
-      window.DrawingUtils.roundRectPath(ctx, x + 4 * s, y + 4 * s, w - 8 * s, h * 0.25, 4 * s);
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        x + 4 * s,
+        y + 4 * s,
+        w - 8 * s,
+        h * 0.25,
+        4 * s
+      );
       ctx.fill();
     } else if (m.variant === "folder") {
       const tabW = w * 0.4,
         tabH = h * 0.3;
-      ctx.fillStyle = window.DrawingUtils.lightenColor(pin.color || "#58a6ff", 12);
-      window.DrawingUtils.roundRectPath(ctx, x + 6 * s, y - tabH * 0.5, tabW, tabH, 4 * s);
+      const baseColor = pin.color || "#58a6ff";
+      const lightenedColor = window.DrawingUtils.lightenColor(baseColor, 12);
+      ctx.fillStyle = lightenedColor;
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        x + 6 * s,
+        y - tabH * 0.5,
+        tabW,
+        tabH,
+        4 * s
+      );
       ctx.fill();
     }
 
@@ -396,143 +625,53 @@ registerShape("card", {
 // ── Circle shape (simple pin) ────────────────────────────────────────────
 
 registerShape("circle", {
-  getMetrics(pin, scale) {
-    return {
-      shape: "circle",
-      radius: pin.radius || 24,
-    };
-  },
-
+  baseShape: "circle", // Use base circle shape
   drawShadow(ctx, pin, m, scr, s) {
     const r = m.radius * s;
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; // Match default shadow opacity
     ctx.beginPath();
-    ctx.arc(scr.x + 3 * s, scr.y + 3 * s, r, 0, Math.PI * 2);
+    ctx.arc(scr.x + 3 * s, scr.y + 4 * s, r * 1.05, 0, Math.PI * 2); // Match default offset and size
     ctx.fill();
   },
+  drawSelection(ctx, pin, m, scr, s, isSelected, isMarquee) {
+    if (!isSelected && !isMarquee) return;
 
-  drawMain(ctx, pin, m, scr, s) {
-    const r = m.radius * s;
-    ctx.fillStyle = pin.color || "#58a6ff";
-    ctx.beginPath();
-    ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.save();
+    // Prioritize selection (white) over marquee (orange)
+    ctx.strokeStyle = isSelected ? "rgba(255,255,255,0.5)" : "#f90";
+    ctx.lineWidth = isSelected ? 4 : 4 / s; // Thicker for selection
 
-    // Classic highlight dot
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    // Circle selection - on top of the circle, not outside
+    const circleRadius = m.radius * s; // Same radius as the circle
+
     ctx.beginPath();
-    ctx.arc(
-      scr.x - 2 * s,
-      scr.y - 2 * s,
-      Math.max(4 * s, r * 0.45),
-      0,
-      Math.PI * 2
-    );
-    ctx.fill();
+    ctx.arc(scr.x, scr.y, circleRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   },
 });
 
 // ── Area Rectangle ───────────────────────────────────────────────────────
 
 registerShape("area-rect", {
-  getMetrics(pin, scale) {
-    return {
-      shape: "area-rect",
-      width: pin.width || 100,
-      height: pin.height || 100,
-      borderWidth: pin.borderWidth || 2,
-    };
-  },
-
-  drawShadow(ctx, pin, m, scr, s) {
-    const w = m.width * s;
-    const h = m.height * s;
-    const x = scr.x - w / 2;
-    const y = scr.y - h / 2;
-
-    ctx.fillStyle = "rgba(0,0,0,0.2)";
-    window.DrawingUtils.roundRectPath(ctx, x + 4 * s, y + 4 * s, w, h, 8 * s);
-    ctx.fill();
-  },
-
-  drawMain(ctx, pin, m, scr, s) {
-    const w = m.width * s;
-    const h = m.height * s;
-    const x = scr.x - w / 2;
-    const y = scr.y - h / 2;
-    const bw = Math.min(m.borderWidth * s, Math.min(w, h) * 0.8);
-    const fillW = Math.max(w - bw, 1);
-    const fillH = Math.max(h - bw, 1);
-    const fillX = scr.x - fillW / 2;
-    const fillY = scr.y - fillH / 2;
-
-    // Fill
-    ctx.fillStyle = pin.fillColor || pin.color + "40";
-    window.DrawingUtils.roundRectPath(ctx, fillX, fillY, fillW, fillH, Math.max(0, 6 * s - bw / 2));
-    ctx.fill();
-
-    // Border
-    if (bw > 0.1) {
-      ctx.strokeStyle = pin.borderColor || pin.color;
-      ctx.lineWidth = bw;
-      ctx.stroke();
-    }
-  },
-
+  baseShape: "areaRect",
   drawDecoration(ctx, pin, m, scr, s) {
     // Center pin
-    drawCenterPin(pin, scr);
+    drawCenterPin(ctx, pin, scr);
   },
 });
 
 // ── Area Circle ──────────────────────────────────────────────────────────
 
 registerShape("area-circle", {
-  getMetrics(pin, scale) {
-    return {
-      shape: "area-circle",
-      radius: pin.radius || 80,
-      borderWidth: pin.borderWidth || 2,
-    };
-  },
-
+  baseShape: "areaCircle",
   drawLabel(ctx, pin, m, scr, s) {
     // Area pins don't show their own labels - everything is handled by center pin
     return;
   },
-
-  drawShadow(ctx, pin, m, scr, s) {
-    const r = m.radius * s;
-    ctx.fillStyle = "rgba(0,0,0,0.2)";
-    ctx.beginPath();
-    ctx.arc(scr.x + 4 * s, scr.y + 4 * s, r, 0, Math.PI * 2);
-    ctx.fill();
-  },
-
-  drawMain(ctx, pin, m, scr, s) {
-    const r = m.radius * s;
-    const bw = Math.min(m.borderWidth * s, r * 0.8);
-    const fillR = Math.max(r - bw, 1); // Leave full border width for fill area
-
-    // Fill (smaller circle)
-    ctx.fillStyle = pin.fillColor || pin.color + "40";
-    ctx.beginPath();
-    ctx.arc(scr.x, scr.y, fillR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Border (full size circle)
-    if (bw > 0.1) {
-      ctx.strokeStyle = pin.borderColor || pin.color;
-      ctx.lineWidth = bw;
-      ctx.beginPath();
-      ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  },
-
   drawDecoration(ctx, pin, m, scr, s) {
     // Center pin
-    drawCenterPin(pin, scr);
+    drawCenterPin(ctx, pin, scr);
   },
 });
 
@@ -542,36 +681,13 @@ registerShape("area-circle", {
 // ── Rectangle/Square shape ──────────────────────────────────────────────────
 
 registerShape("rect", {
-  getMetrics(pin, scale) {
-    // Use metrics from getPinMetrics
-    return {
-      shape: "rect",
-    };
-  },
-
-  drawMain(ctx, pin, m, scr, s) {
-    const w = m.width * s;
-    const h = m.height * s;
-    const x = scr.x - w / 2;
-    const y = scr.y - h / 2;
-    const r = (m.baseRadius || 6) * s;
-
-    ctx.fillStyle = pin.color || "#58a6ff";
-    window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
-    ctx.fill();
-  },
+  baseShape: "rect",
 });
 
 // ── Pill shape ─────────────────────────────────────────────────────────────
 
 registerShape("pill", {
-  getMetrics(pin, scale) {
-    // Use metrics from getPinMetrics
-    return {
-      shape: "pill",
-    };
-  },
-
+  baseShape: "rect",
   drawMain(ctx, pin, m, scr, s) {
     const w = m.width * s;
     const h = m.height * s;
@@ -588,13 +704,7 @@ registerShape("pill", {
 // ── Diamond shape ──────────────────────────────────────────────────────────
 
 registerShape("diamond", {
-  getMetrics(pin, scale) {
-    // Use metrics from getPinMetrics
-    return {
-      shape: "diamond",
-    };
-  },
-
+  baseShape: "rect",
   drawMain(ctx, pin, m, scr, s) {
     // Create a diamond that fits within the pin dimensions
     const w = m.width * s;
@@ -618,10 +728,11 @@ registerShape("diamond", {
 // ── Person Shape ──────────────────────────────────────────────────────────
 registerShape("person", {
   getMetrics(pin, scale) {
-    const headRadius = 26;
-    const bodyHeight = 40;
-    const bodyWidth = 46;
-    const paddingBottom = 20;
+    // 2x smaller than original
+    const headRadius = 13; // 26 / 2
+    const bodyHeight = 15; // 40 / 2
+    const bodyWidth = 25; // 46 / 2 (rounded)
+    const paddingBottom = 10; // 20 / 2
     const totalHeight = headRadius * 2 + bodyHeight + paddingBottom;
 
     return {
@@ -631,8 +742,8 @@ registerShape("person", {
       radius: headRadius,
       bodyH: bodyHeight,
       bodyW: bodyWidth,
-      labelPadding: 10,
-      headYOffset: -20, // Adjusted offset to position icon higher for better centering
+      labelPadding: 5, // 10 / 2
+      headYOffset: -5, // -20 / 2 - adjusted offset to position icon higher for better centering
     };
   },
 
@@ -651,7 +762,7 @@ registerShape("person", {
     const bodyHeight = pinHeight * 0.4; // Body height
 
     // Position elements within the pin bounds
-    const headY = scr.y - pinHeight * 0.15 - 10 * s; // Head center above pin center (raised by 10)
+    const headY = scr.y - pinHeight * 0.15 + m.headYOffset * s; // Head center with offset from metrics
     const bodyY = scr.y + pinHeight * 0.1 - 10 * s; // Body top below pin center (raised by 10)
 
     const fillColor = pin.color || "#6366f1"; // Head color
@@ -715,9 +826,11 @@ registerShape("person", {
 // ── Business Building ──────────────────────────────────────────────────────────
 registerShape("business-building", {
   getMetrics(pin, scale) {
-    // Use metrics from getPinMetrics
+    // 2x larger than default pin size
     return {
       shape: "business-building",
+      width: 32, // 2x the default width (16)
+      height: 32, // 2x the default height (16)
     };
   },
 
@@ -803,17 +916,6 @@ registerShape("business-building", {
   },
 
   drawLabel(ctx, pin, m, scr, s) {
-    // Debug center pins
-    if (pin.typeId && pin.typeId.startsWith("card:")) {
-      console.log("🎴 Drawing center card label:", {
-        typeId: pin.typeId,
-        label: pin.label,
-        description: pin.description,
-        scale: s,
-        position: scr,
-        metrics: m
-      });
-    }
 
     let textToShow = pin.label;
     let descriptionOffset = 0;
@@ -860,41 +962,84 @@ registerShape("business-building", {
 
 // ── Main drawing loop ────────────────────────────────────────────────────
 
-function drawPinShape(pin, metrics, index) {
-  const scr = worldToScreen(pin.x, pin.y);
-  const s = scale;
-  const isSelected = index === selectedPinIndex;
-  const isMarquee = selectedPins.includes(index);
+function drawPinShape(ctx, pin, metrics, index) {
+  // Get complete metrics from getPinMetrics and merge with passed metrics
+  const fullMetrics = window.getPinMetrics
+    ? window.getPinMetrics(pin)
+    : metrics;
+  const mergedMetrics = { ...fullMetrics, ...metrics }; // Passed metrics override getPinMetrics
 
-  const renderer = shapeRenderers.get(metrics.shape);
-  if (!renderer) {
-    console.warn(`No renderer for shape: ${metrics.shape}`);
-    return;
+  const scr = window.worldToScreen(pin.x, pin.y);
+
+  // SECOND: Try normal renderer (will draw on top if it works)
+  const renderer = window.shapeRenderers?.get(mergedMetrics.shape);
+  if (renderer) {
+    try {
+      // Get shape-specific metrics and merge them
+      const shapeMetrics = renderer.getMetrics
+        ? renderer.getMetrics(pin, 1)
+        : {};
+      const finalMetrics = { ...mergedMetrics, ...shapeMetrics };
+
+      // Draw all phases in order
+      ctx.save();
+
+      // 1. Shadow phase
+      if (renderer.drawPhase.shadow) {
+        renderer.drawPhase.shadow(ctx, pin, finalMetrics, scr, 1);
+      }
+
+      // 2. Background phase
+      if (renderer.drawPhase.background) {
+        renderer.drawPhase.background(ctx, pin, finalMetrics, scr, 1);
+      }
+
+      // 3. Main body phase
+      if (renderer.drawPhase.main) {
+        renderer.drawPhase.main(ctx, pin, finalMetrics, scr, 1);
+      }
+
+      // 4. Decoration phase
+      if (renderer.drawPhase.decoration) {
+        renderer.drawPhase.decoration(ctx, pin, finalMetrics, scr, 1);
+      }
+
+      // 5. Selection phase (only if selected or marquee)
+      if (
+        renderer.drawPhase.selection &&
+        (finalMetrics.isSelected || finalMetrics.isMarquee)
+      ) {
+        renderer.drawPhase.selection(
+          ctx,
+          pin,
+          finalMetrics,
+          scr,
+          1,
+          finalMetrics.isSelected,
+          finalMetrics.isMarquee
+        );
+      }
+
+      // 6. Label phase
+      if (renderer.drawPhase.label) {
+        renderer.drawPhase.label(ctx, pin, finalMetrics, scr, 1);
+      }
+
+      ctx.restore();
+    } catch (error) {
+    }
+  } else {
   }
-
-  ctx.save();
-
-  // Common phases – order matters!
-  renderer.drawPhase[DRAW_PHASES.SHADOW](ctx, pin, metrics, scr, s);
-  renderer.drawPhase[DRAW_PHASES.BACKGROUND](ctx, pin, metrics, scr, s);
-  renderer.drawPhase[DRAW_PHASES.MAIN](ctx, pin, metrics, scr, s);
-  renderer.drawPhase[DRAW_PHASES.DECORATION](ctx, pin, metrics, scr, s);
-  renderer.drawPhase[DRAW_PHASES.SELECTION](
-    ctx,
-    pin,
-    metrics,
-    scr,
-    s,
-    isSelected,
-    isMarquee
-  );
-  renderer.drawPhase[DRAW_PHASES.LABEL](ctx, pin, metrics, scr, s);
-
-  ctx.restore();
 }
 
 // ── Draw Text Elements ───────────────────────────────────────────────────
-function drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBottom, margin) {
+function drawTextElements(
+  viewportLeft,
+  viewportRight,
+  viewportTop,
+  viewportBottom,
+  margin
+) {
   if (!textElements) return;
 
   textElements.forEach((textEl, index) => {
@@ -908,8 +1053,8 @@ function drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBott
       return;
     }
 
-    const scr = worldToScreen(textEl.x, textEl.y);
-    const s = scale;
+    const scr = window.worldToScreen(textEl.x, textEl.y);
+    const s = 1; // Consistent with pin rendering
 
     // Draw text bubble background
     ctx.fillStyle = textEl.color || "#ffffff";
@@ -930,7 +1075,14 @@ function drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBott
     const bubbleY = scr.y - bubbleHeight / 2;
 
     // Draw rounded rectangle background
-    window.DrawingUtils.roundRectPath(ctx, bubbleX, bubbleY, bubbleWidth, bubbleHeight, 8 * s);
+    window.DrawingUtils.roundRectPath(
+      ctx,
+      bubbleX,
+      bubbleY,
+      bubbleWidth,
+      bubbleHeight,
+      8 * s
+    );
     ctx.fill();
     ctx.stroke();
 
@@ -940,4 +1092,15 @@ function drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBott
     ctx.textBaseline = "middle";
     ctx.fillText(textEl.content, scr.x, scr.y);
   });
+}
+
+// Make shapeRenderers, pin drawing, and text drawing globally available
+window.shapeRenderers = shapeRenderers;
+window.drawPinShape = drawPinShape;
+window.drawTextElements = drawTextElements;
+window.DRAW_PHASES = DRAW_PHASES;
+
+// Shape registration verification
+if (!shapeRenderers.get("card")) {
+  // Card renderer not found - this would cause issues
 }

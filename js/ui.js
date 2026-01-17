@@ -11,16 +11,18 @@
  */
 function openAddColorModal() {
   renderAddColorPicker();
-  addColorModalBackdrop.style.display = "flex";
-  // Focus on the modal
-  addColorModalBackdrop.focus();
+  if (addColorModalBackdrop) {
+    addColorModalBackdrop.style.display = "flex";
+    // Focus on the modal
+    addColorModalBackdrop.focus();
+  }
 }
 
 /**
  * Close the add color modal
  */
 function closeAddColorModal() {
-  addColorModalBackdrop.style.display = "none";
+  if (addColorModalBackdrop) addColorModalBackdrop.style.display = "none";
 }
 
 // ============================================================================
@@ -56,7 +58,7 @@ function openCardModal(cardId = null) {
   }
 
   renderCardColorPicker();
-  cardModalBackdrop.style.display = "flex";
+  if (cardModalBackdrop) cardModalBackdrop.style.display = "flex";
   cmTitle.focus();
 }
 
@@ -65,7 +67,10 @@ function openCardModal(cardId = null) {
  */
 function closeCardModal() {
   modalCardIndex = null;
-  cardModalBackdrop.style.display = "none";
+  if (cardModalBackdrop) cardModalBackdrop.style.display = "none";
+  // Also hide the modal itself
+  const cardModal = document.getElementById("card-modal");
+  if (cardModal) cardModal.style.display = "none";
 }
 
 // ============================================================================
@@ -77,42 +82,82 @@ function closeCardModal() {
  * @param {number} index - Pin index to edit
  */
 function openPinModal(index) {
-  const pin = pins[index];
+  const pin = window.app.appState.pins[index];
   if (!pin) return;
 
   modalPinIndex = index;
 
+  // Get form field elements
+  const pmTitle = document.getElementById("pm-title");
+  const pmColor = document.getElementById("pm-color");
+  const pmDescription = document.getElementById("pm-description");
+  const pmDate = document.getElementById("pm-date");
+
   // Populate form fields
-  pmTitle.value = pin.label || "";
-  pmColor.value = pin.color || "#58a6ff";
-  pmDescription.value = pin.note || "";
-  pmDate.value = pin.date || "";
+  if (pmTitle) pmTitle.value = pin.label || "";
+  if (pmColor) pmColor.value = pin.color || "#58a6ff";
+  if (pmDescription) pmDescription.value = pin.note || "";
+  if (pmDate) pmDate.value = pin.date || "";
 
   // Handle area-specific fields
   const isArea = pin.typeId.startsWith("area:");
-  document.getElementById("area-fields").style.display = isArea ? "block" : "none";
+  const areaFields = document.getElementById("area-fields");
+  if (areaFields) areaFields.style.display = isArea ? "block" : "none";
 
   if (isArea) {
-    pmAreaTitle.value = pin.title || "";
-    pmAreaDescription.value = pin.description || "";
-    pmAreaIcon.value = pin.icon || "";
-    pmAreaFillColor.value = pin.fillColor || pin.color + "40";
-    pmAreaBorderColor.value = pin.borderColor || pin.color;
-    pmAreaBorderWidth.value = pin.borderWidth || 2;
-    pmAreaTextColor.value = pin.textColor || window._currentThemeTextColor || "#FFFFFF";
-    pmAreaIconColor.value = pin.iconColor || pin.color;
+    const pmAreaTitle = document.getElementById("pm-area-title");
+    const pmAreaDescription = document.getElementById("pm-area-description");
+    const pmAreaIcon = document.getElementById("pm-area-icon");
+    const pmAreaFillColor = document.getElementById("pm-area-fill-color");
+    const pmAreaBorderColor = document.getElementById("pm-area-border-color");
+    const pmAreaBorderWidth = document.getElementById("pm-area-border-width");
+    const pmAreaTextColor = document.getElementById("pm-area-text-color");
+    const pmAreaIconColor = document.getElementById("pm-area-icon-color");
+
+    if (pmAreaTitle) pmAreaTitle.value = pin.title || "";
+    if (pmAreaDescription) pmAreaDescription.value = pin.description || "";
+    if (pmAreaIcon) pmAreaIcon.value = pin.icon || "";
+    if (pmAreaFillColor) pmAreaFillColor.value = pin.fillColor || pin.color + "40";
+    if (pmAreaBorderColor) pmAreaBorderColor.value = pin.borderColor || pin.color;
+    if (pmAreaBorderWidth) pmAreaBorderWidth.value = pin.borderWidth || 2;
+    if (pmAreaTextColor) pmAreaTextColor.value = pin.textColor || window._currentThemeTextColor || "#FFFFFF";
+    if (pmAreaIconColor) pmAreaIconColor.value = pin.iconColor || pin.color;
   }
 
-  pinModalBackdrop.style.display = "flex";
-  pmTitle.focus();
+  const pinModalBackdrop = document.getElementById("pin-modal-backdrop");
+  const pinModal = document.getElementById("pin-modal");
+  if (pinModalBackdrop) {
+    pinModalBackdrop.style.display = "flex";
+    console.log("✅ Opened pin modal backdrop");
+  }
+  if (pinModal) {
+    pinModal.style.display = "block";
+    console.log("✅ Opened pin modal");
+  }
+  if (pmTitle) pmTitle.focus();
 }
 
 /**
  * Close the pin modal
  */
 function closePinModal() {
+  console.log("🔒 Closing pin modal...");
   modalPinIndex = null;
-  pinModalBackdrop.style.display = "none";
+
+  const pinModal = document.getElementById("pin-modal");
+  if (pinModal) {
+    pinModal.style.display = "none";
+    console.log("✅ Hidden pinModal");
+  } else {
+    console.log("❌ pinModal not found");
+  }
+
+  if (pinModalBackdrop) {
+    pinModalBackdrop.style.display = "none";
+    console.log("✅ Hidden pinModalBackdrop");
+  } else {
+    console.log("❌ pinModalBackdrop not found");
+  }
 }
 
 // ============================================================================
@@ -123,7 +168,7 @@ function closePinModal() {
  * Open the load data modal
  */
 function openLoadModal() {
-  loadModalBackdrop.style.display = "flex";
+  if (loadModalBackdrop) loadModalBackdrop.style.display = "flex";
   loadMermaidInput.focus();
 }
 
@@ -131,7 +176,10 @@ function openLoadModal() {
  * Close the load data modal
  */
 function closeLoadModal() {
-  loadModalBackdrop.style.display = "none";
+  if (loadModalBackdrop) loadModalBackdrop.style.display = "none";
+  // Also hide the modal itself
+  const loadModal = document.getElementById("load-modal");
+  if (loadModal) loadModal.style.display = "none";
   loadMermaidInput.value = "";
 }
 
@@ -145,10 +193,37 @@ function closeLoadModal() {
  * @param {number} screenX - Screen X coordinate
  * @param {number} screenY - Screen Y coordinate
  */
+// Global variable for radial menu element
+let radialMenuEl;
+
+// Global variable for pin modal save button
+let pmSave;
+
+// Global variable for radial menu click-outside handler
+let radialMenuOutsideClickHandler;
+
+// Global modal backdrop elements
+let addColorModalBackdrop;
+let cardModalBackdrop;
+let pinModalBackdrop;
+let loadModalBackdrop;
+
+// Global form elements
+let loadMermaidInput;
+let cmTitle, cmSubtitle, cmDate, cmIcon, cmCancel, cmSave;
+
 function openRadialMenu(pinIndex, screenX, screenY) {
+  // Create radial menu element if it doesn't exist
+  if (!radialMenuEl) {
+    radialMenuEl = document.createElement('div');
+    radialMenuEl.id = 'radial-menu';
+    radialMenuEl.className = 'radial-menu';
+    document.body.appendChild(radialMenuEl);
+  }
+
   closeRadialMenu();
-  setSelectedPin(pinIndex);
-  const pin = pins[pinIndex];
+  window.app.setSelectedPin(pinIndex);
+  const pin = window.app.appState.pins[pinIndex];
 
   // NEW LOGIC FOR CENTERING:
   // 1. Define the size of the radial menu container.
@@ -163,7 +238,7 @@ function openRadialMenu(pinIndex, screenX, screenY) {
 
   const radius = 70;
   // Get connections for this pin to determine if we should show curve/straight toggle
-  const pinConnections = connections.filter(
+  const pinConnections = window.app.appState.connections.filter(
     (c) => c.startIndex === pinIndex || c.endIndex === pinIndex
   );
   const hasConnections = pinConnections.length > 0;
@@ -225,6 +300,19 @@ function openRadialMenu(pinIndex, screenX, screenY) {
   });
 
   radialMenuEl.onclick = (e) => e.stopPropagation();
+
+  // Add click-outside-to-close functionality
+  radialMenuOutsideClickHandler = (e) => {
+    // Only close if the click is outside the radial menu
+    if (!radialMenuEl.contains(e.target)) {
+      closeRadialMenu();
+    }
+  };
+
+  // Add the listener after a short delay to avoid immediate closing
+  setTimeout(() => {
+    document.addEventListener('click', radialMenuOutsideClickHandler);
+  }, 10);
 }
 
 /**
@@ -234,6 +322,12 @@ function closeRadialMenu() {
   radialMenuEl.innerHTML = "";
   radialMenuEl.style.display = "none";
   radialMenuEl.onclick = null;
+
+  // Remove the click-outside handler
+  if (radialMenuOutsideClickHandler) {
+    document.removeEventListener('click', radialMenuOutsideClickHandler);
+    radialMenuOutsideClickHandler = null;
+  }
 }
 
 /**
@@ -250,7 +344,15 @@ function executeRadialAction(action, pinIndex) {
       openPinModal(pinIndex);
       break;
     case "delete":
-      if (confirm("Delete this pin?")) deleteSelectedPin();
+      if (confirm("Delete this pin?")) {
+        // Delete selected pins from app state
+        if (window.app.appState.selectedPinIndex !== null) {
+          window.app.appState.pins.splice(window.app.appState.selectedPinIndex, 1);
+          window.app.setSelectedPin(null);
+          window.app.saveAppState(window.app.appState);
+          window.draw();
+        }
+      }
       break;
     case "focus":
       // Focus on this pin and connected pins
@@ -272,7 +374,7 @@ function focusOnPin(pinIndex) {
   connectedIndices.add(pinIndex);
 
   // Add all directly connected pins
-  connections.forEach((c) => {
+  window.app.appState.connections.forEach((c) => {
     if (c.startIndex === pinIndex) connectedIndices.add(c.endIndex);
     if (c.endIndex === pinIndex) connectedIndices.add(c.startIndex);
   });
@@ -284,11 +386,11 @@ function focusOnPin(pinIndex) {
     maxY = -Infinity;
 
   connectedIndices.forEach((idx) => {
-    if (pins[idx]) {
-      minX = Math.min(minX, pins[idx].x);
-      minY = Math.min(minY, pins[idx].y);
-      maxX = Math.max(maxX, pins[idx].x);
-      maxY = Math.max(maxY, pins[idx].y);
+    if (window.app.appState.pins[idx]) {
+      minX = Math.min(minX, window.app.appState.pins[idx].x);
+      minY = Math.min(minY, window.app.appState.pins[idx].y);
+      maxX = Math.max(maxX, window.app.appState.pins[idx].x);
+      maxY = Math.max(maxY, window.app.appState.pins[idx].y);
     }
   });
 
@@ -305,7 +407,7 @@ function focusOnPin(pinIndex) {
     offsetX = canvas.width / 2 - centerX * scale;
     offsetY = canvas.height / 2 - centerY * scale;
 
-    draw();
+    window.draw();
   }
 }
 
@@ -314,7 +416,7 @@ function focusOnPin(pinIndex) {
  * @param {number} pinIndex - Index of the pin
  */
 function togglePinConnectionType(pinIndex) {
-  const pinConnections = connections.filter(
+  const pinConnections = window.app.appState.connections.filter(
     (c) => c.startIndex === pinIndex || c.endIndex === pinIndex
   );
 
@@ -337,8 +439,8 @@ function togglePinConnectionType(pinIndex) {
       c.type = newType;
     });
 
-    saveState();
-    draw();
+    window.app.saveAppState(window.app.appState);
+    window.draw();
   }
 }
 
@@ -375,8 +477,8 @@ function renderAddColorPicker() {
           name: colorObj.name || `Color ${palette.length + 1}`,
           value: colorObj.value,
         });
-        saveState();
-        renderMenu();
+        window.app.saveAppState(window.app.appState);
+        window.app.toolbarManager.render();
         closeAddColorModal();
       }
     };
@@ -449,7 +551,7 @@ function renderCards() {
         div.ondragend = () => div.style.opacity = '1';
         div.ondblclick = () => {
             const pinIdx = pins.findIndex(p => p.cardId === c.id);
-            if (pinIdx !== -1) setSelectedPin(pinIdx);
+            if (pinIdx !== -1) window.app.setSelectedPin(pinIdx);
             div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         };
         cardList.appendChild(div);
@@ -463,24 +565,51 @@ function renderCards() {
         const title = prompt('New card title:') || 'Untitled';
         const subtitle = prompt('Subtitle:') || '';
         const date = prompt('Date/Number:') || '';
-        const color = getSelectedColor();
+        const color = window.app.appState.selectedColor;
         cards.push({id: nextId++, title, subtitle, date, icon: '📄', color, category: 'note', used: false});
         renderCards();
-        saveState();
+        window.app.saveAppState(window.app.appState);
     };
     cardList.appendChild(add);
 }
+
+// ============================================================================
+// GLOBAL VARIABLES
+// ============================================================================
+
+// Global modal close buttons
+let pinModalClose, cardModalClose, addColorModalClose, loadModalClose, textModalClose;
 
 /**
  * Set up UI event handlers
  */
 function setupUIHandlers() {
+  console.log("🔧 Setting up UI handlers...");
+
+  // Initialize modal close buttons
+  pinModalClose = document.getElementById("pin-modal-close");
+  console.log("🎯 pinModalClose element:", pinModalClose);
+  if (!pinModalClose) {
+    console.error("❌ pinModalClose element not found!");
+  }
+
+  cardModalClose = document.getElementById("card-modal-close");
+  addColorModalClose = document.getElementById("add-color-modal-close");
+  loadModalClose = document.getElementById("load-modal-close");
+  textModalClose = document.getElementById("text-modal-close");
+
+  // Initialize modal backdrop elements
+  addColorModalBackdrop = document.getElementById("add-color-modal-backdrop");
+  cardModalBackdrop = document.getElementById("card-modal-backdrop");
+  pinModalBackdrop = document.getElementById("pin-modal-backdrop");
+  loadModalBackdrop = document.getElementById("load-modal-backdrop");
+
+
   // Add color modal handlers
   addColorModalClose.onclick = closeAddColorModal;
   addColorModalBackdrop.addEventListener("click", (e) => {
     if (e.target === addColorModalBackdrop) closeAddColorModal();
   });
-  addColorCancel.onclick = closeAddColorModal;
 
   // Card modal handlers
   cardModalClose.onclick = closeCardModal;
@@ -490,11 +619,19 @@ function setupUIHandlers() {
   cmCancel.onclick = closeCardModal;
 
   // Pin modal handlers
-  pinModalClose.onclick = closePinModal;
+  console.log("🔧 Attaching pin modal close handlers...");
+  pinModalClose.onclick = (e) => {
+    console.log("🎯 X button clicked!");
+    e.stopPropagation(); // Prevent event bubbling to backdrop
+    closePinModal();
+  };
   pinModalBackdrop.addEventListener("click", (e) => {
     if (e.target === pinModalBackdrop) closePinModal();
   });
-  pmCancel.onclick = closePinModal;
+  pmCancel.onclick = (e) => {
+    e.stopPropagation(); // Prevent event bubbling
+    closePinModal();
+  };
 
   // Load modal handlers
   loadModalClose.onclick = closeLoadModal;
@@ -518,7 +655,7 @@ function setupUIHandlers() {
       return;
     }
 
-    saveHistory();
+    window.app.appState.saveHistory();
 
     if (modalCardIndex !== null) {
       // Edit existing card
@@ -546,37 +683,52 @@ function setupUIHandlers() {
 
     renderCards();
     closeCardModal();
-    saveState();
+    window.app.saveAppState(window.app.appState);
   };
 
   // Pin modal save handler
   pmSave.onclick = () => {
-    const pin = pins[modalPinIndex];
+    const pin = window.app.appState.pins[modalPinIndex];
     if (!pin) return;
 
-    saveHistory();
+    // Get form field elements
+    const pmTitle = document.getElementById("pm-title");
+    const pmColor = document.getElementById("pm-color");
+    const pmDescription = document.getElementById("pm-description");
+    const pmDate = document.getElementById("pm-date");
 
-    pin.label = pmTitle.value.trim();
-    pin.color = pmColor.value;
-    pin.note = pmDescription.value.trim();
-    pin.date = pmDate.value.trim();
+    window.app.appState.saveHistory();
+
+    if (pmTitle) pin.label = pmTitle.value.trim();
+    if (pmColor) pin.color = pmColor.value;
+    if (pmDescription) pin.note = pmDescription.value.trim();
+    if (pmDate) pin.date = pmDate.value.trim();
 
     // Handle area-specific fields
     if (pin.typeId.startsWith("area:")) {
-      pin.title = pmAreaTitle.value.trim();
-      pin.description = pmAreaDescription.value.trim();
-      pin.icon = pmAreaIcon.value.trim();
-      pin.fillColor = pmAreaFillColor.value;
-      pin.borderColor = pmAreaBorderColor.value;
-      pin.borderWidth = parseInt(pmAreaBorderWidth.value) || 2;
-      pin.textColor = pmAreaTextColor.value;
-      pin.iconColor = pmAreaIconColor.value;
+      const pmAreaTitle = document.getElementById("pm-area-title");
+      const pmAreaDescription = document.getElementById("pm-area-description");
+      const pmAreaIcon = document.getElementById("pm-area-icon");
+      const pmAreaFillColor = document.getElementById("pm-area-fill-color");
+      const pmAreaBorderColor = document.getElementById("pm-area-border-color");
+      const pmAreaBorderWidth = document.getElementById("pm-area-border-width");
+      const pmAreaTextColor = document.getElementById("pm-area-text-color");
+      const pmAreaIconColor = document.getElementById("pm-area-icon-color");
+
+      if (pmAreaTitle) pin.title = pmAreaTitle.value.trim();
+      if (pmAreaDescription) pin.description = pmAreaDescription.value.trim();
+      if (pmAreaIcon) pin.icon = pmAreaIcon.value.trim();
+      if (pmAreaFillColor) pin.fillColor = pmAreaFillColor.value;
+      if (pmAreaBorderColor) pin.borderColor = pmAreaBorderColor.value;
+      if (pmAreaBorderWidth) pin.borderWidth = parseInt(pmAreaBorderWidth.value) || 2;
+      if (pmAreaTextColor) pin.textColor = pmAreaTextColor.value;
+      if (pmAreaIconColor) pin.iconColor = pmAreaIconColor.value;
     }
 
-    renderSelectedPinInfo();
+    window.app.updatePinInfo();
     closePinModal();
-    saveState();
-    draw();
+    window.app.saveAppState(window.app.appState);
+    window.draw();
   };
 
   // Load modal handlers
@@ -595,3 +747,7 @@ function setupUIHandlers() {
     }
   };
 }
+
+// Expose radial menu functions globally
+window.openRadialMenu = openRadialMenu;
+window.closeRadialMenu = closeRadialMenu;

@@ -58,3 +58,5 @@ console.log("\nPressing key 4 (switch back to text):");
 handleKey4();
 
 console.log("\nFinal state:", { currentTool, currentTextType });
+
+

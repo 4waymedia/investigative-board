@@ -63,3 +63,5 @@ function applyThemeBackground(theme) {
 applyThemeBackground(null);
 applyThemeBackground({ background: { type: "solid", value: "#ff0000" } });
 applyThemeBackground({ background: { type: "linear-gradient", value: "linear-gradient(to right, #ff0000, #0000ff)" } });
+
+

@@ -133,3 +133,5 @@ if (isDraggingArea && areaDragStart && areaDragCurrent) {
 
 console.log("\nFinal pins array:", pins);
 console.log("Total areas created:", pins.length);
+
+

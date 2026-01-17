@@ -8,10 +8,10 @@ body {
 }
 #canvas-container {
   position: fixed;
-  top: 0;
+  top: 50px; /* Start below the menu bar */
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: 140px; /* Leave room for the tray at bottom */
   z-index: 1;
   /* Background will be set dynamically via JavaScript based on theme */
 }
@@ -60,6 +60,17 @@ canvas {
 .tool-btn span.icon {
   font-size: 16px;
 }
+
+.tool-btn span.key {
+  font-size: 11px;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-family: monospace;
+  text-transform: uppercase;
+}
 .tool-btn:hover {
   background: #1f2430;
   opacity: 1;
@@ -69,6 +80,14 @@ canvas {
   border-color: #46a1ff;
   color: white;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.tool-separator {
+  color: #666;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 0 8px;
+  user-select: none;
 }
 
 .type-bar {
@@ -125,6 +144,38 @@ canvas {
 .type-caret:hover {
   color: #fff;
   transform: translateY(1px);
+}
+
+/* Type dropdown styles */
+.type-dropdown {
+  background: #2d333b;
+  border: 1px solid #444c56;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  min-width: 120px;
+  padding: 4px 0;
+}
+
+.type-dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #c9d1d9;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.type-dropdown-option:hover {
+  background: #1f2430;
+  color: #fff;
+}
+
+.type-dropdown-option .icon {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
 }
 
 .type-menu {
@@ -264,7 +315,7 @@ canvas {
   box-sizing: border-box;
   z-index: 90;
 }
-#card-list {
+#tray-content {
   display: inline-flex;
   gap: 18px;
 }
@@ -540,16 +591,28 @@ canvas {
 #pin-modal-close:hover {
   opacity: 1;
 }
+.form-group {
+  margin-bottom: 16px;
+}
+
 .modal-field {
   margin-bottom: 10px;
 }
-.modal-label {
+/* Modal form styling */
+#pin-modal label,
+#card-modal label {
   font-size: 12px;
   opacity: 0.8;
   margin-bottom: 4px;
+  display: block;
+  font-weight: 600;
+  color: #e6edf3;
 }
-.modal-input,
-.modal-textarea {
+
+#pin-modal input,
+#pin-modal textarea,
+#card-modal input,
+#card-modal textarea {
   width: 100%;
   border-radius: 8px;
   border: 1px solid #30363d;
@@ -560,12 +623,17 @@ canvas {
   box-sizing: border-box;
   outline: none;
 }
-.modal-input:focus,
-.modal-textarea:focus {
+
+#pin-modal input:focus,
+#pin-modal textarea:focus,
+#card-modal input:focus,
+#card-modal textarea:focus {
   border-color: #58a6ff;
   box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.4);
 }
-.modal-textarea {
+
+#pin-modal textarea,
+#card-modal textarea {
   min-height: 70px;
   resize: vertical;
 }
@@ -742,4 +810,61 @@ canvas {
 
 .tab-content.active {
   display: block;
+}
+
+/* Dropdown menu styles */
+.tool-dropdown-container {
+  position: relative;
+}
+
+.tool-btn.dropdown-btn {
+  cursor: pointer;
+}
+
+.tool-btn.dropdown-btn .dropdown-arrow {
+  font-size: 8px;
+  margin-left: 2px;
+  color: #999;
+}
+
+.tool-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  min-width: 120px;
+  z-index: 1000;
+  display: none;
+  margin-top: 2px;
+}
+
+.tool-dropdown-menu.visible {
+  display: block;
+}
+
+.tool-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #333;
+}
+
+.tool-dropdown-item:hover {
+  background-color: #f0f0f0;
+}
+
+.tool-dropdown-item .icon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+.tool-dropdown-item span.key {
+  margin-left: auto;
+  font-size: 10px;
+  color: #666;
 }

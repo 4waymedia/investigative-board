@@ -54,3 +54,5 @@ console.log("\nPressing regular 1 key (no Shift):");
 handleKeyDown({ shiftKey: false, key: "1", preventDefault: () => {} });
 
 console.log(`\nFinal selectedColor: ${selectedColor}`);
+
+

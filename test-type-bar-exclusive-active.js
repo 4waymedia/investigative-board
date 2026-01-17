@@ -61,3 +61,5 @@ renderTypeBar();
 console.log("6. Change text type while text tool active:");
 currentTextType = "rectangle";
 renderTypeBar();
+
+

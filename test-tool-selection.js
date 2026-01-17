@@ -62,3 +62,5 @@ console.log("\n8. Clicking text tool button again:");
 setTool("text");
 
 console.log("\nFinal state:", { currentTool, currentFamily, currentTypeId });
+
+

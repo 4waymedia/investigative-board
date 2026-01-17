@@ -85,3 +85,5 @@ console.log("\nFinal state:");
 console.log(`currentThemeId: ${currentThemeId}`);
 console.log("Final palette:", palette);
 console.log(`selectedColor: ${selectedColor}`);
+
+

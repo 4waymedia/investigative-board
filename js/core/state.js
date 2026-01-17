@@ -2,12 +2,7 @@
 // STATE MANAGEMENT MODULE - Centralized application state
 // ============================================================================
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-
-const STORAGE_KEY = "investigativeBoardState"; // localStorage key for persistence
-const MAX_HISTORY = 100; // Maximum undo history entries
+// Constants are available globally from constants.js
 
 // ============================================================================
 // APP STATE CLASS
@@ -32,6 +27,8 @@ class AppState {
     this.selectedPins = [];
     this.selectedTextIndex = null;
     this.connectStartIndex = null;
+    this.connectMousePos = null;
+    this.connectionMode = null; // 'sequential' or 'hub'
 
     // Marquee Selection State
     this.marqueeStart = null;
@@ -52,9 +49,9 @@ class AppState {
 
     // Additional tool state
     this.selectedTypeByFamily = {
-      pin: "pin:circle",
-      card: "card:card",
-      area: "area:circle",
+      pin: 0,  // Index into pin family types
+      card: 0, // Index into card family types
+      area: 0, // Index into area family types
     };
 
     // Theme State
@@ -96,7 +93,7 @@ class AppState {
       offsetY: this.offsetY,
     };
     this.history.push(snapshot);
-    if (this.history.length > MAX_HISTORY) {
+    if (this.history.length > window.MAX_HISTORY) {
       this.history.shift();
     }
   }
@@ -121,6 +118,7 @@ class AppState {
       this.selectedPins = [];
       this.selectedTextIndex = null;
       this.connectStartIndex = null;
+      this.connectMousePos = null;
 
       return true;
     }
@@ -272,7 +270,7 @@ function saveAppState(appState) {
   const stateData = appState.toSerializable();
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateData));
+    localStorage.setItem(window.STORAGE_KEY, JSON.stringify(stateData));
   } catch (e) {
     console.error("Failed to save AppState to localStorage:", e);
   }
@@ -289,7 +287,7 @@ function loadAppState(appState) {
   }
 
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(window.STORAGE_KEY);
     if (stored) {
       const stateData = JSON.parse(stored);
       appState.fromSerializable(stateData);

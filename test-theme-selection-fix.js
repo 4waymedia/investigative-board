@@ -70,3 +70,5 @@ renderMenu();
 
 console.log("\nFinal state:");
 console.log(`currentThemeId: ${currentThemeId}`);
+
+
