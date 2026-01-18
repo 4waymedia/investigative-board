@@ -233,7 +233,7 @@ function closeLoadModal() {
  */
 
 function openRadialMenu(pinIndex, screenX, screenY) {
-  console.log("🎯 openRadialMenu called with pinIndex:", pinIndex);
+  console.log("🎯 openRadialMenu called with pinIndex:", pinIndex, "screenX:", screenX, "screenY:", screenY);
 
   // Check if app is available
   if (!window.app) {
@@ -272,8 +272,11 @@ function openRadialMenu(pinIndex, screenX, screenY) {
   // 2. Center the container's top-left corner by shifting it back.
   radialMenuEl.style.width = menuSize + "px";
   radialMenuEl.style.height = menuSize + "px";
-  radialMenuEl.style.left = screenX - centerOffset + "px";
-  radialMenuEl.style.top = screenY - centerOffset + "px";
+  const leftPos = screenX - centerOffset;
+  const topPos = screenY - centerOffset;
+  radialMenuEl.style.left = leftPos + "px";
+  radialMenuEl.style.top = topPos + "px";
+  console.log("🎯 Positioning radial menu at:", leftPos, topPos, "menuSize:", menuSize, "centerOffset:", centerOffset);
 
   const radius = 70;
   // Get connections for this pin to determine if we should show curve/straight toggle
@@ -296,14 +299,16 @@ function openRadialMenu(pinIndex, screenX, screenY) {
 
   // Add curve/straight toggle if pin has connections
   if (hasConnections) {
+    // Get connection type from appState if available, otherwise use global
+    const globalConnectionType = window.app && window.app.appState ? window.app.appState.connectionType : connectionType;
     const allSameType = pinConnections.every(
       (c) =>
-        (c.type || connectionType) ===
-        (pinConnections[0].type || connectionType)
+        (c.type || globalConnectionType) ===
+        (pinConnections[0].type || globalConnectionType)
     );
     const currentType = allSameType
-      ? pinConnections[0].type || connectionType
-      : connectionType;
+      ? pinConnections[0].type || globalConnectionType
+      : globalConnectionType;
     items.push({
       icon: currentType === "curved" ? "📈" : "📏",
       action: "toggleConnectionType",
@@ -313,8 +318,9 @@ function openRadialMenu(pinIndex, screenX, screenY) {
   }
 
   radialMenuEl.style.display = "block";
+  console.log("🎯 Radial menu display set to block, element:", radialMenuEl);
 
-  items.forEach((item, i) => {
+    items.forEach((item, i) => {
     const angle = (i / items.length) * Math.PI * 2;
 
     // 3. Position items relative to the center of the container (100, 100)
@@ -345,6 +351,7 @@ function openRadialMenu(pinIndex, screenX, screenY) {
     // Only close if the click is outside the radial menu
     if (!radialMenuEl.contains(e.target)) {
       closeRadialMenu();
+      // Don't stop propagation - let canvas handle the click for pin creation
     }
   };
 
@@ -379,7 +386,15 @@ function closeRadialMenu() {
 function executeRadialAction(action, pinIndex) {
   switch (action) {
     case "connect":
-      connectStartIndex = pinIndex;
+      window.app.appState.connectStartIndex = pinIndex;
+      window.app.appState.connectionMode = 'parent'; // Locked parent effect
+      // Force a redraw to ensure marquee shows immediately
+      window.draw();
+      break;
+    case "edit":
+      if (window.openPinModal) {
+        window.openPinModal(pinIndex);
+      }
       break;
     case "edit":
       openPinModal(pinIndex);
@@ -390,7 +405,7 @@ function executeRadialAction(action, pinIndex) {
         window.app.appState.pins.splice(pinIndex, 1);
         window.app.setSelectedPin(null);
         closeRadialMenu();
-        window.app.saveAppState(window.app.appState);
+        window.app.saveState();
         window.draw();
       }
       break;
@@ -517,7 +532,7 @@ function renderAddColorPicker() {
           name: colorObj.name || `Color ${palette.length + 1}`,
           value: colorObj.value,
         });
-        window.app.saveAppState(window.app.appState);
+        window.app.saveState();
         window.app.toolbarManager.render();
         closeAddColorModal();
       }
@@ -757,36 +772,26 @@ function setupUIHandlers() {
         // Save history before making changes
         window.app.appState.saveHistory();
 
-        // Update pin based on field
-        switch (fieldId) {
-          case 'pm-title':
-            pin.label = field.value.trim();
-            break;
-          case 'pm-subtitle':
-            pin.subtitle = field.value.trim();
-            break;
-          case 'pm-description':
-            pin.description = field.value.trim();
-            break;
-          case 'pm-note':
-            pin.note = field.value.trim();
-            break;
-          case 'pm-date':
-            pin.date = field.value;
-            break;
-          case 'pm-color':
-            pin.color = field.value;
-            break;
-          case 'pm-text-color':
-            pin.textColor = field.value;
-            break;
-          case 'pm-scale':
-            pin.pinScale = parseFloat(field.value) || 1;
-            break;
+        // Field mapping for auto-save functionality
+        const pinFieldMappings = {
+          'pm-title': { property: 'label', transform: (value) => value.trim() },
+          'pm-subtitle': { property: 'subtitle', transform: (value) => value.trim() },
+          'pm-description': { property: 'description', transform: (value) => value.trim() },
+          'pm-note': { property: 'note', transform: (value) => value.trim() },
+          'pm-date': { property: 'date', transform: (value) => value },
+          'pm-color': { property: 'color', transform: (value) => value },
+          'pm-text-color': { property: 'textColor', transform: (value) => value },
+          'pm-scale': { property: 'pinScale', transform: (value) => parseFloat(value) || 1 },
+        };
+
+        // Update pin based on field mapping
+        const mapping = pinFieldMappings[fieldId];
+        if (mapping) {
+          pin[mapping.property] = mapping.transform(field.value);
         }
 
         window.app.updatePinInfo();
-        window.app.saveAppState(window.app.appState);
+        window.app.saveState();
         window.draw();
       });
     }
@@ -803,36 +808,26 @@ function setupUIHandlers() {
         // Save history before making changes
         window.app.appState.saveHistory();
 
-        // Update pin based on field
-        switch (fieldId) {
-          case 'pm-area-title':
-            pin.title = field.value.trim();
-            break;
-          case 'pm-area-description':
-            pin.description = field.value.trim();
-            break;
-          case 'pm-area-icon':
-            pin.icon = field.value.trim();
-            break;
-          case 'pm-area-fill-color':
-            pin.fillColor = field.value;
-            break;
-          case 'pm-area-border-color':
-            pin.borderColor = field.value;
-            break;
-          case 'pm-area-border-width':
-            pin.borderWidth = parseInt(field.value) || 2;
-            break;
-          case 'pm-area-text-color':
-            pin.textColor = field.value;
-            break;
-          case 'pm-area-icon-color':
-            pin.iconColor = field.value;
-            break;
+        // Field mapping for area pin auto-save functionality
+        const areaPinFieldMappings = {
+          'pm-area-title': { property: 'title', transform: (value) => value.trim() },
+          'pm-area-description': { property: 'description', transform: (value) => value.trim() },
+          'pm-area-icon': { property: 'icon', transform: (value) => value.trim() },
+          'pm-area-fill-color': { property: 'fillColor', transform: (value) => value },
+          'pm-area-border-color': { property: 'borderColor', transform: (value) => value },
+          'pm-area-border-width': { property: 'borderWidth', transform: (value) => parseInt(value) || 2 },
+          'pm-area-text-color': { property: 'textColor', transform: (value) => value },
+          'pm-area-icon-color': { property: 'iconColor', transform: (value) => value },
+        };
+
+        // Update area pin based on field mapping
+        const areaMapping = areaPinFieldMappings[fieldId];
+        if (areaMapping) {
+          pin[areaMapping.property] = areaMapping.transform(field.value);
         }
 
         window.app.updatePinInfo();
-        window.app.saveAppState(window.app.appState);
+        window.app.saveState();
         window.draw();
       });
     }
@@ -853,7 +848,7 @@ function setupUIHandlers() {
         window.app.setSelectedPin(null);
         closePinModal();
 
-        window.app.saveAppState(window.app.appState);
+        window.app.saveState();
         window.draw();
       }
     };
@@ -874,9 +869,9 @@ function setupUIHandlers() {
 // FUNCTION EXPORTS
 // ============================================================================
 
-// Expose radial menu functions globally
-console.log("🎯 Exposing radial menu functions globally");
+// Expose UI functions globally
 window.openRadialMenu = openRadialMenu;
 window.closeRadialMenu = closeRadialMenu;
-console.log("✅ window.openRadialMenu:", typeof window.openRadialMenu);
-console.log("✅ window.closeRadialMenu:", typeof window.closeRadialMenu);
+// Use ModalManager's openPinModal instead of the old ui.js version
+window.openPinModal = (index) => window.app?.modalManager?.openPinModal(index);
+window.closePinModal = closePinModal;

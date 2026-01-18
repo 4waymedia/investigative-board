@@ -275,7 +275,9 @@ function undo() {
   offsetX = snapshot.offsetX;
   offsetY = snapshot.offsetY;
   renderCards();
-  renderSelectedPinInfo();
+  if (window.app && window.app.updatePinInfo) {
+    window.app.updatePinInfo();
+  }
   saveState(); // Save state after undoing
   draw();
 }

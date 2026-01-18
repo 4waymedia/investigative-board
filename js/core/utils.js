@@ -172,16 +172,22 @@ function getPinMetrics(pin) {
   // Get node type details
   const typeDetail = window.NodeTypesAPI?.getNodeType(typeId) || { variant: "circle" };
 
-  // Area pins don't scale like regular pins
-  const pinScale = !typeId.startsWith("area:") ? (pin.pinScale || 1) : 1;
+  // All pins can scale, but area pins use areaScale for the area size and pinScale for the icon
+  const pinScale = pin.pinScale || 1;
+  const areaScale = pin.areaScale || 1;
+
+  // For area pins, area dimensions use areaScale, icon uses pinScale
+  // For regular pins, everything uses pinScale
+  const isArea = typeId.startsWith("area:");
+  const dimensionScale = isArea ? areaScale : pinScale;
 
   return {
     shape: base.shape,
     baseRadius: base.baseRadius,
     variant: typeDetail.variant,
-    radius: (pin.radius || base.baseRadius) * pinScale,
-    width: (pin.width || base.baseRadius * 2) * pinScale,
-    height: (pin.height || base.baseRadius * 2) * pinScale,
+    radius: (pin.radius || base.baseRadius) * dimensionScale,
+    width: (pin.width || base.baseRadius * 2) * dimensionScale,
+    height: (pin.height || base.baseRadius * 2) * dimensionScale,
   };
 }
 

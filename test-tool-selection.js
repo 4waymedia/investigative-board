@@ -64,3 +64,4 @@ setTool("text");
 console.log("\nFinal state:", { currentTool, currentFamily, currentTypeId });
 
 
+

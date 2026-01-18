@@ -58,13 +58,12 @@ class ToolbarManager {
       { id: "pan", label: "Move", icon: "🖐", key: "M" },
       { id: "select", label: "Select", icon: "🔳", key: "S" },
       { id: "text", label: "Text", icon: "📝", key: "T" },
-      { id: "test", label: "Test Card", icon: "🃏", key: "Y" },
-      { id: "resetview", label: "Reset View", icon: "🎯", key: "R" }
     ];
 
-    mainTools.forEach(tool => {
+    mainTools.forEach((tool) => {
       const btn = document.createElement("div");
-      btn.className = "tool-btn" + (this.appState.currentTool === tool.id ? " active" : "");
+      btn.className =
+        "tool-btn" + (this.appState.currentTool === tool.id ? " active" : "");
       btn.innerHTML = `<span class="icon">${tool.icon}</span><span>${tool.label}</span><span class="key">${tool.key}</span>`;
       btn.onclick = () => {
         this.setTool(tool.id);
@@ -99,65 +98,18 @@ class ToolbarManager {
     // When switching to family tools (pin/card/area), set the family
     if (toolId === "pin" || toolId === "card" || toolId === "area") {
       this.appState.currentFamily = toolId;
-      this.appState.selectedTypeByFamily = this.appState.selectedTypeByFamily || {};
-      this.appState.selectedTypeByFamily[toolId] = this.appState.selectedTypeByFamily[toolId] || 0;
+      this.appState.selectedTypeByFamily =
+        this.appState.selectedTypeByFamily || {};
+      this.appState.selectedTypeByFamily[toolId] =
+        this.appState.selectedTypeByFamily[toolId] || 0;
       this.updateCurrentTypeId();
-    }
-
-    // Test tool - draw a square immediately
-    if (toolId === "test") {
-      this.drawTestSquare();
-      return; // Don't change the active tool indicator for test
-    }
-
-    // Reset view tool
-    if (toolId === "resetview") {
-      this.resetView();
-      return;
     }
 
     this.render();
   }
 
-  // Draw a test card using the shape rendering system
-  drawTestSquare() {
-
-    if (!window.app || !window.app.appState) {
-      return;
-    }
-
-    // Create a test card pin
-    const testCard = {
-      x: 200,  // World coordinates
-      y: 150,
-      color: "#58a6ff",
-      typeId: "card:card",  // Use card shape
-      pinScale: 1,
-      label: "TEST CARD",
-      note: "This is a test card to verify shape rendering works"
-    };
-
-    // Add to pins array (or replace existing test card)
-    const existingTestIndex = window.app.appState.pins.findIndex(p => p.label === "TEST CARD");
-    if (existingTestIndex !== -1) {
-      // Remove existing test card
-      window.app.appState.pins.splice(existingTestIndex, 1);
-    } else {
-      // Add new test card
-      window.app.appState.pins.push(testCard);
-    }
-
-    // Trigger render to show the test card
-    if (window.app && window.app.render) {
-      window.app.render();
-    } else {
-    }
-
-  }
-
   // Reset the canvas view to show all pins
   resetView() {
-
     if (!window.app || !window.app.appState) {
       return;
     }
@@ -180,14 +132,19 @@ class ToolbarManager {
 
     // Get current family types
     const family = this.appState.currentFamily || "pin";
-    const types = window.NODE_TYPES.filter(t => t.family === family);
+    const types = window.NODE_TYPES.filter((t) => t.family === family);
 
     types.forEach((type, index) => {
       const typeBtn = document.createElement("div");
-      typeBtn.className = "type-menu-item" + (index === this.appState.selectedTypeByFamily?.[family] ? " active" : "");
+      typeBtn.className =
+        "type-menu-item" +
+        (index === this.appState.selectedTypeByFamily?.[family]
+          ? " active"
+          : "");
       typeBtn.innerHTML = `<div class="icon">${type.icon}</div>`;
       typeBtn.onclick = () => {
-        this.appState.selectedTypeByFamily = this.appState.selectedTypeByFamily || {};
+        this.appState.selectedTypeByFamily =
+          this.appState.selectedTypeByFamily || {};
         this.appState.selectedTypeByFamily[family] = index;
         this.updateCurrentTypeId();
         this.render();
@@ -207,21 +164,31 @@ class ToolbarManager {
     const families = [
       { id: "pin", name: "Pin", defaultIcon: "●" },
       { id: "card", name: "Card", defaultIcon: "▤" },
-      { id: "area", name: "Area", defaultIcon: "⭕" }
+      { id: "area", name: "Area", defaultIcon: "⭕" },
     ];
 
-    families.forEach(family => {
+    families.forEach((family) => {
       const typeGroup = document.createElement("div");
       typeGroup.className = "type-group";
 
       // Get current type for this family
-      const types = window.NODE_TYPES ? window.NODE_TYPES.filter(t => t.family === family.id) : [];
-      const selectedIndex = (this.appState.selectedTypeByFamily && this.appState.selectedTypeByFamily[family.id]) || 0;
-      const currentType = types[selectedIndex] || { icon: family.defaultIcon, label: family.name };
+      const types = window.NODE_TYPES
+        ? window.NODE_TYPES.filter((t) => t.family === family.id)
+        : [];
+      const selectedIndex =
+        (this.appState.selectedTypeByFamily &&
+          this.appState.selectedTypeByFamily[family.id]) ||
+        0;
+      const currentType = types[selectedIndex] || {
+        icon: family.defaultIcon,
+        label: family.name,
+      };
 
       // Create type option (shows current selection)
       const typeOption = document.createElement("div");
-      typeOption.className = "type-option" + (this.appState.currentFamily === family.id ? " active" : "");
+      typeOption.className =
+        "type-option" +
+        (this.appState.currentFamily === family.id ? " active" : "");
       typeOption.innerHTML = `
         <div class="type-option-icon">${currentType.icon}</div>
         <div class="label">${currentType.label || family.name}</div>
@@ -255,7 +222,7 @@ class ToolbarManager {
   // Show dropdown for type selection
   showTypeDropdown(familyId, caretElement, types) {
     // Remove any existing dropdown
-    const existingDropdown = document.querySelector('.type-dropdown');
+    const existingDropdown = document.querySelector(".type-dropdown");
     if (existingDropdown) {
       existingDropdown.remove();
     }
@@ -270,7 +237,8 @@ class ToolbarManager {
       option.innerHTML = `<span class="icon">${type.icon}</span><span>${type.label}</span>`;
 
       option.onclick = () => {
-        this.appState.selectedTypeByFamily = this.appState.selectedTypeByFamily || {};
+        this.appState.selectedTypeByFamily =
+          this.appState.selectedTypeByFamily || {};
         this.appState.selectedTypeByFamily[familyId] = index;
         this.appState.currentFamily = familyId;
         this.appState.currentTool = familyId;
@@ -286,7 +254,7 @@ class ToolbarManager {
     const rect = caretElement.getBoundingClientRect();
     dropdown.style.position = "absolute";
     dropdown.style.left = rect.left + "px";
-    dropdown.style.top = (rect.bottom + 5) + "px";
+    dropdown.style.top = rect.bottom + 5 + "px";
     dropdown.style.zIndex = "1000";
 
     // Add to body (or menu)
@@ -296,10 +264,10 @@ class ToolbarManager {
     const closeDropdown = (e) => {
       if (!dropdown.contains(e.target) && e.target !== caretElement) {
         dropdown.remove();
-        document.removeEventListener('click', closeDropdown);
+        document.removeEventListener("click", closeDropdown);
       }
     };
-    setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+    setTimeout(() => document.addEventListener("click", closeDropdown), 0);
   }
 
   // Render color palette
@@ -308,7 +276,9 @@ class ToolbarManager {
 
     palette.forEach((col) => {
       const el = document.createElement("div");
-      el.className = "color-option" + (col.value === this.appState.selectedColor ? " active" : "");
+      el.className =
+        "color-option" +
+        (col.value === this.appState.selectedColor ? " active" : "");
       el.innerHTML = `<div class="label">${col.name}</div><div class="swatch" style="background:${col.value}"></div>`;
       el.onclick = () => {
         this.appState.selectedColor = col.value;
@@ -334,18 +304,22 @@ class ToolbarManager {
   // Render connection type toggle
   renderConnectionTypeToggle() {
     const connTypeDiv = document.createElement("div");
-    connTypeDiv.className = "color-option";
-    connTypeDiv.style.marginLeft = "10px";
+    connTypeDiv.className = "connection-type-toggle";
     connTypeDiv.innerHTML = `<div class="label" style="font-size:11px;opacity:0.9">Line</div><div style="font-size:20px;margin-top:4px">${
       this.appState.connectionType === "curved" ? "📈" : "📏"
     }</div>`;
     connTypeDiv.onclick = () => {
-      this.appState.connectionType = this.appState.connectionType === "curved" ? "straight" : "curved";
+      this.appState.connectionType =
+        this.appState.connectionType === "curved" ? "straight" : "curved";
+      // Also update global connectionType variable
+      if (typeof window.connectionType !== "undefined") {
+        window.connectionType = this.appState.connectionType;
+      }
       this.saveAppState(this.appState);
       this.render();
       this.draw();
     };
-    connTypeDiv.title = `Connection Type: ${this.appState.connectionType} (Press 'T' to toggle)`;
+    connTypeDiv.title = `Connection Type: ${this.appState.connectionType} (Press 'L' to toggle)`;
     this.menu.appendChild(connTypeDiv);
   }
 
@@ -356,9 +330,7 @@ class ToolbarManager {
     themeSelector.className = "theme-selector";
 
     // Get themes from global themes
-    const themes = window.THEMES || [
-      { id: "default", name: "Default" }
-    ];
+    const themes = window.THEMES || [{ id: "default", name: "Default" }];
 
     themes.forEach((theme) => {
       const option = document.createElement("option");
@@ -373,17 +345,27 @@ class ToolbarManager {
     // Set up change handler
     themeSelector.onchange = (e) => {
       if (window.applyTheme) {
+        // Apply theme (updates colors and background)
         window.applyTheme(e.target.value);
         this.appState.currentThemeId = e.target.value;
+
+        // Ensure selectedColor is valid for the new theme
+        const currentPalette = window.DEFAULT_COLORS || [];
+        if (
+          currentPalette.length > 0 &&
+          !currentPalette.find((c) => c.value === this.appState.selectedColor)
+        ) {
+          this.appState.selectedColor = currentPalette[0].value;
+        }
+
         if (window.saveAppState) {
           window.saveAppState(this.appState);
         }
         this.render();
-      } else {
       }
     };
 
-    return themeSelector;
+    this.menu.appendChild(themeSelector);
   }
 
   // Update current type ID based on selections
@@ -391,7 +373,7 @@ class ToolbarManager {
     const family = this.appState.currentFamily || "pin";
     const selectedTypeByFamily = this.appState.selectedTypeByFamily || {};
     const typeIndex = selectedTypeByFamily[family] || 0;
-    const types = window.NODE_TYPES.filter(t => t.family === family);
+    const types = window.NODE_TYPES.filter((t) => t.family === family);
 
     if (types[typeIndex]) {
       this.appState.currentTypeId = types[typeIndex].id;

@@ -15,6 +15,7 @@
     <script src="js/domain/nodeTypes.js"></script>
     <script src="js/domain/connections.js"></script>
     <script src="js/domain/cards.js"></script>
+    <script src="js/pins.js"></script>
 
     <!-- Core application modules -->
     <script src="js/core/state.js"></script>
@@ -102,8 +103,17 @@
 
           <!-- Style Tab -->
           <div class="tab-content" id="style-tab">
+            <!-- Theme Colors Palette -->
             <div class="form-group">
-              <label for="pm-color">Color</label>
+              <label>Theme Colors</label>
+              <div id="modal-color-palette" class="modal-color-palette">
+                <!-- Colors will be populated by JavaScript -->
+              </div>
+            </div>
+
+            <!-- Custom Color Pickers -->
+            <div class="form-group">
+              <label for="pm-color">Custom Color</label>
               <input type="color" id="pm-color">
             </div>
             <div class="form-group">
@@ -126,8 +136,12 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="pm-scale">Scale</label>
+              <label for="pm-scale">Icon Scale</label>
               <input type="range" id="pm-scale" min="0.1" max="3" step="0.1">
+            </div>
+            <div class="form-group" id="area-scale-container" style="display: none;">
+              <label for="pm-area-scale">Area Scale</label>
+              <input type="range" id="pm-area-scale" min="0.1" max="5" step="0.1">
             </div>
           </div>
         </div>

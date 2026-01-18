@@ -65,7 +65,9 @@ function setupCanvasEvents() {
     if (marqueeStart && marqueeEnd) {
       selectedPins = calculateMarqueeSelection(marqueeStart, marqueeEnd);
       selectedPinIndex = selectedPins.length > 0 ? selectedPins[0] : null;
-      renderSelectedPinInfo();
+      if (window.app && window.app.updatePinInfo) {
+        window.app.updatePinInfo();
+      }
       draw();
     }
   }
@@ -92,10 +94,12 @@ function setupCanvasEvents() {
     return selected;
   }
 
-  /**
-   * Handle mouse down events on canvas
-   */
-  canvas.onmousedown = (e) => {
+/**
+ * Handle mouse down events on canvas - DISABLED (using eventHandlers.js)
+ * Keeping for reference but commented out to avoid conflicts
+ */
+/*
+canvas.onmousedown = (e) => {
   e.preventDefault();
   // Get canvas position relative to viewport
   const rect = canvas.getBoundingClientRect();
@@ -147,7 +151,9 @@ function setupCanvasEvents() {
           }
           selectedPinIndex = clickedPinIndex;
           selectedPins = [clickedPinIndex];
-          renderSelectedPinInfo();
+          if (window.app && window.app.updatePinInfo) {
+        window.app.updatePinInfo();
+      }
         }
         return;
       }
@@ -214,7 +220,9 @@ function setupCanvasEvents() {
         }
         selectedPinIndex = clickedPinIndex;
         selectedPins = [clickedPinIndex];
-        renderSelectedPinInfo();
+        if (window.app && window.app.updatePinInfo) {
+        window.app.updatePinInfo();
+      }
         return;
       }
 
@@ -241,7 +249,9 @@ function setupCanvasEvents() {
         }
         selectedPinIndex = clickedPinIndex;
         selectedPins = [clickedPinIndex];
-        renderSelectedPinInfo();
+        if (window.app && window.app.updatePinInfo) {
+        window.app.updatePinInfo();
+      }
       }
       return;
     }
@@ -263,14 +273,16 @@ function setupCanvasEvents() {
 
   if (e.button === 2) {
     // Right mouse button - show radial menu
-    e.preventDefault();
-    showRadialMenu(world.x, world.y);
+  e.preventDefault();
+  showRadialMenu(world.x, world.y);
   }
 };
+*/
 
 /**
- * Handle mouse move events on canvas
+ * Handle mouse move events on canvas - DISABLED (using eventHandlers.js)
  */
+/*
 canvas.addEventListener("pointermove", (e) => {
   const rect = canvas.getBoundingClientRect();
   mouseScreenX = e.clientX - rect.left;
@@ -357,10 +369,12 @@ canvas.addEventListener("pointermove", (e) => {
   prevScreenX = e.clientX;
   prevScreenY = e.clientY;
 });
+*/
 
 /**
- * Handle mouse up events on canvas
+ * Handle mouse up events on canvas - DISABLED (using eventHandlers.js)
  */
+/*
 canvas.addEventListener("pointerup", (e) => {
   const rect = canvas.getBoundingClientRect();
   const canvasX = e.clientX - rect.left;
@@ -525,6 +539,7 @@ canvas.addEventListener("pointerup", (e) => {
     }
   }
 });
+*/
 
 // ============================================================================
 // KEYBOARD EVENT HANDLERS
@@ -536,7 +551,17 @@ canvas.addEventListener("pointerup", (e) => {
 window.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "z") {
     e.preventDefault();
-    undo();
+    if (window.app && window.app.appState) {
+      const success = window.app.appState.undo();
+      if (success) {
+        window.app.syncGlobalVariables();
+        // Update the UI
+        if (window.app.updatePinInfo) window.app.updatePinInfo();
+        if (window.draw) window.draw();
+      }
+    } else {
+      undo();
+    }
   }
   if (
     (selectedPinIndex !== null || selectedPins.length > 0) &&
@@ -643,10 +668,14 @@ window.addEventListener("keydown", (e) => {
     }
   }
 
-  // T: Toggle connection type (straight/curved)
-  if (e.key === "t" || e.key === "T") {
+  // L: Toggle connection type (straight/curved)
+  if (e.key === "l" || e.key === "L") {
     e.preventDefault();
     connectionType = connectionType === "curved" ? "straight" : "curved";
+    // Also update appState if available
+    if (window.app && window.app.appState) {
+      window.app.appState.connectionType = connectionType;
+    }
     saveState();
     renderMenu();
     draw();

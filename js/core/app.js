@@ -33,6 +33,11 @@ class Application {
     // Initialize AppState
     this.appState = new window.AppState();
 
+    // Load themes
+    if (window.loadThemes) {
+      await window.loadThemes();
+    }
+
     // Load saved state
     const stateLoaded = window.loadAppState(this.appState);
 
@@ -56,6 +61,11 @@ class Application {
 
     // Render initial state
     this.render();
+
+    // Apply current theme
+    if (window.applyTheme && this.appState.currentThemeId) {
+      window.applyTheme(this.appState.currentThemeId);
+    }
 
     // Also render toolbar and tray
     if (this.toolbarManager) {
@@ -134,7 +144,9 @@ class Application {
     // Initialize event handlers
     console.log("Creating EventHandlers, window.EventHandlers:", typeof window.EventHandlers);
     if (!window.EventHandlers) {
-      throw new Error("EventHandlers not loaded yet");
+      console.warn("EventHandlers not loaded yet, retrying in 100ms...");
+      setTimeout(() => this.initializeManagers(), 100);
+      return;
     }
     this.eventHandlers = new window.EventHandlers(this.appState, this.canvas);
     this.eventHandlers.initialize({
@@ -232,41 +244,52 @@ class Application {
       ctx.restore();
     }
 
-    // Draw area creation preview if dragging
-    if (window.isDraggingArea && window.areaDragStart && window.areaDragCurrent) {
+    // Draw area creation marquee if dragging
+    if (window.app && window.app.eventHandlers && window.app.eventHandlers.isDraggingArea &&
+        window.app.eventHandlers.areaDragStart && window.app.eventHandlers.areaDragCurrent) {
+      const eh = window.app.eventHandlers;
       ctx.save();
       // Temporarily reset transforms to draw in screen space
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const startScreen = this.worldToScreen(window.areaDragStart.x, window.areaDragStart.y);
-      const currentScreen = this.worldToScreen(window.areaDragCurrent.x, window.areaDragCurrent.y);
 
-      // Check if creating a circle or rectangle area
-      if (window.currentTypeId === "area:circle") {
-        // Draw circle preview
-        const dx = Math.abs(window.areaDragCurrent.x - window.areaDragStart.x);
-        const dy = Math.abs(window.areaDragCurrent.y - window.areaDragStart.y);
-        const radius = Math.sqrt(dx * dx + dy * dy);
+      const startScreen = this.worldToScreen(eh.areaDragStart.x, eh.areaDragStart.y);
+      const currentScreen = this.worldToScreen(eh.areaDragCurrent.x, eh.areaDragCurrent.y);
 
-        ctx.strokeStyle = window.selectedColor || "#58a6ff";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
+      // Calculate dimensions in screen space for proper visual scaling
+      const dx = Math.abs(currentScreen.x - startScreen.x);
+      const dy = Math.abs(currentScreen.y - startScreen.y);
+
+      // Animated marquee for area creation
+      const time = Date.now();
+      ctx.lineDashOffset = -((time * 0.5) % 16); // Animated marching ants
+
+      ctx.strokeStyle = "#ff0000"; // Bright red
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+
+      // Draw different shapes based on area type
+      if (this.appState.currentTypeId === "area:circle") {
+        // Circular marquee
+        const radius = Math.max(Math.sqrt(dx * dx + dy * dy), 10);
         ctx.arc(startScreen.x, startScreen.y, radius, 0, Math.PI * 2);
-        ctx.stroke();
+        console.log(`🎨 Circle marquee: center(${startScreen.x}, ${startScreen.y}), radius=${radius}`);
       } else {
-        // Draw rectangle preview
-        const x = Math.min(startScreen.x, currentScreen.x);
-        const y = Math.min(startScreen.y, currentScreen.y);
-        const w = Math.abs(currentScreen.x - startScreen.x);
-        const h = Math.abs(currentScreen.y - startScreen.y);
-
-        ctx.strokeStyle = window.selectedColor || "#58a6ff";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(x, y, w, h);
+        // Rectangular marquee - show the actual area bounds
+        const halfWidth = Math.max(dx, 25);
+        const halfHeight = Math.max(dy, 25);
+        ctx.rect(
+          startScreen.x - halfWidth,
+          startScreen.y - halfHeight,
+          halfWidth * 2,
+          halfHeight * 2
+        );
+        console.log(`🎨 Rectangle marquee: center(${startScreen.x}, ${startScreen.y}), width=${halfWidth * 2}, height=${halfHeight * 2}`);
       }
 
-      ctx.setLineDash([]);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset
+
       ctx.restore();
     }
 
@@ -278,22 +301,50 @@ class Application {
         ctx.strokeStyle = "#ffffff"; // White line as requested
         ctx.lineWidth = 4 / this.appState.scale; // Scale line width
 
-        // Create animated wavy dash pattern
-        const time = Date.now() * 0.005; // Animation speed
-        const waveOffset = (Math.sin(time) * 0.5 + 0.5) * 20; // Oscillating offset
-        ctx.setLineDash([
-          12 / this.appState.scale, // Dash length
-          8 / this.appState.scale,  // Gap length
-          6 / this.appState.scale,  // Short dash
-          10 / this.appState.scale  // Longer gap
-        ]);
-        ctx.lineDashOffset = -waveOffset; // Animate the dash pattern
+        const time = Date.now();
+
+        // Animate the line dash offset for the "moving" effect
+        ctx.lineDashOffset = -((time * 0.5) % 10);
+
+        ctx.strokeStyle = "#ffffff"; // White line
+        ctx.lineWidth = 3; // Thicker line for better visibility
+        ctx.setLineDash([5, 5]);
         ctx.beginPath();
         ctx.moveTo(startPin.x, startPin.y);
-        ctx.lineTo(this.appState.connectMousePos.x, this.appState.connectMousePos.y);
+
+        // Calculate distance and number of segments for the wave
+        const dx = this.appState.connectMousePos.x - startPin.x;
+        const dy = this.appState.connectMousePos.y - startPin.y;
+        const distance = Math.hypot(dx, dy);
+        const segments = Math.max(8, Math.floor(distance / (15 * this.appState.scale))); // More segments, smaller spacing
+
+        // Wave parameters - increased magnitude for more visible effect
+        const waveMagnitude = 25 * Math.sqrt(this.appState.scale); // Increased from 10 to 25
+        const waveSpeed = time * 0.02; // Slowed down from 0.05 to 0.02
+
+        console.log(`🎨 Marquee: distance=${distance.toFixed(1)}, segments=${segments}, magnitude=${waveMagnitude.toFixed(1)}, speed=${waveSpeed.toFixed(3)}`);
+
+        for (let i = 1; i <= segments; i++) {
+          const t = i / segments;
+          const x = startPin.x + dx * t;
+          const y = startPin.y + dy * t;
+
+          // Apply sine wave based on time and position (ORIGINAL index2.html style)
+          const wave =
+            Math.sin(t * Math.PI) *
+            Math.sin(t * 10 + waveSpeed) *
+            waveMagnitude;
+
+          const perpX = -dy / distance;
+          const perpY = dx / distance;
+
+          ctx.lineTo(x + perpX * wave, y + perpY * wave);
+        }
+
         ctx.stroke();
-        ctx.restore();
-      } else {
+        ctx.setLineDash([]); // Reset dash
+        ctx.lineDashOffset = 0; // Reset offset
+        ctx.lineWidth = 1; // Reset line width
       }
     }
 
@@ -325,12 +376,20 @@ class Application {
 
   // Draw all connections
   drawConnections(ctx) {
-    if (!this.appState.connections) return;
+    if (!this.appState.connections || !this.appState.pins) return;
 
     // Note: Connection preview is drawn in main draw() method with animation
 
-    this.appState.connections.forEach(connection => {
-      // Basic connection drawing - can be enhanced
+    // Group connections by endpoint for fan-out calculations
+    const connectionsByEndpoint = {};
+    this.appState.connections.forEach((conn, idx) => {
+      if (!connectionsByEndpoint[conn.startIndex]) connectionsByEndpoint[conn.startIndex] = [];
+      if (!connectionsByEndpoint[conn.endIndex]) connectionsByEndpoint[conn.endIndex] = [];
+      connectionsByEndpoint[conn.startIndex].push(idx);
+      connectionsByEndpoint[conn.endIndex].push(idx);
+    });
+
+    this.appState.connections.forEach((connection, idx) => {
       ctx.strokeStyle = connection.color || "#666";
       ctx.lineWidth = 2 / this.appState.scale; // Scale the line width
       ctx.setLineDash([]); // Ensure solid line (not dashed)
@@ -339,11 +398,68 @@ class Application {
       const startPin = this.appState.pins[connection.startIndex];
       const endPin = this.appState.pins[connection.endIndex];
 
-      if (startPin && endPin) {
+      if (!startPin || !endPin) return;
+
+      // Determine connection type (use connection's type, or default to global setting)
+      const connType = connection.type || this.appState.connectionType;
+
+      if (connType === "curved") {
+        // Calculate fan-out for curved connections
+        // Find how many connections share the same endpoint
+        const endConnections = connectionsByEndpoint[connection.endIndex] || [];
+        const startConnections = connectionsByEndpoint[connection.startIndex] || [];
+
+        // Use the endpoint with more connections for fan-out
+        let fanOutCount = 1;
+        let fanOutIndex = 0;
+        let useStart = false;
+
+        if (endConnections.length > startConnections.length && endConnections.length > 1) {
+          fanOutCount = endConnections.length;
+          fanOutIndex = endConnections.indexOf(idx);
+          useStart = false;
+        } else if (startConnections.length > 1) {
+          fanOutCount = startConnections.length;
+          fanOutIndex = startConnections.indexOf(idx);
+          useStart = true;
+        }
+
+        // Calculate curve
+        const dx = endPin.x - startPin.x;
+        const dy = endPin.y - startPin.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 0) {
+          const midX = (startPin.x + endPin.x) / 2;
+          const midY = (startPin.y + endPin.y) / 2;
+
+          // Perpendicular vector
+          const perpX = -dy / dist;
+          const perpY = dx / dist;
+
+          // Fan out curve based on connection index
+          const curveAmount = 40 * this.appState.scale; // Base curve amount
+          const fanOutOffset = fanOutCount > 1
+            ? ((fanOutIndex - (fanOutCount - 1) / 2) / (fanOutCount - 1)) * 30 * this.appState.scale
+            : 0;
+
+          const controlX = midX + perpX * curveAmount;
+          const controlY = midY + perpY * curveAmount + fanOutOffset;
+
+          ctx.moveTo(startPin.x, startPin.y);
+          ctx.quadraticCurveTo(controlX, controlY, endPin.x, endPin.y);
+        } else {
+          // Fallback to straight line if pins are at same position
+          ctx.moveTo(startPin.x, startPin.y);
+          ctx.lineTo(endPin.x, endPin.y);
+        }
+      } else {
+        // Straight line
         ctx.moveTo(startPin.x, startPin.y);
         ctx.lineTo(endPin.x, endPin.y);
-        ctx.stroke();
       }
+
+      ctx.stroke();
     });
   }
 

@@ -79,3 +79,4 @@ handleKey4();
 console.log("\nFinal state:", { currentTool, currentFamily, currentTextType });
 
 
+

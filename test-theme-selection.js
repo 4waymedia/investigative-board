@@ -87,3 +87,4 @@ console.log("Final palette:", palette);
 console.log(`selectedColor: ${selectedColor}`);
 
 
+

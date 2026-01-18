@@ -101,3 +101,4 @@ console.log("Text elements:", textElements.length);
 console.log("Selected text:", selectedTextIndex !== null ? `index ${selectedTextIndex}` : "none");
 
 
+

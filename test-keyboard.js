@@ -120,3 +120,4 @@ console.log(`Cycled text type to: ${currentTextType}`);
 console.log("\nFinal state - currentFamily:", currentFamily, "currentTypeId:", currentTypeId, "currentTool:", currentTool, "currentTextType:", currentTextType);
 
 
+

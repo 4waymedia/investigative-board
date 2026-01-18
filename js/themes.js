@@ -100,6 +100,8 @@ function applyTheme(themeId) {
   // Apply color palette
   if (theme.colors && theme.colors.length > 0) {
     palette = [...theme.colors];
+    // Update global DEFAULT_COLORS so toolbar/tray use theme colors
+    window.DEFAULT_COLORS = [...theme.colors];
     // Ensure selectedColor is valid for new theme
     if (!palette.find(c => c.value === selectedColor)) {
       selectedColor = palette[0].value;
@@ -110,8 +112,10 @@ function applyTheme(themeId) {
   applyThemeBackground(theme);
 
   // Update UI elements that depend on theme
-  renderMenu();
-  renderSelectedPinInfo();
+  // Note: renderMenu() is not called here because ToolbarManager handles its own rendering
+  if (window.app && window.app.updatePinInfo) {
+    window.app.updatePinInfo();
+  }
   draw();
 }
 
@@ -269,6 +273,35 @@ async function loadThemes() {
         }
       }
 
+      // Special handling for known themes
+      if (key === 'G1') {
+        // Investigative Noir
+        themeObj.colors = [
+          { name: "Black", value: "#000000" },
+          { name: "Dark Gray", value: "#1A1A1A" },
+          { name: "Gray", value: "#4A4A4A" },
+          { name: "Orange", value: "#FF4500" },
+          { name: "Gold", value: "#FFD700" },
+          { name: "Sky Blue", value: "#00BFFF" },
+          { name: "Forest Green", value: "#228B22" },
+          { name: "Blue Violet", value: "#8A2BE2" },
+          { name: "Crimson", value: "#DC143C" }
+        ];
+      } else if (key === 'G2') {
+        // Sci-Fi Futuristic
+        themeObj.colors = [
+          { name: "Dark Blue", value: "#0A0F1A" },
+          { name: "Dark Blue Gray", value: "#1C2331" },
+          { name: "Cyan", value: "#00FFFF" },
+          { name: "Magenta", value: "#FF00FF" },
+          { name: "Lime Green", value: "#00FF00" },
+          { name: "Yellow", value: "#FFFF00" },
+          { name: "Hot Pink", value: "#FF69B4" },
+          { name: "Indigo", value: "#4B0082" },
+          { name: "Light Sea Green", value: "#20B2AA" }
+        ];
+      }
+
       // Add to THEMES array if not already present
       const existingIndex = THEMES.findIndex(t => t.id === key);
       if (existingIndex >= 0) {
@@ -279,6 +312,12 @@ async function loadThemes() {
     });
 
     console.log(`Loaded ${Object.keys(themeData).length} themes from themes.json`);
+
+    // Apply default theme colors to global DEFAULT_COLORS
+    const defaultTheme = THEMES.find(t => t.id === 'default');
+    if (defaultTheme && defaultTheme.colors) {
+      window.DEFAULT_COLORS = [...defaultTheme.colors];
+    }
   } catch (error) {
     console.error('Error loading themes:', error);
   }
@@ -370,6 +409,8 @@ function drawThemeBackground() {
  * @param {Object} theme - Theme object with background property
  */
 function applyThemeBackground(theme) {
+  const canvasContainer = document.getElementById("canvas-container");
+
   if (!theme || !theme.background || !canvasContainer) {
     // Set default background
     if (canvasContainer) {

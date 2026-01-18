@@ -63,3 +63,4 @@ currentTextType = "rectangle";
 renderTypeBar();
 
 
+

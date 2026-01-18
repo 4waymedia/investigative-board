@@ -497,7 +497,7 @@ function defaultDrawLabel(ctx, pin, metrics, scr, s) {
   ctx.fillText(pin.label, scr.x, scr.y + yOffset + 2 * s);
 
   // Text
-  ctx.fillStyle = window._currentThemeTextColor || "#ffffff";
+  ctx.fillStyle = pin.textColor || window._currentThemeTextColor || "#ffffff";
   ctx.fillText(pin.label, scr.x, scr.y + yOffset);
 
   ctx.restore();
@@ -931,7 +931,7 @@ registerShape("business-building", {
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillText(textToShow, scr.x, scr.y + offset + 2 * s);
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = pin.textColor || "#ffffff";
       ctx.fillText(textToShow, scr.x, scr.y + offset);
       descriptionOffset = 18 * s; // Space for next line
     }
@@ -943,7 +943,7 @@ registerShape("business-building", {
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.8)";
       ctx.fillText(pin.description, scr.x, scr.y + offset + 2 * s);
-      ctx.fillStyle = "#aaaaaa";
+      ctx.fillStyle = pin.textColor || "#aaaaaa";
       ctx.fillText(pin.description, scr.x, scr.y + offset);
     }
 
@@ -954,7 +954,7 @@ registerShape("business-building", {
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillText(pin.description, scr.x, scr.y + offset + 2 * s);
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = pin.textColor || "#ffffff";
       ctx.fillText(pin.description, scr.x, scr.y + offset);
     }
   },
@@ -969,7 +969,8 @@ function drawPinShape(ctx, pin, metrics, index) {
     : metrics;
   const mergedMetrics = { ...fullMetrics, ...metrics }; // Passed metrics override getPinMetrics
 
-  const scr = window.worldToScreen(pin.x, pin.y);
+  // Use world coordinates directly since canvas is already transformed
+  const scr = { x: pin.x, y: pin.y };
 
   // SECOND: Try normal renderer (will draw on top if it works)
   const renderer = window.shapeRenderers?.get(mergedMetrics.shape);

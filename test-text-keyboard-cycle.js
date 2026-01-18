@@ -60,3 +60,4 @@ handleKey4();
 console.log("\nFinal state:", { currentTool, currentTextType });
 
 
+

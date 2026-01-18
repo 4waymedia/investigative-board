@@ -56,3 +56,4 @@ handleKeyDown({ shiftKey: false, key: "1", preventDefault: () => {} });
 console.log(`\nFinal selectedColor: ${selectedColor}`);
 
 
+
