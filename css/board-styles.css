@@ -937,11 +937,13 @@ canvas, #canvas-container {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   transition: transform 0.2s, background 0.2s;
 }
-.radial-item:hover {
+.radial-item:hover,
+.radial-item.selected {
   background: #2383e0;
   transform: scale(1.1);
 }
-.radial-item.delete:hover {
+.radial-item.delete:hover,
+.radial-item.delete.selected {
   background: #f85149;
 }
 

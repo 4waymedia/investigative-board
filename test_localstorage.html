@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>localStorage Test</title>
+</head>
+<body>
+    <h1>localStorage Test</h1>
+    <button id="testBtn">Test localStorage Save/Load</button>
+    <div id="output"></div>
+    
+    <script>
+        const STORAGE_KEY = "msc-investigativeboard";
+        
+        function saveAppState(appState) {
+            console.log("saveAppState called with:", appState);
+            const stateData = {
+                document: {
+                    pins: appState.pins || [],
+                    connections: appState.connections || []
+                },
+                view: {
+                    scale: appState.scale || 1,
+                    offsetX: appState.offsetX || 0,
+                    offsetY: appState.offsetY || 0
+                }
+            };
+            
+            try {
+                const jsonString = JSON.stringify(stateData);
+                localStorage.setItem(STORAGE_KEY, jsonString);
+                console.log("Saved to localStorage:", jsonString);
+                return true;
+            } catch (e) {
+                console.error("Save failed:", e);
+                return false;
+            }
+        }
+        
+        function loadAppState() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    console.log("Loaded from localStorage:", parsed);
+                    return parsed;
+                }
+            } catch (e) {
+                console.error("Load failed:", e);
+            }
+            return null;
+        }
+        
+        document.getElementById('testBtn').addEventListener('click', () => {
+            const output = document.getElementById('output');
+            
+            // Create test data
+            const testAppState = {
+                pins: [{ id: 'test_pin_1', x: 100, y: 200, color: '#ff0000' }],
+                connections: [],
+                scale: 1.5,
+                offsetX: 50,
+                offsetY: 75
+            };
+            
+            output.innerHTML += "<p>Testing save...</p>";
+            const saveResult = saveAppState(testAppState);
+            output.innerHTML += `<p>Save result: ${saveResult}</p>`;
+            
+            output.innerHTML += "<p>Testing load...</p>";
+            const loaded = loadAppState();
+            if (loaded) {
+                output.innerHTML += `<p>Loaded pins: ${loaded.document?.pins?.length || 0}</p>`;
+                output.innerHTML += `<p>Loaded connections: ${loaded.document?.connections?.length || 0}</p>`;
+            } else {
+                output.innerHTML += "<p>Load failed - no data</p>";
+            }
+        });
+    </script>
+</body>
+</html>

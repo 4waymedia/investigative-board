@@ -235,6 +235,9 @@ function closeLoadModal() {
 function openRadialMenu(pinIndex, screenX, screenY) {
   console.log("🎯 openRadialMenu called with pinIndex:", pinIndex, "screenX:", screenX, "screenY:", screenY);
 
+  // Set global flag that menu is open
+  window.isRadialMenuOpen = true;
+
   // Check if app is available
   if (!window.app) {
     console.error("❌ window.app not available - app not initialized yet");
@@ -246,12 +249,43 @@ function openRadialMenu(pinIndex, screenX, screenY) {
     radialMenuEl = document.createElement("div");
     radialMenuEl.id = "radial-menu";
     radialMenuEl.className = "radial-menu";
+    radialMenuEl.tabIndex = -1; // Make focusable
 
     // Prevent context menu on radial menu
     radialMenuEl.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
       return false;
+    });
+
+    // Add global wheel event handler to capture all wheel events when menu is open
+    window._radialMenuWheelHandler = (e) => {
+      if (window.isRadialMenuOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY > 0 ? 1 : -1;
+        selectRadialMenuItem(delta);
+      }
+    };
+    document.addEventListener("wheel", window._radialMenuWheelHandler, { capture: true });
+
+    // Add wheel event handler for menu selection (backup)
+    radialMenuEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY > 0 ? 1 : -1;
+      selectRadialMenuItem(delta);
+    });
+
+    // Add keyboard handler for confirmation
+    radialMenuEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        executeSelectedRadialItem();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        closeRadialMenu();
+      }
     });
 
     document.body.appendChild(radialMenuEl);
@@ -261,6 +295,9 @@ function openRadialMenu(pinIndex, screenX, screenY) {
   closeRadialMenu();
   window.app.setSelectedPin(pinIndex);
   const pin = window.app.appState.pins[pinIndex];
+
+  // Store the pin index for wheel selection
+  window.currentRadialPinIndex = pinIndex;
 
   console.log("🎯 Opening radial menu for pin:", pin);
 
@@ -317,7 +354,12 @@ function openRadialMenu(pinIndex, screenX, screenY) {
     });
   }
 
+  // Store items globally for wheel selection
+  window.currentRadialItems = items;
+  window.currentRadialSelection = 0; // Start with first item selected
+
   radialMenuEl.style.display = "block";
+  radialMenuEl.focus(); // Focus for keyboard events
   console.log("🎯 Radial menu display set to block, element:", radialMenuEl);
 
     items.forEach((item, i) => {
@@ -332,6 +374,10 @@ function openRadialMenu(pinIndex, screenX, screenY) {
     const itemEl = document.createElement("div");
     itemEl.className =
       "radial-item" + (item.className ? " " + item.className : "");
+    // Add selected class if this is the currently selected item
+    if (i === window.currentRadialSelection) {
+      itemEl.className += " selected";
+    }
     itemEl.innerHTML = item.icon;
     itemEl.style.left = x + "px";
     itemEl.style.top = y + "px";
@@ -362,10 +408,66 @@ function openRadialMenu(pinIndex, screenX, screenY) {
 }
 
 /**
+ * Select radial menu item using wheel (delta: 1 for next, -1 for previous)
+ */
+function selectRadialMenuItem(delta) {
+  if (!window.currentRadialItems || window.currentRadialItems.length === 0) return;
+
+  // Update selection
+  window.currentRadialSelection += delta;
+  if (window.currentRadialSelection < 0) {
+    window.currentRadialSelection = window.currentRadialItems.length - 1;
+  } else if (window.currentRadialSelection >= window.currentRadialItems.length) {
+    window.currentRadialSelection = 0;
+  }
+
+  // Update visual selection
+  updateRadialSelection();
+}
+
+/**
+ * Update visual selection in radial menu
+ */
+function updateRadialSelection() {
+  if (!radialMenuEl) return;
+
+  const items = radialMenuEl.querySelectorAll('.radial-item');
+  items.forEach((item, index) => {
+    if (index === window.currentRadialSelection) {
+      item.classList.add('selected');
+    } else {
+      item.classList.remove('selected');
+    }
+  });
+}
+
+/**
+ * Execute selected radial menu item
+ */
+function executeSelectedRadialItem() {
+  if (!window.currentRadialItems || !window.currentRadialPinIndex) return;
+
+  const selectedItem = window.currentRadialItems[window.currentRadialSelection];
+  if (selectedItem) {
+    closeRadialMenu();
+    executeRadialAction(selectedItem.action, window.currentRadialPinIndex);
+  }
+}
+
+/**
  * Close the radial menu
  */
 function closeRadialMenu() {
   if (!radialMenuEl) return; // Guard against null
+
+  // Clear global flag and remove global wheel handler
+  window.isRadialMenuOpen = false;
+  window.currentRadialSelection = -1;
+
+  if (window._radialMenuWheelHandler) {
+    document.removeEventListener("wheel", window._radialMenuWheelHandler, { capture: true });
+    window._radialMenuWheelHandler = null;
+  }
 
   radialMenuEl.innerHTML = "";
   radialMenuEl.style.display = "none";
@@ -871,6 +973,9 @@ function setupUIHandlers() {
 
 // Expose UI functions globally
 window.openRadialMenu = openRadialMenu;
+window.closeRadialMenu = closeRadialMenu;
+window.selectRadialMenuItem = selectRadialMenuItem;
+window.executeSelectedRadialItem = executeSelectedRadialItem;
 window.closeRadialMenu = closeRadialMenu;
 // Use ModalManager's openPinModal instead of the old ui.js version
 window.openPinModal = (index) => window.app?.modalManager?.openPinModal(index);

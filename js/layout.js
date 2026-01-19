@@ -2,8 +2,19 @@
 // LAYOUT SYSTEM MODULE - Layout algorithms and worker management
 // ============================================================================
 
+// Layout Strategy Registry - Strategy Pattern for extensible layouts
+const LAYOUT_STRATEGIES = {
+  timeline: layoutTimeline,
+  default: (mode) => startLayoutWorker(mode),
+  force: (mode) => startLayoutWorker(mode),
+  // Future layouts can be added here:
+  // grid: layoutGrid,
+  // circle: layoutCircle,
+  // hierarchical: layoutHierarchical
+};
+
 /**
- * Apply a layout algorithm to the pins
+ * Apply a layout algorithm to the pins using Strategy Pattern
  */
 function applyLayout(mode) {
   if (isWorkerProcessing) return; // Prevent concurrent requests
@@ -13,14 +24,13 @@ function applyLayout(mode) {
     stopLayout();
   }
 
-  if (mode === "timeline") {
-    layoutTimeline();
-    return;
-  }
-
-  // For force-directed layouts, use the web worker
-  startLayoutWorker(mode);
+  // Get the appropriate strategy or fall back to default
+  const strategy = LAYOUT_STRATEGIES[mode] || LAYOUT_STRATEGIES.default;
+  strategy(mode);
 }
+
+// Request ID counter for preventing race conditions
+let currentRequestId = 0;
 
 /**
  * Start the layout worker for force-directed layouts
@@ -39,9 +49,33 @@ function startLayoutWorker(layoutMode = "default") {
   isWorkerProcessing = true;
   isLayoutSimulating = true;
 
-  // Send layout request to worker
+  // Generate unique request ID
+  const requestId = ++currentRequestId;
+
+  // Set up error handling and timeout
+  const timeoutId = setTimeout(() => {
+    if (isWorkerProcessing) {
+      console.error("Worker timeout - resetting layout state");
+      isWorkerProcessing = false;
+      isLayoutSimulating = false;
+    }
+  }, 30000); // 30 second timeout
+
+  // Add error handler to worker
+  const errorHandler = (error) => {
+    console.error("Worker error:", error);
+    clearTimeout(timeoutId);
+    isWorkerProcessing = false;
+    isLayoutSimulating = false;
+    layoutWorker.removeEventListener('error', errorHandler);
+  };
+
+  layoutWorker.addEventListener('error', errorHandler);
+
+  // Send layout request to worker with request ID
   layoutWorker.postMessage({
     command: "start",
+    requestId: requestId,
     pins: pins.map((p, index) => ({
       index,
       x: p.x,
@@ -55,6 +89,10 @@ function startLayoutWorker(layoutMode = "default") {
     })),
     layoutMode: layoutMode
   });
+
+  // Store timeout ID for cleanup
+  layoutWorker._currentTimeoutId = timeoutId;
+  layoutWorker._currentRequestId = requestId;
 }
 
 /**
@@ -112,9 +150,11 @@ function layoutTimeline() {
   const maxX = Math.max(...parsedPins.map(tp => tp.pin.x));
   const lowestY = Math.max(...parsedPins.map(tp => tp.pin.y));
 
-  const horizontalPaddingWorld = 100 / scale;
-  const footerMarginWorld = 120 / scale;
-  const offsetWorld = 80 / scale;
+  // Use fixed world unit values instead of scale-dependent calculations
+  // This ensures consistent layout regardless of zoom level
+  const horizontalPaddingWorld = 100; // World units
+  const footerMarginWorld = 120; // World units
+  const offsetWorld = 80; // World units
 
   timelinePins = parsedPins;
   timelineY = lowestY + footerMarginWorld;
@@ -162,10 +202,13 @@ function parseDate(dateStr) {
     const match = clean.match(format);
     if (match) {
       try {
-        if (match.length === 4) { // YYYY-MM-DD
+        if (format === /^(\d{4})-(\d{2})-(\d{2})$/) { // YYYY-MM-DD
           dateObj = new Date(match[1], match[2] - 1, match[3]);
           timestamp = dateObj.getTime();
-        } else if (match.length === 5) { // Month DD, YYYY
+        } else if (format === /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/) { // MM/DD/YYYY or MM-DD-YYYY
+          dateObj = new Date(match[3], match[1] - 1, match[2]);
+          timestamp = dateObj.getTime();
+        } else if (format === /^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/) { // Month DD, YYYY
           const monthNames = ["jan", "feb", "mar", "apr", "may", "jun",
                              "jul", "aug", "sep", "oct", "nov", "dec"];
           const month = monthNames.indexOf(match[1].toLowerCase().substring(0, 3));
@@ -173,19 +216,17 @@ function parseDate(dateStr) {
             dateObj = new Date(match[3], month, match[2]);
             timestamp = dateObj.getTime();
           }
-        } else if (match.length === 3) { // Month YYYY or YYYY only
-          if (match[2]) { // Month YYYY
-            const monthNames = ["jan", "feb", "mar", "apr", "may", "jun",
-                               "jul", "aug", "sep", "oct", "nov", "dec"];
-            const month = monthNames.indexOf(match[1].toLowerCase().substring(0, 3));
-            if (month !== -1) {
-              dateObj = new Date(match[2], month, 1);
-              timestamp = dateObj.getTime();
-            }
-          } else { // YYYY only
-            dateObj = new Date(match[1], 0, 1);
+        } else if (format === /^([A-Za-z]+)\s+(\d{4})$/) { // Month YYYY
+          const monthNames = ["jan", "feb", "mar", "apr", "may", "jun",
+                             "jul", "aug", "sep", "oct", "nov", "dec"];
+          const month = monthNames.indexOf(match[1].toLowerCase().substring(0, 3));
+          if (month !== -1) {
+            dateObj = new Date(match[2], month, 1);
             timestamp = dateObj.getTime();
           }
+        } else if (format === /^(\d{4})$/) { // YYYY only
+          dateObj = new Date(match[1], 0, 1);
+          timestamp = dateObj.getTime();
         }
         if (dateObj && !isNaN(timestamp)) {
           break;

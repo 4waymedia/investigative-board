@@ -6,8 +6,187 @@
 // CONSTANTS
 // ============================================================================
 
-const STORAGE_KEY = "investigativeBoardState"; // localStorage key for persistence
-const MAX_HISTORY = 100; // Maximum undo history entries
+// Use constants from core/constants.js for consistency
+const STORAGE_KEY = window.STORAGE_KEY || "investigativeBoardState";
+const MAX_HISTORY = window.MAX_HISTORY || 100;
+
+// ============================================================================
+// ID GENERATION UTILITY
+// ============================================================================
+
+/**
+ * Generates a unique identifier for state objects
+ * @returns {string} A unique UUID
+ */
+function generateId() {
+  // Use the modern Web Crypto API for high-entropy IDs
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older environments
+  return Math.random().toString(36).substring(2, 15) +
+         Math.random().toString(36).substring(2, 15);
+}
+
+// ============================================================================
+// OBSERVER PATTERN FOR STATE CHANGES
+// ============================================================================
+
+/**
+ * Simple Observer pattern to decouple state changes from UI rendering
+ */
+class StateChangeObserver {
+  constructor() {
+    this.observers = new Set();
+  }
+
+  /**
+   * Subscribe to state changes
+   * @param {Function} callback - Function to call when state changes
+   * @returns {Function} Unsubscribe function
+   */
+  subscribe(callback) {
+    this.observers.add(callback);
+    return () => this.observers.delete(callback);
+  }
+
+  /**
+   * Notify all observers of state changes
+   * @param {Object} changes - Object describing what changed
+   */
+  notify(changes) {
+    this.observers.forEach(callback => {
+      try {
+        callback(changes);
+      } catch (error) {
+        console.error("Error in state change observer:", error);
+      }
+    });
+  }
+}
+
+// Global observer instance
+const stateObserver = new StateChangeObserver();
+
+// ============================================================================
+// DEBOUNCED PERSISTENCE
+// ============================================================================
+
+let saveTimeout;
+function debouncedSave(appState) {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => saveAppState(appState), 1000); // Save to disk 1 second after last change
+}
+
+// ============================================================================
+// REFACTORED HISTORY MANAGEMENT (User's Approach)
+// ============================================================================
+
+/**
+ * Saves the current state to history for undo functionality
+ * Improved with UUID mapping and structuredClone
+ */
+function saveHistory() {
+  if (isLayoutSimulating) toggleForceLayout();
+
+  // Map timeline pins to IDs instead of array indices for stability
+  const serializedTimelinePins = timelinePins.map((tp) => ({
+    pinId: tp.pin.id, // Using stable ID
+    dateStr: tp.dateStr,
+    timestamp: tp.timestamp,
+  }));
+
+  const snapshot = {
+    // structuredClone is faster and more robust than JSON.parse(JSON.stringify())
+    pins: structuredClone(pins),
+    connections: structuredClone(connections),
+    cards: structuredClone(cards),
+    textElements: structuredClone(textElements),
+    timelinePins: serializedTimelinePins,
+    // Include all necessary metadata
+    scale,
+    offsetX,
+    offsetY,
+    timelineActive,
+    timelineY,
+    timelineLeft,
+    timelineRight,
+    selectedColor,
+    palette,
+    tempStartIndex,
+    connectStartIndex,
+    selectedPinIndex
+  };
+
+  history.push(snapshot);
+  if (history.length > MAX_HISTORY) history.shift();
+
+  // Use debounced save for better performance
+  debouncedSave();
+}
+
+/**
+ * Undoes the last action
+ * Restores object references by matching UUIDs
+ */
+function undo() {
+  if (!history.length) return;
+  if (isLayoutSimulating) toggleForceLayout();
+
+  const snapshot = history.pop();
+
+  // Restore primary data arrays
+  pins = snapshot.pins;
+  connections = snapshot.connections;
+  cards = snapshot.cards;
+  textElements = snapshot.textElements;
+
+  // Re-link timeline references using UUIDs
+  timelinePins = (snapshot.timelinePins || [])
+    .map((stp) => {
+      const actualPin = pins.find(p => p.id === stp.pinId);
+      if (actualPin) {
+        return {
+          pin: actualPin,
+          dateStr: stp.dateStr,
+          timestamp: stp.timestamp
+        };
+      }
+      return null;
+    })
+    .filter(tp => tp !== null);
+
+  // Restore other state
+  scale = snapshot.scale;
+  offsetX = snapshot.offsetX;
+  offsetY = snapshot.offsetY;
+  timelineActive = snapshot.timelineActive;
+  timelineY = snapshot.timelineY;
+  timelineLeft = snapshot.timelineLeft;
+  timelineRight = snapshot.timelineRight;
+  selectedColor = snapshot.selectedColor;
+  palette = snapshot.palette;
+  tempStartIndex = snapshot.tempStartIndex;
+  connectStartIndex = snapshot.connectStartIndex;
+  selectedPinIndex = snapshot.selectedPinIndex;
+
+  // Notify observers instead of direct UI calls
+  stateObserver.notify({
+    type: 'undo',
+    changes: {
+      pins: true,
+      connections: true,
+      cards: true,
+      textElements: true,
+      timelinePins: true,
+      view: true,
+      selection: true
+    }
+  });
+
+  // Debounced save after undo
+  debouncedSave();
+}
 
 // ============================================================================
 // STATE PERSISTENCE
@@ -15,22 +194,18 @@ const MAX_HISTORY = 100; // Maximum undo history entries
 
 /**
  * Saves the current application state to localStorage
+ * Updated to use UUIDs for timeline mapping
  */
 function saveState() {
   if (!window.localStorage) return;
-
-  // Stop simulation before saving a snapshot
   if (isLayoutSimulating) toggleForceLayout();
 
-  // Convert timelinePins to a serializable format (store pin indices instead of references)
-  const serializedTimelinePins = timelinePins.map((tp) => {
-    const pinIndex = pins.indexOf(tp.pin);
-    return {
-      pinIndex: pinIndex !== -1 ? pinIndex : null,
-      dateStr: tp.dateStr,
-      timestamp: tp.timestamp,
-    };
-  });
+  // Use the stable pin ID instead of the array index
+  const serializedTimelinePins = timelinePins.map((tp) => ({
+    pinId: tp.pin.id,
+    dateStr: tp.dateStr,
+    timestamp: tp.timestamp,
+  }));
 
   const state = {
     pins,
@@ -54,16 +229,21 @@ function saveState() {
     currentTypeId,
     connectionType,
     currentThemeId,
+    // Include custom theme data
+    customThemes: window.themeManager ? window.themeManager.themes.filter(t => t.isCustom) : [],
+    customIcons: window.themeManager ? window.themeManager.customIcons : {},
   };
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
-    console.error("Error saving state to localStorage:", error);
+    console.error("Error saving state:", error);
   }
 }
 
 /**
  * Loads the application state from localStorage
+ * Updated to use UUIDs for timeline mapping
  * @returns {boolean} True if state was loaded successfully
  */
 function loadState() {
@@ -85,62 +265,93 @@ function loadState() {
       offsetY = state.offsetY || 0;
 
       timelineActive = state.timelineActive || false;
-      // Restore timelinePins - re-link pin references using indices
-      const restoredTimelinePins = (state.timelinePins || [])
-        .map((stp) => {
-          // Check if it's the old format (has pin property) or new format (has pinIndex)
-          if (stp.pin && typeof stp.pin === "object") {
-            // Old format - try to find the pin by matching properties
-            const pinIndex = pins.findIndex(
-              (p) =>
+
+      // Ensure pins have UUIDs (add if missing for backward compatibility)
+      pins.forEach(pin => {
+        if (!pin.id) {
+          pin.id = generateId();
+        }
+      });
+
+      // Restore timelinePins using UUIDs instead of indices
+      if (state.timelinePins && state.timelinePins.length > 0) {
+        timelinePins = state.timelinePins
+          .map((stp) => {
+            // New format with pinId (UUID-based)
+            if (stp.pinId) {
+              const pin = pins.find(p => p.id === stp.pinId);
+              if (pin) {
+                return {
+                  pin: pin,
+                  dateStr: stp.dateStr,
+                  timestamp: stp.timestamp,
+                };
+              }
+            }
+            // Backward compatibility: old format with pinIndex
+            else if (typeof stp.pinIndex === "number" && pins[stp.pinIndex]) {
+              return {
+                pin: pins[stp.pinIndex],
+                dateStr: stp.dateStr,
+                timestamp: stp.timestamp,
+              };
+            }
+            // Oldest format with pin object properties
+            else if (stp.pin && typeof stp.pin === "object") {
+              const pin = pins.find(p =>
                 p &&
                 stp.pin &&
                 p.x === stp.pin.x &&
                 p.y === stp.pin.y &&
                 (p.label || "") === (stp.pin.label || "")
-            );
-            if (pinIndex !== -1) {
-              return {
-                pin: pins[pinIndex],
-                dateStr: stp.dateStr,
-                timestamp: stp.timestamp,
-              };
+              );
+              if (pin) {
+                return {
+                  pin: pin,
+                  dateStr: stp.dateStr,
+                  timestamp: stp.timestamp,
+                };
+              }
             }
-          } else if (
-            typeof stp.pinIndex === "number" &&
-            pins[stp.pinIndex]
-          ) {
-            // New format - use pinIndex
-            return {
-              pin: pins[stp.pinIndex],
-              dateStr: stp.dateStr,
-              timestamp: stp.timestamp,
-            };
-          }
-          return null;
-        })
-        .filter((tp) => tp !== null && tp.pin !== undefined);
-      timelinePins = restoredTimelinePins;
+            return null;
+          })
+          .filter(tp => tp !== null && tp.pin !== undefined);
+      }
+
       timelineY = state.timelineY || 0;
       timelineLeft = state.timelineLeft || 0;
       timelineRight = state.timelineRight || 0;
 
-      selectedColor = state.selectedColor || palette[0].value;
+      selectedColor = state.selectedColor || (palette ? palette[0]?.value : "#58a6ff");
       palette = state.palette || defaultColors;
       nextId = state.nextId || nextId;
 
-      selectedTypeByFamily =
-        state.selectedTypeByFamily || selectedTypeByFamily;
+      selectedTypeByFamily = state.selectedTypeByFamily || selectedTypeByFamily;
       currentFamily = state.currentFamily || currentFamily;
       currentTypeId = state.currentTypeId || currentTypeId;
       connectionType = state.connectionType || "straight";
 
-      // Store saved theme ID to apply after themes are loaded
-      // (Themes may not be loaded yet, so we'll apply it later)
+      // Store saved theme info to apply after themes are loaded
       if (state.currentThemeId) {
-        // Store in a variable that will be used after loadThemes()
-        window._savedThemeId = state.currentThemeId;
-        window._savedSelectedColor = state.selectedColor;
+        window._pendingThemeApplication = {
+          themeId: state.currentThemeId,
+          selectedColor: state.selectedColor
+        };
+      }
+
+      // Restore custom themes and icons
+      if (window.themeManager) {
+        if (state.customThemes && Array.isArray(state.customThemes)) {
+          state.customThemes.forEach(theme => {
+            // Avoid duplicates
+            if (!window.themeManager.themes.find(t => t.id === theme.id)) {
+              window.themeManager.themes.push(theme);
+            }
+          });
+        }
+        if (state.customIcons && typeof state.customIcons === 'object') {
+          window.themeManager.customIcons = { ...state.customIcons };
+        }
       }
 
       // Update area containment after loading
@@ -161,125 +372,159 @@ function loadState() {
 
 /**
  * Saves the current state to history for undo functionality
+ * @param {AppState} appState - The AppState instance
  */
-function saveHistory() {
-  // Stop simulation before saving a snapshot
-  if (isLayoutSimulating) toggleForceLayout();
+function saveHistory(appState) {
+  if (!appState) {
+    console.warn("No appState provided to saveHistory");
+    return;
+  }
 
-  // Serialize timelinePins for history (store pin indices instead of references)
-  const serializedTimelinePins = timelinePins.map((tp) => {
-    const pinIndex = pins.indexOf(tp.pin);
-    return {
-      pinIndex: pinIndex !== -1 ? pinIndex : null,
-      dateStr: tp.dateStr,
-      timestamp: tp.timestamp,
-    };
-  });
+  // Stop simulation before saving a snapshot (synchronous check)
+  if (appState.isLayoutSimulating) {
+    if (typeof toggleForceLayout === 'function') {
+      toggleForceLayout();
+      // Small delay to ensure synchronous completion
+      setTimeout(() => saveHistoryInternal(appState), 10);
+    } else {
+      saveHistoryInternal(appState);
+    }
+    return;
+  }
 
+  saveHistoryInternal(appState);
+}
+
+/**
+ * Internal function to save history snapshot
+ * @param {AppState} appState - The AppState instance
+ */
+function saveHistoryInternal(appState) {
+  // Serialize timelinePins using UUIDs for robust linking
+  const serializedTimelinePins = appState.timelinePins.map((tp) => ({
+    pinId: tp.pin.id, // Use UUID instead of index for stability
+    dateStr: tp.dateStr,
+    timestamp: tp.timestamp,
+  }));
+
+  // Use structuredClone for better performance than JSON.parse(JSON.stringify())
   const snapshot = {
-    pins: JSON.parse(JSON.stringify(pins)),
-    connections: JSON.parse(JSON.stringify(connections)),
-    cards: JSON.parse(JSON.stringify(cards)),
-    textElements: JSON.parse(JSON.stringify(textElements)),
-    tempStartIndex,
-    connectStartIndex,
-    selectedPinIndex,
-    timelineActive,
-    timelinePins: serializedTimelinePins,
-    timelineY,
-    timelineLeft,
-    timelineRight,
-    scale,
-    offsetX,
-    offsetY,
+    document: structuredClone(appState.document),
+    view: structuredClone(appState.view),
+    session: {
+      tempStartIndex: appState.session.tempStartIndex,
+      connectStartIndex: appState.session.connectStartIndex,
+      selectedPinIndex: appState.session.selectedPinIndex,
+      timelineActive: appState.document.timelineActive,
+      timelinePins: serializedTimelinePins,
+      timelineY: appState.document.timelineY,
+      timelineLeft: appState.document.timelineLeft,
+      timelineRight: appState.document.timelineRight,
+    }
   };
-  history.push(snapshot);
-  if (history.length > MAX_HISTORY) history.shift();
 
-  saveState(); // Crucial: Save to local storage after every history snapshot
+  appState.history.push(snapshot);
+  if (appState.history.length > MAX_HISTORY) {
+    appState.history.shift();
+  }
+
+  // Use debounced save instead of immediate save for better performance
+  debouncedSave(appState);
 }
 
 /**
  * Undoes the last action by restoring the previous state from history
+ * @param {AppState} appState - The AppState instance
  */
-function undo() {
-  if (!history.length) return;
-  // Stop simulation when restoring state
-  if (isLayoutSimulating) toggleForceLayout();
+function undo(appState) {
+  if (!appState || !appState.history.length) return;
 
-  const snapshot = history.pop();
-  pins = snapshot.pins;
-  connections = snapshot.connections;
-  cards = snapshot.cards;
-  textElements = snapshot.textElements;
-  tempStartIndex = snapshot.tempStartIndex;
-  connectStartIndex = snapshot.connectStartIndex;
-  selectedPinIndex = snapshot.selectedPinIndex;
-  timelineActive = snapshot.timelineActive;
-  // Restore timelinePins from history - re-link pin references using indices
-  timelinePins = (snapshot.timelinePins || [])
-    .map((stp) => {
-      if (
-        typeof stp.pinIndex === "number" &&
-        snapshot.pins &&
-        snapshot.pins[stp.pinIndex]
-      ) {
-        // New format - use pinIndex (pins haven't been restored yet, so use snapshot.pins)
-        // After pins are restored, we'll re-link them
-        return {
-          pinIndex: stp.pinIndex,
-          dateStr: stp.dateStr,
-          timestamp: stp.timestamp,
-        };
-      }
-      // Old format - try to match by properties
-      if (stp.pin && typeof stp.pin === "object" && snapshot.pins) {
-        const pinIndex = snapshot.pins.findIndex(
-          (p) =>
-            p &&
-            stp.pin &&
-            p.x === stp.pin.x &&
-            p.y === stp.pin.y &&
-            (p.label || "") === (stp.pin.label || "")
-        );
-        if (pinIndex !== -1) {
+  // Stop simulation when restoring state
+  if (appState.isLayoutSimulating) {
+    if (typeof toggleForceLayout === 'function') {
+      toggleForceLayout();
+      // Small delay to ensure synchronous completion
+      setTimeout(() => undoInternal(appState), 10);
+    } else {
+      undoInternal(appState);
+    }
+    return;
+  }
+
+  undoInternal(appState);
+}
+
+/**
+ * Internal function to perform undo operation
+ * @param {AppState} appState - The AppState instance
+ */
+function undoInternal(appState) {
+  const snapshot = appState.history.pop();
+
+  // Restore document and view state
+  if (snapshot.document) {
+    appState.document = structuredClone(snapshot.document);
+  }
+  if (snapshot.view) {
+    appState.view = structuredClone(snapshot.view);
+  }
+
+  // Restore session state
+  if (snapshot.session) {
+    appState.session.tempStartIndex = snapshot.session.tempStartIndex;
+    appState.session.connectStartIndex = snapshot.session.connectStartIndex;
+    appState.session.selectedPinIndex = snapshot.session.selectedPinIndex;
+  }
+
+  // Restore timelinePins using UUIDs for robust linking
+  if (snapshot.session && snapshot.session.timelinePins) {
+    appState.timelinePins = snapshot.session.timelinePins
+      .map((stp) => {
+        // New format with pinId (UUID-based)
+        if (stp.pinId) {
+          const pin = appState.pins.find(p => p.id === stp.pinId);
+          if (pin) {
+            return {
+              pin: pin,
+              dateStr: stp.dateStr,
+              timestamp: stp.timestamp,
+            };
+          }
+        }
+        // Backward compatibility: old format with pinIndex
+        else if (typeof stp.pinIndex === "number" && appState.pins[stp.pinIndex]) {
           return {
-            pinIndex,
+            pin: appState.pins[stp.pinIndex],
             dateStr: stp.dateStr,
             timestamp: stp.timestamp,
           };
         }
-      }
-      return null;
-    })
-    .filter((tp) => tp !== null);
-
-  // Now re-link timelinePins to actual pins after pins array is restored
-  timelinePins = timelinePins
-    .map((stp) => {
-      if (typeof stp.pinIndex === "number" && pins[stp.pinIndex]) {
-        return {
-          pin: pins[stp.pinIndex],
-          dateStr: stp.dateStr,
-          timestamp: stp.timestamp,
-        };
-      }
-      return null;
-    })
-    .filter((tp) => tp !== null && tp.pin !== undefined);
-
-  timelineY = snapshot.timelineY;
-  timelineLeft = snapshot.timelineLeft;
-  timelineRight = snapshot.timelineRight;
-  scale = snapshot.scale;
-  offsetX = snapshot.offsetX;
-  offsetY = snapshot.offsetY;
-  renderCards();
-  if (window.app && window.app.updatePinInfo) {
-    window.app.updatePinInfo();
+        return null;
+      })
+      .filter(tp => tp !== null && tp.pin !== undefined);
   }
-  saveState(); // Save state after undoing
-  draw();
+
+  // Clear transient session state after undo
+  appState.session.selectedPins = [];
+  appState.session.selectedTextIndex = null;
+  appState.session.connectStartIndex = null;
+  appState.session.connectMousePos = null;
+  appState.session.marqueeStart = null;
+  appState.session.marqueeEnd = null;
+
+  // Notify observers of state changes (decoupled from direct UI calls)
+  stateObserver.notify({
+    type: 'undo',
+    changes: {
+      document: true,
+      view: true,
+      session: true,
+      timelinePins: true
+    }
+  });
+
+  // Use debounced save instead of immediate save
+  debouncedSave(appState);
 }
 
 // ============================================================================
@@ -294,8 +539,33 @@ function updateAreaContainment() {
   // This function would recalculate which pins are contained within area pins
 }
 
+/**
+ * Applies any pending theme that was loaded from state but couldn't be applied until themes were loaded
+ */
+function applyPendingTheme() {
+  if (window._pendingThemeApplication && typeof applySavedThemeWithColor === 'function') {
+    const { themeId, selectedColor } = window._pendingThemeApplication;
+    delete window._pendingThemeApplication;
+    applySavedThemeWithColor(themeId, selectedColor);
+  }
+}
+
 // ============================================================================
 // APPSTATE INTEGRATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Internal debounced save function
+ */
+function debouncedSave() {
+  clearTimeout(window._saveTimeout);
+  window._saveTimeout = setTimeout(() => {
+    saveState();
+  }, 1000); // Save to disk 1 second after last change
+}
+
+// ============================================================================
+// APPSTATE INTEGRATION FUNCTIONS (for future migration)
 // ============================================================================
 
 /**
@@ -308,13 +578,22 @@ function saveAppState(appState) {
     return;
   }
 
+  console.log("💾 saveAppState called - preparing to save...");
+
   const stateData = appState.toSerializable();
+  console.log("💾 Serialized state data:", {
+    pins: stateData.pins?.length || 0,
+    connections: stateData.connections?.length || 0,
+    scale: stateData.scale,
+    offsetX: stateData.offsetX,
+    offsetY: stateData.offsetY
+  });
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateData));
-    console.log("AppState saved successfully to localStorage.");
+    console.log("✅ AppState saved successfully to localStorage.");
   } catch (e) {
-    console.error("Failed to save AppState to localStorage:", e);
+    console.error("❌ Failed to save AppState to localStorage:", e);
   }
 }
 
@@ -341,3 +620,24 @@ function loadAppState(appState) {
   }
   return false;
 }
+
+// ============================================================================
+// GLOBAL EXPORTS
+// ============================================================================
+
+// Export observer pattern for decoupling state changes from UI
+window.stateObserver = stateObserver;
+
+// Export utility functions
+window.generateId = generateId;
+
+// Export refactored functions (backward compatible)
+window.saveState = saveState;
+window.loadState = loadState;
+window.saveHistory = saveHistory;
+window.undo = undo;
+window.applyPendingTheme = applyPendingTheme;
+
+// Export AppState functions for future migration
+window.saveAppState = saveAppState;
+window.loadAppState = loadAppState;

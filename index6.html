@@ -8,6 +8,11 @@
     <script src="js/state.js"></script>
     <script src="js/drawing.js"></script>
     <script src="js/text.js"></script>
+    <script src="js/themes.js"></script>
+    <script src="js/core/app.js"></script>
+
+    <!-- Bootstrap script handles initialization order -->
+    <script src="js/bootstrap.js"></script>
   </head>
   <body>
     <div id="menu">
@@ -2182,55 +2187,7 @@
         nextId = Math.max(nextId, maxId + 1);
       }
 
-      // Load themes from JSON file, then render menu
-      loadThemes()
-        .then(() => {
-          // Apply saved theme if one was stored during loadState()
-          if (window._savedThemeId) {
-            const savedThemeId = window._savedThemeId;
-            const savedSelectedColor = window._savedSelectedColor;
-            delete window._savedThemeId;
-            delete window._savedSelectedColor;
-
-            const savedTheme = THEMES.find((t) => t.id === savedThemeId);
-            if (savedTheme) {
-              // Apply theme colors without calling applyTheme to avoid saveState recursion
-              currentThemeId = savedThemeId;
-              // Apply CSS background
-              applyThemeBackground(savedTheme);
-              palette = savedTheme.colors.map((c) => ({ ...c })); // Clone colors
-              if (palette.length > 0 && savedSelectedColor) {
-                // Check if saved color exists in theme, otherwise use first theme color
-                const colorExists = palette.some(
-                  (c) => c.value === savedSelectedColor
-                );
-                selectedColor = colorExists
-                  ? savedSelectedColor
-                  : palette[0].value;
-              } else if (palette.length > 0) {
-                selectedColor = palette[0].value;
-              }
-            } else {
-              // No saved theme found, apply default theme background
-              const defaultTheme = THEMES[0];
-              if (defaultTheme) {
-                applyThemeBackground(defaultTheme);
-              }
-            }
-          } else {
-            // No saved theme ID, apply default theme background
-            const defaultTheme = THEMES[0];
-            if (defaultTheme) {
-              applyThemeBackground(defaultTheme);
-            }
-          }
-
-          renderMenu();
-          renderCards();
-          draw(); // Redraw with the correct theme background
-        })
-        .catch(() => {
-          // If themes fail to load, still render menu with default theme
+      // Application initialization is now handled by bootstrap.js
           renderMenu();
           renderCards();
         });

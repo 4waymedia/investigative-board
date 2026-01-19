@@ -8,15 +8,181 @@ console.log("Available globals:", {
   DrawingUtils: !!window.DrawingUtils
 });
 
+// Tool State Pattern - Each tool implements onMouseDown, onMouseMove, onMouseUp
+class BaseTool {
+  constructor(eventHandlers) {
+    this.eventHandlers = eventHandlers;
+    this.appState = eventHandlers.appState;
+    this.app = eventHandlers.app;
+  }
+
+  onMouseDown(e, mousePos, clickedPinIndex) {
+    // Default implementation - do nothing
+  }
+
+  onMouseMove(e, mousePos) {
+    // Default implementation - do nothing
+  }
+
+  onMouseUp(e, mousePos) {
+    // Default implementation - do nothing
+  }
+}
+
+class PanTool extends BaseTool {
+  onMouseDown(e, mousePos, clickedPinIndex) {
+    this.eventHandlers.isPanning = true;
+    this.eventHandlers.prevScreenX = e.clientX;
+    this.eventHandlers.prevScreenY = e.clientY;
+    console.log(`👆 Left-click: Pan mode activated`);
+  }
+}
+
+class SelectTool extends BaseTool {
+  onMouseDown(e, mousePos, clickedPinIndex) {
+    this.eventHandlers.isMarqueeSelecting = true;
+    this.eventHandlers.marqueeStart = mousePos.world;
+    this.eventHandlers.marqueeEnd = mousePos.world;
+    console.log(`👆 Left-click: Marquee selection started`);
+  }
+}
+
+class PinTool extends BaseTool {
+  onMouseDown(e, mousePos, clickedPinIndex) {
+    // Pin tool logic is handled in mouseUp for pin creation
+    // MouseDown only handles pin selection and dragging
+    if (clickedPinIndex !== null) {
+      this.handlePinInteraction(mousePos, clickedPinIndex);
+    }
+  }
+
+  handlePinInteraction(mousePos, clickedPinIndex) {
+    // Check if we should connect to an existing selected pin
+    // Only auto-connect in 'sequential' mode, not in 'parent' mode
+    if (this.appState.selectedPinIndex !== null && this.appState.selectedPinIndex !== clickedPinIndex && this.appState.connectionMode === 'sequential') {
+      // Check if connection already exists between these pins (bidirectional)
+      const existingConnection = this.appState.connections.find(conn =>
+        (conn.startIndex === this.appState.selectedPinIndex && conn.endIndex === clickedPinIndex) ||
+        (conn.startIndex === clickedPinIndex && conn.endIndex === this.appState.selectedPinIndex)
+      );
+
+      if (existingConnection) {
+        console.log(`⚠️ Connection already exists between pin ${this.appState.selectedPinIndex} and pin ${clickedPinIndex}`);
+        // Reset connection state without creating duplicate
+        this.appState.connectStartIndex = null;
+        this.appState.connectMousePos = null;
+        this.eventHandlers.stopMarqueeAnimation();
+        return true; // Don't continue with selection
+      }
+
+      // Connect the selected pin to the clicked pin
+      const connection = {
+        startIndex: this.appState.selectedPinIndex,
+        endIndex: clickedPinIndex,
+        color: this.appState.selectedColor,
+        type: this.appState.connectionType
+      };
+      this.appState.connections.push(connection);
+      this.appState.saveHistory();
+      if (this.saveAppState) {
+        this.saveAppState(this.appState);
+      }
+      // Update pin scales based on new connections
+      window.updatePinScales(this.appState.pins, this.appState.connections);
+      // Reset connection state after connecting pins
+      this.appState.connectStartIndex = null;
+      this.appState.connectMousePos = null;
+      this.eventHandlers.stopMarqueeAnimation();
+      console.log(`🔗 Connected pin ${this.appState.selectedPinIndex} to pin ${clickedPinIndex}`);
+      this.eventHandlers.draw();
+      return true; // Connection made, don't continue with selection
+    }
+
+    // Clicked on existing pin - select it and prepare for drag
+    this.eventHandlers.setSelectedPin(clickedPinIndex);
+    this.eventHandlers.selectedPins = [clickedPinIndex];
+
+    // Start drag using drag manager
+    if (window.dragManager) {
+      window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, this.eventHandlers.selectedPins);
+    } else {
+      // Fallback if drag manager not available
+      this.eventHandlers.isDraggingPin = true;
+      this.eventHandlers.dragPinIndex = clickedPinIndex;
+    }
+
+    // Set as connection source for next pin placement (sequential mode)
+    this.appState.connectStartIndex = clickedPinIndex;
+    this.appState.connectionMode = 'sequential';
+
+    // Clear any existing connection timeout
+    if (this.eventHandlers.connectionTimeout) {
+      clearTimeout(this.eventHandlers.connectionTimeout);
+      this.eventHandlers.connectionTimeout = null;
+    }
+
+    // Clear connectStartIndex after 5 seconds of inactivity to prevent lingering marquee
+    this.eventHandlers.connectionTimeout = setTimeout(() => {
+      if (this.appState.connectStartIndex === clickedPinIndex && !this.eventHandlers.isDraggingPin && !this.eventHandlers.isDraggingArea) {
+        this.appState.connectStartIndex = null;
+        this.appState.connectMousePos = null;
+        this.eventHandlers.stopMarqueeAnimation();
+        console.log('⏰ Cleared stale connection state after 5 seconds');
+        this.eventHandlers.connectionTimeout = null;
+      }
+    }, 5000);
+
+    // Start marquee animation to show connection mode is active
+    this.eventHandlers.startMarqueeAnimation();
+    console.log(`🎯 Marquee activated for pin ${clickedPinIndex} - ready for connections`);
+
+    console.log(`👆 Left-click: Pin ${clickedPinIndex} selected for dragging`);
+    return false; // Continue with normal flow
+  }
+}
+
+class TextTool extends BaseTool {
+  onMouseDown(e, mousePos, clickedPinIndex) {
+    // Text tool logic is handled in mouseUp
+    console.log(`👆 Left-click: Text tool on empty space`);
+  }
+}
+
+class AreaTool extends BaseTool {
+  onMouseDown(e, mousePos, clickedPinIndex) {
+    // Area tool - start area creation drag
+    this.eventHandlers.isDraggingArea = true;
+    this.eventHandlers.areaDragStart = { x: mousePos.world.x, y: mousePos.world.y };
+    this.eventHandlers.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y };
+    this.eventHandlers.startMarqueeAnimation(); // Start continuous animation
+    console.log(`👆 Left-click: Area creation started at (${mousePos.world.x}, ${mousePos.world.y})`);
+  }
+}
+
 class EventHandlers {
-  constructor(appState, canvas) {
-    console.log("EventHandlers constructor called with:", typeof appState, typeof canvas);
+  constructor(appState, canvas, app) {
+    console.log("EventHandlers constructor called with:", typeof appState, typeof canvas, typeof app);
     console.log("Canvas element:", canvas, "id:", canvas ? canvas.id : "no id");
     if (!appState || !canvas) {
       throw new Error("EventHandlers constructor missing required parameters");
     }
     this.appState = appState;
     this.canvas = canvas;
+    this.app = app;
+
+    // Cache DOM element references to avoid stale references
+    this.canvasContainer = document.getElementById("canvas-container");
+    this.boardElement = document.getElementById("board");
+
+    // Initialize tool instances
+    this.tools = {
+      pan: new PanTool(this),
+      select: new SelectTool(this),
+      pin: new PinTool(this),
+      text: new TextTool(this),
+      area: new AreaTool(this)
+    };
+
     this.mouseScreenX = 0;
     this.mouseScreenY = 0;
     this.prevScreenX = 0;
@@ -62,14 +228,63 @@ class EventHandlers {
     this.setSelectedPin = null;
     this.updateAreaContainment = null;
 
-    // Bind methods to preserve 'this' context
+    // Bind methods to preserve 'this' context and prevent memory leaks
     this.handleCanvasPointerMove = this.handleCanvasPointerMove.bind(this);
     this.handleCanvasPointerUp = this.handleCanvasPointerUp.bind(this);
     this.handleCanvasMouseDown = this.handleCanvasMouseDown.bind(this);
     this.handleCanvasMouseMove = this.handleCanvasMouseMove.bind(this);
     this.handleCanvasMouseUp = this.handleCanvasMouseUp.bind(this);
     this.handleCanvasContextMenu = this.handleCanvasContextMenu.bind(this);
+    this.handleCanvasDoubleClick = this.handleCanvasDoubleClick.bind(this);
+    this.handleCanvasDragOver = this.handleCanvasDragOver.bind(this);
+    this.handleCanvasDrop = this.handleCanvasDrop.bind(this);
+    this.handleWheel = this.handleWheel.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleKeyUp = this.handleKeyUp.bind(this);
+
+    // State management for preventing stale timeouts
+    this.connectionTimeout = null;
+
+    // Double-click detection
+    this.lastClickTime = 0;
+    this.lastClickX = 0;
+    this.lastClickY = 0;
+    this.doubleClickThreshold = 300; // ms
+
+    // Command map for cleaner key handling (will be checked with conditions)
+    this.keyCommands = {
+      // Tool selection
+      'm': () => this.selectTool('pan'),
+      'M': () => this.selectTool('pan'),
+      's': () => this.selectTool('select'),
+      'S': () => this.selectTool('select'),
+      'p': () => this.selectTool('pin'),
+      'P': () => this.selectTool('pin'),
+      't': () => this.selectTool('text'),
+      'T': () => this.selectTool('text'),
+
+      // Other shortcuts
+      'f': () => this.frameAllPins(),
+      'F': () => this.frameAllPins(),
+      'l': () => this.toggleConnectionType(),
+      'L': () => this.toggleConnectionType()
+    };
+  }
+
+  // Helper method to get mouse coordinates consistently across all handlers
+  getMousePos(e) {
+    if (!this.canvasContainer) {
+      this.canvasContainer = document.getElementById("canvas-container");
+    }
+
+    const rect = this.canvasContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    return {
+      screen: { x, y },
+      world: this.screenToWorld(x, y)
+    };
   }
 
   // Initialize all event handlers
@@ -81,17 +296,17 @@ class EventHandlers {
     this.setSelectedPin = dependencies.setSelectedPin;
     this.updateAreaContainment = dependencies.updateAreaContainment;
 
-    // Canvas event handlers - use consistent addEventListener for all
+    // Canvas event handlers - use pre-bound methods from constructor to prevent memory leaks
     // Temporarily disable pointer events to avoid conflicts with mouse events
-    // this.canvas.addEventListener("pointermove", this.handleCanvasPointerMove.bind(this));
-    // this.canvas.addEventListener("pointerup", this.handleCanvasPointerUp.bind(this));
-    this.canvas.addEventListener("mousedown", this.handleCanvasMouseDown.bind(this));
-    this.canvas.addEventListener("mousemove", this.handleCanvasMouseMove.bind(this));
-    this.canvas.addEventListener("mouseup", this.handleCanvasMouseUp.bind(this));
-    console.log("✅ Mouse up event listener attached to canvas");
-    this.canvas.addEventListener("dblclick", this.handleCanvasDoubleClick.bind(this));
-    console.log("🎯 Attaching context menu listener to canvas:", this.canvas);
-    this.canvas.addEventListener("contextmenu", this.handleCanvasContextMenu.bind(this));
+    // this.canvas.addEventListener("pointermove", this.handleCanvasPointerMove);
+    // this.canvas.addEventListener("pointerup", this.handleCanvasPointerUp);
+    this.canvas.addEventListener("mousedown", this.handleCanvasMouseDown);
+    this.canvas.addEventListener("mousemove", this.handleCanvasMouseMove);
+    this.canvas.addEventListener("mouseup", this.handleCanvasMouseUp);
+    console.log("✅ Mouse event listeners attached to canvas");
+    this.canvas.addEventListener("dblclick", this.handleCanvasDoubleClick);
+    console.log("✅ Double-click listener attached to canvas");
+    this.canvas.addEventListener("contextmenu", this.handleCanvasContextMenu);
 
     // Aggressive context menu prevention for entire document
     document.addEventListener("contextmenu", (e) => {
@@ -109,15 +324,15 @@ class EventHandlers {
     }, true); // Use capture phase to catch events early
 
     // Drag and drop handlers for cards
-    this.canvas.addEventListener("dragover", this.handleCanvasDragOver.bind(this));
-    this.canvas.addEventListener("drop", this.handleCanvasDrop.bind(this));
+    this.canvas.addEventListener("dragover", this.handleCanvasDragOver);
+    this.canvas.addEventListener("drop", this.handleCanvasDrop);
 
     // Wheel event handler for zooming
-    this.canvas.addEventListener("wheel", this.handleWheel.bind(this), { passive: false });
+    this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
 
     // Keyboard event handlers
-    window.addEventListener("keydown", this.handleKeyDown.bind(this));
-    window.addEventListener("keyup", this.handleKeyUp.bind(this));
+    window.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("keyup", this.handleKeyUp);
   }
 
   // Canvas pointer move handler
@@ -139,16 +354,17 @@ class EventHandlers {
     this.totalMovement += Math.abs(dx) + Math.abs(dy);
 
     // Set didDrag if total movement exceeds threshold (indicating intentional drag)
-    // Use a higher threshold for pin placement to avoid treating small movements as drags
-    if (this.totalMovement > 25) {
+    // Use a reasonable threshold for drag detection (5px for better responsiveness)
+    if (this.totalMovement > 5) {
       this.didDrag = true;
     }
 
     if (this.isPanning) {
+      console.log(`📦 PANNING: offset (${this.appState.offsetX}, ${this.appState.offsetY}) += (${dx}, ${dy})`);
       this.isUserInteracting = true;
       this.appState.offsetX += dx;
       this.appState.offsetY += dy;
-      this.saveAppState(this.appState);
+      this.appState.saveHistory(); // Pan operations should be undoable
     } else if (this.isDraggingText && this.dragTextIndex !== null) {
       this.isUserInteracting = true;
       const worldDelta = { x: dx / this.appState.scale, y: dy / this.appState.scale };
@@ -160,16 +376,9 @@ class EventHandlers {
     } else if (this.isDraggingArea) {
       console.log(`🎯 AREA DRAGGING: About to execute area dragging code - this.isDraggingArea = ${this.isDraggingArea}`);
       this.isUserInteracting = true;
-      // Convert mouse coordinates to canvas-relative
-      const canvas = document.getElementById("board");
-      const canvasContainer = document.getElementById("canvas-container");
-      const rect = canvasContainer.getBoundingClientRect();
-      const canvasX = e.clientX - rect.left;
-      const canvasY = e.clientY - rect.top;
-      const newPos = this.screenToWorld(canvasX, canvasY);
-      console.log(`🎯 screenToWorld(${canvasX}, ${canvasY}) returned: (${newPos.x}, ${newPos.y})`);
+      console.log(`🎯 screenToWorld(${canvasX}, ${canvasY}) returned: (${mousePos.world.x}, ${mousePos.world.y})`);
       console.log(`🎯 areaDragCurrent before: (${this.areaDragCurrent.x}, ${this.areaDragCurrent.y})`);
-      this.areaDragCurrent = { x: newPos.x, y: newPos.y }; // Explicit assignment
+      this.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y }; // Explicit assignment
       console.log(`🎯 areaDragCurrent after: (${this.areaDragCurrent.x}, ${this.areaDragCurrent.y})`);
 
       // Update marquee animation and draw animated marquee
@@ -214,78 +423,29 @@ class EventHandlers {
     if (e.button === 2) {
       e.preventDefault();
     }
-    // Convert mouse coordinates to canvas-relative
-    const canvasContainer = document.getElementById("canvas-container");
-    const containerRect = canvasContainer.getBoundingClientRect();
 
-    // Simple approach: use container coordinates directly
-    const canvasX = e.clientX - containerRect.left;
-    const canvasY = e.clientY - containerRect.top;
-
-    const mouseWorld = this.screenToWorld(canvasX, canvasY);
-    const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
-    console.log(`   App scale: ${this.appState.scale}, offset: (${this.appState.offsetX}, ${this.appState.offsetY})`);
+    const mousePos = this.getMousePos(e);
+    const clickedPinIndex = this.findPinAt(mousePos.world.x, mousePos.world.y);
 
     // Initialize mouse position tracking for movement detection
     this.prevScreenX = e.clientX;
     this.prevScreenY = e.clientY;
 
-    // Handle different click scenarios based on current tool
-    const currentTool = this.appState.currentTool || "pin";
-
     // Handle right-click separately
     if (e.button === 2) {
-      this.handleCanvasRightClick(e, mouseWorld, clickedPinIndex);
+      this.handleCanvasRightClick(e, mousePos.world, clickedPinIndex);
       return;
     }
 
-    // Handle left-click and middle-click
+    // Handle left-click using tool pattern
     if (e.button === 0) { // Left click
+      const currentTool = this.appState.currentTool || "pin";
+      const tool = this.tools[currentTool];
 
-      if (currentTool === "pan") {
-        // Pan tool - always pan on click and drag
-        this.isPanning = true;
-        this.prevScreenX = e.clientX;
-        this.prevScreenY = e.clientY;
-        console.log(`👆 Left-click: Pan mode activated`);
-      } else if (currentTool === "select") {
-        // Select tool - marquee selection (rectangular)
-        this.isMarqueeSelecting = true;
-        this.marqueeStart = mouseWorld;
-        this.marqueeEnd = mouseWorld;
-        console.log(`👆 Left-click: Marquee selection started`);
-      } else {
-        // Handle interactions for all other tools
-        if (clickedPinIndex !== null) {
-          // Clicked on existing pin - select it and prepare for drag (works in any tool)
-          this.setSelectedPin(clickedPinIndex);
-          this.isDraggingPin = true;
-          this.dragPinIndex = clickedPinIndex;
-          this.selectedPins = [clickedPinIndex];
-          // Set as connection source for next pin placement (sequential mode)
-          this.appState.connectStartIndex = clickedPinIndex;
-          this.appState.connectionMode = 'sequential';
-          this.startMarqueeAnimation(); // Start continuous animation for connection marquee
-          console.log(`👆 Left-click: Pin ${clickedPinIndex} selected for dragging`);
-        } else {
-          // Clicked on empty space - tool-specific behavior
-          if (currentTool === "pin") {
-            // Pin tool - will handle in mouse up for pin creation
-          } else if (currentTool === "text") {
-            // Text tool - will handle in mouse up
-            console.log(`👆 Left-click: Text tool on empty space`);
-      } else if (currentTool === "area") {
-        // Area tool - start area creation drag
-        this.isDraggingArea = true;
-        this.areaDragStart = { x: mouseWorld.x, y: mouseWorld.y };
-        this.areaDragCurrent = { x: mouseWorld.x, y: mouseWorld.y };
-        this.startMarqueeAnimation(); // Start continuous animation
-        console.log(`👆 Left-click: Area creation started at (${mouseWorld.x}, ${mouseWorld.y})`);
+      if (tool) {
+        tool.onMouseDown(e, mousePos, clickedPinIndex);
       }
-        }
-      }
-    } else if (e.button === 1) { // Middle click
-      // Middle click - pan
+    } else if (e.button === 1) { // Middle click - always pan
       this.isPanning = true;
       this.prevScreenX = e.clientX;
       this.prevScreenY = e.clientY;
@@ -296,18 +456,39 @@ class EventHandlers {
   // Canvas right-click handler (separated for clarity)
   handleCanvasRightClick(e, mouseWorld, clickedPinIndex) {
     e.preventDefault(); // Prevent context menu from showing
+    e.stopPropagation(); // Stop event bubbling
+    e.stopImmediatePropagation(); // Stop other handlers
+    e.returnValue = false; // For older browsers
 
     if (clickedPinIndex !== null) {
       // Right-click on pin - BOTH open radial menu AND activate marquee for connections
       console.log(`🎯 RIGHT-CLICK: Opening radial menu AND activating marquee for pin ${clickedPinIndex}`);
+
+      // Clear any existing connection timeout
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
 
       // 1. Set pin as parent for connections (activate marquee)
       this.setSelectedPin(clickedPinIndex);
       this.appState.connectStartIndex = clickedPinIndex;
       this.appState.connectionMode = 'parent'; // Locked parent effect
 
-      // Start continuous marquee animation
+      // Clear connectStartIndex after 10 seconds for parent mode (longer since it's multi-connection)
+      this.connectionTimeout = setTimeout(() => {
+        if (this.appState.connectStartIndex === clickedPinIndex && this.appState.connectionMode === 'parent') {
+          this.appState.connectStartIndex = null;
+          this.appState.connectMousePos = null;
+          this.stopMarqueeAnimation();
+          console.log('⏰ Cleared parent connection state after 10 seconds');
+          this.connectionTimeout = null;
+        }
+      }, 10000);
+
+      // Start marquee animation to show connection mode is active
       this.startMarqueeAnimation();
+      console.log(`🎯 Marquee activated for parent pin ${clickedPinIndex} - ready for radial connections`);
 
       // 2. Open radial menu
       if (window.openRadialMenu) {
@@ -363,13 +544,19 @@ class EventHandlers {
       newPin.containedPins = [];
     }
 
-    this.appState.pins.push(newPin);
+    // Validate pin data before adding to appState
+    const validatedPin = this.app.validatePin(newPin);
+    this.appState.pins.push(validatedPin);
     const newIndex = this.appState.pins.length - 1;
 
     // Set this pin as hub for subsequent connections
     this.setSelectedPin(newIndex);
     this.appState.connectStartIndex = newIndex;
     this.appState.connectionMode = 'parent'; // Set parent/hub mode
+
+    // Start marquee animation to show connection mode is active
+    this.startMarqueeAnimation();
+    console.log(`🎯 Marquee activated for hub pin ${newIndex} - ready for radial connections`);
 
     console.log(`   Pin created at: (${newPin.x}, ${newPin.y}) and set as HUB`);
     this.draw();
@@ -378,13 +565,9 @@ class EventHandlers {
   // Canvas mouse move handler
   handleCanvasMouseMove(e) {
     console.log(`🎯 MOUSE MOVE: Called with isDraggingArea=${this.isDraggingArea}, buttons=${e.buttons}`);
-    // Convert mouse coordinates to canvas-relative
-    const canvasContainer = document.getElementById("canvas-container");
-    const containerRect = canvasContainer.getBoundingClientRect();
-
-    // Simple approach: use container coordinates directly
-    const canvasX = e.clientX - containerRect.left;
-    const canvasY = e.clientY - containerRect.top;
+    const mousePos = this.getMousePos(e);
+    const canvasX = mousePos.screen.x;
+    const canvasY = mousePos.screen.y;
 
     // Accumulate movement for drag detection (moved from pointer handler)
     if (e.buttons !== 0) {
@@ -393,7 +576,7 @@ class EventHandlers {
       this.totalMovement += Math.abs(dx) + Math.abs(dy);
 
       // Set didDrag if total movement exceeds threshold
-      if (this.totalMovement > 25) {
+      if (this.totalMovement > 5) {
         this.didDrag = true;
       }
 
@@ -405,54 +588,39 @@ class EventHandlers {
 
     if (this.isMarqueeSelecting) {
       console.log(`🎯 Executing: MARQUEE branch`);
-      this.marqueeEnd = this.screenToWorld(canvasX, canvasY);
+      this.marqueeEnd = mousePos.world;
       this.draw();
     }
 
     // Track mouse position for connection preview line
     if (this.appState.connectStartIndex !== null) {
-      console.log(`🎯 Executing: CONNECTION branch`);
+      // Throttle logging to reduce console spam during mouse movement
+      if (!this._lastConnectionLog || Date.now() - this._lastConnectionLog > 100) {
+        console.log(`🎯 Executing: CONNECTION branch`);
+        this._lastConnectionLog = Date.now();
+      }
       this.appState.connectMousePos = this.screenToWorld(canvasX, canvasY);
-      this.draw(); // Just redraw to show marquee in main draw function
+      // Only start marquee animation if mouse has moved significantly (indicating active preview intent)
+      const startPin = this.appState.pins[this.appState.connectStartIndex];
+      if (startPin) {
+        const distanceFromStart = Math.sqrt(
+          Math.pow(this.appState.connectMousePos.x - startPin.x, 2) +
+          Math.pow(this.appState.connectMousePos.y - startPin.y, 2)
+        );
+        if (distanceFromStart > 20 && !this.marqueeAnimationId) { // Only start if moved > 20 units from pin
+          this.startMarqueeAnimation();
+        }
+      }
+      // Don't call draw() here - let the marquee animation handle drawing
     }
 
-    // Handle pin dragging (moved from pointer handler)
-    console.log(`🎯 PIN DRAGGING: About to check pin dragging condition`);
-    if (this.isDraggingPin && this.dragPinIndex !== null) {
-      console.log(`🎯 Executing: PIN DRAGGING branch`);
-      // Convert current mouse position to world coordinates
-      const canvas = document.getElementById("board");
-      const canvasContainer = document.getElementById("canvas-container");
-      const rect = canvasContainer.getBoundingClientRect();
-      const canvasX = e.clientX - rect.left;
-      const canvasY = e.clientY - rect.top;
-      const mouseWorld = this.screenToWorld(canvasX, canvasY);
+    // Handle pin dragging using drag manager
+    if (window.dragManager && window.dragManager.isDraggingType('pin')) {
+      window.dragManager.updateDrag(this.screenToWorld(canvasX, canvasY));
+    }
 
-      // Set pin position to mouse position (1:1 mapping)
-      if (this.selectedPins.length > 0 && this.selectedPins.includes(this.dragPinIndex)) {
-        // Drag all selected pins, maintaining their relative positions
-        const basePin = this.appState.pins[this.dragPinIndex];
-        if (basePin) {
-          const offsetX = mouseWorld.x - basePin.x;
-          const offsetY = mouseWorld.y - basePin.y;
-
-          this.selectedPins.forEach((idx) => {
-            if (this.appState.pins[idx]) {
-              this.appState.pins[idx].x += offsetX;
-              this.appState.pins[idx].y += offsetY;
-            }
-          });
-        }
-      } else if (this.appState.pins[this.dragPinIndex]) {
-        // Drag single pin to mouse position
-        this.appState.pins[this.dragPinIndex].x = mouseWorld.x;
-        this.appState.pins[this.dragPinIndex].y = mouseWorld.y;
-      }
-
-      // Update area containment after moving pins
-      this.updateAreaContainment();
-      this.draw();
-    } else if (this.isDraggingText && this.dragTextIndex !== null) {
+    // Handle text dragging (legacy fallback)
+    if (this.isDraggingText && this.dragTextIndex !== null) {
       this.isUserInteracting = true;
       // Calculate mouse movement delta
       const dx = e.clientX - this.prevScreenX;
@@ -469,16 +637,9 @@ class EventHandlers {
     } else if (this.isDraggingArea) {
       console.log(`🎯 AREA DRAGGING: About to execute area dragging code - this.isDraggingArea = ${this.isDraggingArea}`);
       this.isUserInteracting = true;
-      // Convert mouse coordinates to canvas-relative
-      const canvas = document.getElementById("board");
-      const canvasContainer = document.getElementById("canvas-container");
-      const rect = canvasContainer.getBoundingClientRect();
-      const canvasX = e.clientX - rect.left;
-      const canvasY = e.clientY - rect.top;
-      const newPos = this.screenToWorld(canvasX, canvasY);
-      console.log(`🎯 screenToWorld(${canvasX}, ${canvasY}) returned: (${newPos.x}, ${newPos.y})`);
+      console.log(`🎯 screenToWorld(${canvasX}, ${canvasY}) returned: (${mousePos.world.x}, ${mousePos.world.y})`);
       console.log(`🎯 areaDragCurrent before: (${this.areaDragCurrent.x}, ${this.areaDragCurrent.y})`);
-      this.areaDragCurrent = { x: newPos.x, y: newPos.y }; // Explicit assignment
+      this.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y }; // Explicit assignment
       console.log(`🎯 areaDragCurrent after: (${this.areaDragCurrent.x}, ${this.areaDragCurrent.y})`);
 
       // Update marquee animation and draw animated marquee
@@ -490,16 +651,35 @@ class EventHandlers {
   // Canvas mouse up handler
   handleCanvasMouseUp(e) {
     console.log("👆 Mouse up event detected", e);
-    // Convert mouse coordinates to canvas-relative
-    const canvasContainer = document.getElementById("canvas-container");
-    const containerRect = canvasContainer.getBoundingClientRect();
 
-    // Simple approach: use container coordinates directly
-    const canvasX = e.clientX - containerRect.left;
-    const canvasY = e.clientY - containerRect.top;
-    const mouseWorld = this.screenToWorld(canvasX, canvasY);
+    // Check for potential double-click to avoid conflicts
+    const now = Date.now();
+    const clickX = e.clientX;
+    const clickY = e.clientY;
+    const timeDiff = now - this.lastClickTime;
+    const distance = Math.sqrt(
+      Math.pow(clickX - this.lastClickX, 2) +
+      Math.pow(clickY - this.lastClickY, 2)
+    );
+
+    // If this might be part of a double-click, delay single-click actions
+    const isPotentialDoubleClick = timeDiff < this.doubleClickThreshold && distance < 10;
+
+    // Update click tracking
+    this.lastClickTime = now;
+    this.lastClickX = clickX;
+    this.lastClickY = clickY;
+
+    const mousePos = this.getMousePos(e);
+    const mouseWorld = mousePos.world;
 
     console.log(`👆 Click release at (${mouseWorld.x}, ${mouseWorld.y})`);
+
+    // If this might be part of a double-click, don't perform single-click actions
+    if (isPotentialDoubleClick) {
+      console.log(`👆 Suppressing single-click actions due to potential double-click`);
+      return;
+    }
 
     let areaCreated = false;
 
@@ -524,12 +704,32 @@ class EventHandlers {
           this.setSelectedPin(this.selectedPins[0]);
         }
       }
+
+      // Clear marquee immediately to prevent ghost marquee
+      this.marqueeStart = null;
+      this.marqueeEnd = null;
+      this.isMarqueeSelecting = false;
     }
 
     // Handle connection creation if connectStartIndex is set
     if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       if (clickedPinIndex !== null && clickedPinIndex !== this.appState.connectStartIndex) {
+        // Check if connection already exists between these pins (bidirectional)
+        const existingConnection = this.appState.connections.find(conn =>
+          (conn.startIndex === this.appState.connectStartIndex && conn.endIndex === clickedPinIndex) ||
+          (conn.startIndex === clickedPinIndex && conn.endIndex === this.appState.connectStartIndex)
+        );
+
+        if (existingConnection) {
+          console.log(`⚠️ Connection already exists between pin ${this.appState.connectStartIndex} and pin ${clickedPinIndex}`);
+          // Reset connection state without creating duplicate
+          this.appState.connectStartIndex = null;
+          this.appState.connectMousePos = null;
+          this.stopMarqueeAnimation();
+          return; // Don't create a new pin
+        }
+
         // Create connection between existing pins
         const connection = {
           startIndex: this.appState.connectStartIndex,
@@ -539,10 +739,25 @@ class EventHandlers {
         };
         this.appState.connections.push(connection);
         this.appState.saveHistory();
-        // Reset connection mode after connecting to existing pin
-        this.appState.connectStartIndex = null;
-        this.appState.connectMousePos = null;
-        this.stopMarqueeAnimation(); // Stop marquee animation
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
+        }
+        // Update pin scales based on new connections
+        window.updatePinScales(this.appState.pins, this.appState.connections);
+
+        // Handle connection state based on mode
+        if (this.appState.connectionMode === 'sequential') {
+          // In sequential mode: set the connected pin as the new connection source
+          this.appState.connectStartIndex = clickedPinIndex;
+          this.appState.connectMousePos = null; // Clear mouse pos but keep connection active
+          console.log(`🔄 Sequential: Connected to pin ${clickedPinIndex}, now set as new connection source`);
+        } else {
+          // In other modes: reset connection state
+          this.appState.connectStartIndex = null;
+          this.appState.connectMousePos = null;
+          this.stopMarqueeAnimation(); // Stop marquee animation
+        }
+
         this.draw();
         return; // Don't create a new pin
       }
@@ -618,8 +833,9 @@ class EventHandlers {
       const newIndex = this.appState.pins.length - 1;
       this.setSelectedPin(newIndex);
       this.appState.saveHistory();
-
-      this.saveAppState(this.appState);
+      if (this.saveAppState) {
+        this.saveAppState(this.appState);
+      }
       this.draw();
       this.stopMarqueeAnimation(); // Stop animation after area creation
     }
@@ -634,9 +850,7 @@ class EventHandlers {
         // Look up the node type to get variant and other properties
         const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
 
-        const newPin = {
-          x: mouseWorld.x,
-          y: mouseWorld.y,
+        const pinProperties = {
           color: this.appState.selectedColor,
           label: "",
           note: "",
@@ -646,63 +860,191 @@ class EventHandlers {
           pinScale: 1
         };
 
-
         // Add pin-specific properties based on type
         if (this.appState.currentTypeId.startsWith("area:")) {
-          newPin.width = 100;
-          newPin.height = 100;
-          newPin.fillColor = this.appState.selectedColor + "40";
-          newPin.borderColor = this.appState.selectedColor;
-          newPin.borderWidth = 2;
-          newPin.textColor = window._currentThemeTextColor || "#ffffff";
-          newPin.icon = "▤";
-          newPin.iconColor = this.appState.selectedColor;
-          newPin.containedPins = [];
-          newPin.title = "";
-          newPin.description = "";
+          pinProperties.width = 100;
+          pinProperties.height = 100;
+          pinProperties.fillColor = this.appState.selectedColor + "40";
+          pinProperties.borderColor = this.appState.selectedColor;
+          pinProperties.borderWidth = 2;
+          pinProperties.textColor = window._currentThemeTextColor || "#ffffff";
+          pinProperties.icon = "▤";
+          pinProperties.iconColor = this.appState.selectedColor;
+          pinProperties.containedPins = [];
+          pinProperties.title = "";
+          pinProperties.description = "";
         }
 
-        this.appState.pins.push(newPin);
-        const newIndex = this.appState.pins.length - 1;
+        // Use addPin method for consistent pin creation
+        const newIndex = this.appState.addPin(mouseWorld.x, mouseWorld.y, pinProperties);
+        const newPin = this.appState.pins[newIndex];
+        console.log(`📍 Pin added to appState.pins at index ${newIndex}:`, newPin);
+
+        // Check if we should connect this new pin to an active connection source
+        let connectionCreated = false;
+        if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== newIndex) {
+          // Check if connection already exists (shouldn't happen for new pin, but safety check)
+          const existingConnection = this.appState.connections.find(conn =>
+            (conn.startIndex === this.appState.connectStartIndex && conn.endIndex === newIndex) ||
+            (conn.startIndex === newIndex && conn.endIndex === this.appState.connectStartIndex)
+          );
+
+          if (!existingConnection) {
+            // Create connection between active source and new pin
+            const connection = {
+              startIndex: this.appState.connectStartIndex,
+              endIndex: newIndex,
+              color: this.appState.selectedColor,
+              type: this.appState.connectionType
+            };
+            this.appState.connections.push(connection);
+            this.appState.saveHistory();
+            if (this.saveAppState) {
+              this.saveAppState(this.appState);
+            }
+            // Update pin scales based on new connections
+            window.updatePinScales(this.appState.pins, this.appState.connections);
+            connectionCreated = true;
+            console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to new pin ${newIndex}`);
+          }
+        }
+
+        if (connectionCreated) {
+          console.log(`📍 Placed pin ${newIndex} and connected to pin ${this.appState.connectStartIndex}`);
+        } else {
+          console.log(`📍 Placed pin ${newIndex} without automatic connection`);
+        }
+
+        // Handle ActivePin updates based on connection mode
+        if (this.appState.connectionMode !== 'parent') {
+          // Not in Radial/Parent Mode: Set new pin as active (sequential behavior)
+          this.setSelectedPin(newIndex);
+
+          // If we just created a connection, update connection state for sequential mode
+          if (connectionCreated && this.appState.connectionMode === 'sequential') {
+            // In sequential mode: the new pin becomes the connection source for the next pin
+            this.appState.connectStartIndex = newIndex;
+            console.log(`🔄 Sequential: New pin ${newIndex} is now the connection source`);
+          } else if (!connectionCreated) {
+            // No connection was created: set as connection source for next pin placement
+            this.appState.connectStartIndex = newIndex;
+            this.appState.connectionMode = 'sequential';
+          }
+
+          // Start marquee animation to show connection mode is active
+          this.startMarqueeAnimation();
+          console.log(`🎯 Marquee activated for pin ${newIndex} - ready for connections`);
+
+          // Clear any existing connection timeout
+          if (this.connectionTimeout) {
+            clearTimeout(this.connectionTimeout);
+            this.connectionTimeout = null;
+          }
+
+          // Clear connectStartIndex after 5 seconds of inactivity to prevent lingering marquee
+          this.connectionTimeout = setTimeout(() => {
+            if (this.appState.connectStartIndex === newIndex && !this.isDraggingPin && !this.isDraggingArea) {
+              this.appState.connectStartIndex = null;
+              this.appState.connectMousePos = null;
+              this.stopMarqueeAnimation();
+              console.log('⏰ Cleared sequential connection state after 5 seconds');
+              this.connectionTimeout = null;
+            }
+          }, 5000);
+
+          console.log(`🔄 Sequential mode: Updated ActivePin to new pin ${newIndex}`);
+        } else {
+          // Radial/Parent Mode: Keep ActivePin locked to current pin (1 -> 2, 1 -> 3, 1 -> 4)
+          // Don't change selectedPin or connectStartIndex
+          console.log(`👨‍👩‍👧 Parent mode: Keeping ActivePin locked to pin ${this.appState.connectStartIndex} for radial connections`);
+        }
 
         console.log(`   Pin created at: (${newPin.x}, ${newPin.y})`);
 
-        // Create connection if we have a connection source
-        if (this.appState.connectStartIndex !== null) {
-          const connection = {
-            startIndex: this.appState.connectStartIndex,
-            endIndex: newIndex,
-            color: this.appState.selectedColor,
-            type: this.appState.connectionType
-          };
-          this.appState.connections.push(connection);
+        console.log(`💾 Saving app state after pin creation: pins=${this.appState.pins.length}, connections=${this.appState.connections.length}`);
+        console.log(`💾 AppState before save:`, {
+          pinsCount: this.appState.pins.length,
+          connectionsCount: this.appState.connections.length,
+          selectedPinIndex: this.appState.selectedPinIndex,
+          connectStartIndex: this.appState.connectStartIndex,
+          actualPinsType: typeof this.appState.pins,
+          isArray: Array.isArray(this.appState.pins),
+          samplePin: this.appState.pins.length > 0 ? this.appState.pins[0] : null
+        });
+
+        // Pin creation should be part of history for undo/redo
+        setTimeout(() => {
+          // Sync appState to global variables before saving
+          if (window.app && window.app.syncGlobalVariables) {
+            window.app.syncGlobalVariables();
+          }
           this.appState.saveHistory();
-          console.log(`🔗 Created connection: pin ${this.appState.connectStartIndex} → pin ${newIndex}, total connections: ${this.appState.connections.length}`);
-        } else {
-          console.log(`📍 Placed pin ${newIndex} without connection (no parent set)`);
-        }
 
-        // Set this new pin as the selected pin
-        this.setSelectedPin(newIndex);
+          // Debug: Check data integrity before save
+          console.log(`🔍 Pre-save data check:`, {
+            appStatePinsLength: this.appState.pins.length,
+            windowPinsLength: window.pins?.length || 'undefined',
+            saveAppStateAvailable: !!this.saveAppState,
+            storageKey: window.STORAGE_KEY,
+            firstPin: this.appState.pins.length > 0 ? { id: this.appState.pins[0].id, x: this.appState.pins[0].x, y: this.appState.pins[0].y } : 'no pins',
+            pinsIsArray: Array.isArray(this.appState.pins),
+            pinsType: typeof this.appState.pins
+          });
 
-        // Handle connection mode persistence
-        if (this.appState.connectionMode === 'parent') {
-          // In parent mode (right-click), keep the original parent as connection source
-          // This allows creating multiple children from the same parent pin
-          console.log(`👨‍👩‍👧 Parent mode: Keeping pin ${this.appState.connectStartIndex} as parent for next connections`);
-        } else {
-          // In sequential mode (left-click on pin), update to the new pin as source
-          this.appState.connectStartIndex = newIndex;
-          console.log(`🔄 Sequential mode: Updated connection source to new pin ${newIndex}`);
-        }
+          // Test JSON serialization
+          try {
+            const testJson = JSON.stringify(this.appState.pins);
+            console.log(`🔍 JSON serialization test: success, length=${testJson.length}`);
+          } catch (e) {
+            console.error(`🔍 JSON serialization test: FAILED`, e);
+          }
 
-        this.saveAppState(this.appState);
+          // Also save to localStorage for persistence
+          if (this.saveAppState) {
+            console.log(`💾 Calling saveAppState...`);
+            this.saveAppState(this.appState);
+          } else {
+            console.error(`❌ saveAppState function not available!`);
+          }
+          console.log(`✅ History saved after delay`);
+        }, 50);
+
+        // Verify localStorage was updated
+        setTimeout(() => {
+          try {
+            console.log(`🔍 Checking localStorage with key:`, window.STORAGE_KEY || 'msc-investigativeboard');
+            const stored = localStorage.getItem(window.STORAGE_KEY || 'msc-investigativeboard');
+            console.log(`🔍 Raw localStorage data:`, stored ? stored.substring(0, 200) + '...' : 'null');
+
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              console.log(`🔍 Parsed localStorage structure:`, {
+                hasDocument: !!parsed.document,
+                hasView: !!parsed.view,
+                documentKeys: parsed.document ? Object.keys(parsed.document) : [],
+                pinsCount: parsed.document?.pins?.length || 0,
+                connectionsCount: parsed.document?.connections?.length || 0
+              });
+
+              console.log(`🔍 Post-save localStorage check: pins=${parsed.document?.pins?.length || 0}, connections=${parsed.document?.connections?.length || 0}`);
+            } else {
+              console.log(`🔍 Post-save localStorage check: no data found in localStorage`);
+            }
+          } catch (e) {
+            console.error(`🔍 Error checking localStorage:`, e);
+          }
+        }, 100);
 
         // Trigger render to show the new pin and connection
         if (window.app && window.app.render) {
           window.app.render();
         }
-        this.stopMarqueeAnimation(); // Stop animation after connection creation
+        // Stop marquee animation briefly after connection creation, but restart if still in parent mode
+        this.stopMarqueeAnimation();
+        if (this.appState.connectionMode === 'parent') {
+          // Restart animation for parent mode (brief pause to avoid spam)
+          setTimeout(() => this.startMarqueeAnimation(), 100);
+        }
       } else {
         // Pin creation failed - conditions not met
       }
@@ -710,7 +1052,12 @@ class EventHandlers {
     this.draw();
     }
 
-    // Reset interaction flags
+    // End drag operations using drag manager
+    if (window.dragManager) {
+      window.dragManager.endDrag();
+    }
+
+    // Reset interaction flags (legacy support)
     this.isPanning = false;
     this.isDraggingPin = false;
     this.isDraggingText = false;
@@ -740,14 +1087,42 @@ class EventHandlers {
   startMarqueeAnimation() {
     if (this.marqueeAnimationId) return; // Already running
 
-    const animate = () => {
+    // Clear any existing marquee animation to prevent conflicts
+    this.stopMarqueeAnimation();
+
+    let lastDrawTime = 0;
+    let frameCount = 0;
+    const startTime = Date.now();
+
+    const animate = (timestamp) => {
+      frameCount++;
+
+      // Safety check: stop animation after 5 minutes to prevent infinite loops
+      if (Date.now() - startTime > 300000) { // 5 minutes
+        console.warn("Marquee animation running for too long, stopping automatically");
+        this.stopMarqueeAnimation();
+        return;
+      }
+
       // Check if we still need to animate
       const hasActiveMarquee = this.appState.connectStartIndex !== null ||
                               this.isDraggingArea;
 
       if (hasActiveMarquee) {
-        // Just trigger a redraw - marquees are drawn in the main draw loop
-        window.app.draw();
+        // Throttle drawing to ~10fps to reduce CPU usage significantly
+        // Only draw every 6th frame to further reduce frequency
+        if (timestamp - lastDrawTime > 100 && frameCount % 6 === 0) { // ~10fps, every 6th frame
+          // Only draw if we're not in the middle of another draw operation
+          if (window.app && !window.app.isDrawing) {
+            window.app.isDrawing = true;
+            try {
+              window.app.draw();
+            } finally {
+              window.app.isDrawing = false;
+            }
+            lastDrawTime = timestamp;
+          }
+        }
         this.marqueeAnimationId = requestAnimationFrame(animate);
       } else {
         this.stopMarqueeAnimation();
@@ -765,6 +1140,17 @@ class EventHandlers {
     }
   }
 
+  // Force stop marquee animation and clear related state
+  forceStopMarqueeAnimation() {
+    this.stopMarqueeAnimation();
+    // Clear any stale connection state
+    if (this.appState) {
+      this.appState.connectStartIndex = null;
+      this.appState.connectMousePos = null;
+      this.appState.connectionMode = null;
+    }
+  }
+
   // Draw animated marquee (marching ants) - now only handles connection marquees
   // Area marquees are drawn in the main app.js draw loop
   drawAnimatedMarquee() {
@@ -776,14 +1162,8 @@ class EventHandlers {
   handleCanvasDoubleClick(e) {
     console.log(`👆 Double-click detected at (${e.clientX}, ${e.clientY})`);
     e.preventDefault();
-    // Convert mouse coordinates to canvas-relative
-    const canvasContainer = document.getElementById("canvas-container");
-    const containerRect = canvasContainer.getBoundingClientRect();
-
-    // Simple approach: use container coordinates directly
-    const canvasX = e.clientX - containerRect.left;
-    const canvasY = e.clientY - containerRect.top;
-    const mouseWorld = this.screenToWorld(canvasX, canvasY);
+    const mousePos = this.getMousePos(e);
+    const mouseWorld = mousePos.world;
     const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
 
     console.log(`📍 Double-click world coords: (${mouseWorld.x}, ${mouseWorld.y}), found pin: ${clickedPinIndex}`);
@@ -835,14 +1215,8 @@ class EventHandlers {
     }
 
     // Get drop position
-    // Convert mouse coordinates to canvas-relative
-    const canvasContainer = document.getElementById("canvas-container");
-    const containerRect = canvasContainer.getBoundingClientRect();
-
-    // Simple approach: use container coordinates directly
-    const canvasX = e.clientX - containerRect.left;
-    const canvasY = e.clientY - containerRect.top;
-    const mouseWorld = this.screenToWorld(canvasX, canvasY);
+    const mousePos = this.getMousePos(e);
+    const mouseWorld = mousePos.world;
 
 
     // Find the card data
@@ -874,8 +1248,8 @@ class EventHandlers {
     // Select the new pin
     window.appState.selectedPinIndex = newIndex;
 
-    // Save state
-    this.saveAppState(window.appState);
+    // Card drop should be undoable
+    window.appState.saveHistory();
 
     // Re-render
     this.draw();
@@ -908,30 +1282,25 @@ class EventHandlers {
       return;
     }
 
-    // Handle tool selection (M, S, P, T)
-    if (e.key === 'm' || e.key === 'M') {
+    // Handle key commands using command map
+    const command = this.keyCommands[e.key];
+    if (command) {
       e.preventDefault();
-      this.selectTool('pan');
-    } else if (e.key === 's' || e.key === 'S') {
-      e.preventDefault();
-      this.selectTool('select');
-    } else if (e.key === 'p' || e.key === 'P') {
-      e.preventDefault();
-      this.selectTool('pin');
-    } else if (e.key === 't' || e.key === 'T') {
-      e.preventDefault();
-      this.selectTool('text');
+      command();
+      return;
     }
-    // Handle type cycling within families (1=cycle pin types, 2=cycle card types, 3=cycle area types)
-    else if (e.key === '1' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+
+    // Handle conditional keys (numbers with modifier checks)
+    if (e.key >= '1' && e.key <= '3' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      this.cycleTypeInFamily('pin');
-    } else if (e.key === '2' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      const typeMap = { '1': 'pin', '2': 'card', '3': 'area' };
+      this.cycleTypeInFamily(typeMap[e.key]);
+      return;
+    }
+    // Handle text tool cycling (4 key when text tool is active)
+    else if (this.appState.currentTool === 'text' && e.key === '4' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
       e.preventDefault();
-      this.cycleTypeInFamily('card');
-    } else if (e.key === '3' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      this.cycleTypeInFamily('area');
+      this.cycleTextType();
     }
     // Handle Shift+1,2,3: Change selected pin type (if pin is selected)
     else if ((e.key === '!' || (e.key === '1' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
@@ -945,9 +1314,10 @@ class EventHandlers {
       this.cycleSelectedPinType('area');
     }
     // Handle Shift+Number: Quick color selection (Shift+1=first color, Shift+2=second color, etc.)
-    else if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+    // Note: This conflicts with Shift+1,2,3 for pin type selection - prioritize pin type selection
+    else if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key >= '4' && e.key <= '9') {
       e.preventDefault();
-      const colorIndex = parseInt(e.key) - 1; // Convert "1" to index 0, "2" to index 1, etc.
+      const colorIndex = parseInt(e.key) - 1; // Convert "4" to index 3, "5" to index 4, etc.
       const currentPalette = typeof getPalette === 'function' ? getPalette() : [];
       if (colorIndex < currentPalette.length) {
         if (typeof setSelectedColor === 'function') {
@@ -957,6 +1327,20 @@ class EventHandlers {
           if (typeof renderToolbar === 'function') {
             renderToolbar();
           }
+        }
+      }
+    }
+    // Handle radial menu navigation when menu is open
+    else if (window.isRadialMenuOpen) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (typeof window.executeSelectedRadialItem === 'function') {
+          window.executeSelectedRadialItem();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (typeof window.closeRadialMenu === 'function') {
+          window.closeRadialMenu();
         }
       }
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -970,6 +1354,11 @@ class EventHandlers {
     } else if (e.key === 'f' || e.key === 'F') {
       // Frame all pins
       this.frameAllPins();
+    } else if (e.key === 'Escape' && (this.appState.connectStartIndex !== null || this.marqueeAnimationId)) {
+      // Force stop marquee animation if it's stuck
+      console.log("🎯 Force stopping marquee animation");
+      this.forceStopMarqueeAnimation();
+      this.draw();
     } else if (e.key === 'Escape') {
       console.log(`🎯 ESC key pressed - checking for modals/marquee to cancel`);
 
@@ -1043,6 +1432,24 @@ class EventHandlers {
       if (hadSelectedPin) console.log(`   ↳ Deselected active pin`);
 
       this.draw();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      // Undo (Ctrl+Z / Cmd+Z)
+      e.preventDefault();
+      if (this.appState && this.appState.undo) {
+        const success = this.appState.undo();
+        if (success) {
+          // Update global state after undo
+          if (window.app && window.app.syncGlobalVariables) {
+            window.app.syncGlobalVariables();
+          }
+          // Update UI after undo
+          if (window.app && window.app.updatePinInfo) {
+            window.app.updatePinInfo();
+          }
+          this.draw();
+          console.log('↶ Undo performed');
+        }
+      }
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
       // Select all pins (Ctrl+A)
       e.preventDefault();
@@ -1069,7 +1476,26 @@ class EventHandlers {
           const newPin = { ...pinData };
           this.appState.pins.push(newPin);
         });
-        this.saveAppState(this.appState);
+        this.appState.saveHistory();
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
+        }
+        this.draw();
+      }
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      // Save state (Ctrl+S)
+      e.preventDefault();
+      if (this.appState && this.appState.saveState) {
+        this.appState.saveState();
+        console.log('💾 State saved');
+      }
+    } else if (e.key === 'l' || e.key === 'L') {
+      // Toggle connection type (L)
+      e.preventDefault();
+      if (this.appState) {
+        this.appState.connectionType = this.appState.connectionType === "curved" ? "straight" : "curved";
+        this.appState.saveState();
+        console.log(`🔗 Connection type: ${this.appState.connectionType}`);
         this.draw();
       }
     } else if (e.shiftKey) {
@@ -1092,6 +1518,73 @@ class EventHandlers {
     if (window.app && window.app.toolbarManager) {
       window.app.toolbarManager.render();
     }
+  }
+
+  // Cycle through text types
+  cycleTextType() {
+    if (this.appState.currentTextType) {
+      const textTypes = ["plain", "rectangle", "comic", "title"];
+      const currentIndex = textTypes.indexOf(this.appState.currentTextType);
+      const nextIndex = (currentIndex + 1) % textTypes.length;
+      this.appState.currentTextType = textTypes[nextIndex];
+      console.log(`📝 Text type cycled to: ${this.appState.currentTextType}`);
+
+      // Update UI if available
+      if (window.renderMenu) {
+        window.renderMenu();
+      }
+    }
+  }
+
+  // Toggle connection type (straight/curved)
+  toggleConnectionType() {
+    if (this.appState) {
+      this.appState.connectionType = this.appState.connectionType === "curved" ? "straight" : "curved";
+      this.appState.saveState();
+      console.log(`🔗 Connection type: ${this.appState.connectionType}`);
+      this.draw();
+    }
+  }
+
+  // Frame all pins in view
+  frameAllPins() {
+    if (this.appState.pins.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    this.appState.pins.forEach(pin => {
+      minX = Math.min(minX, pin.x);
+      maxX = Math.max(maxX, pin.x);
+      minY = Math.min(minY, pin.y);
+      maxY = Math.max(maxY, pin.y);
+    });
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const padding = 50;
+
+    const canvasWidth = this.canvas.width / window.devicePixelRatio;
+    const canvasHeight = this.canvas.height / window.devicePixelRatio;
+    const contentWidth = maxX - minX + padding * 2;
+    const contentHeight = maxY - minY + padding * 2;
+
+    const scaleX = canvasWidth / contentWidth;
+    const scaleY = canvasHeight / contentHeight;
+    const newScale = Math.min(scaleX, scaleY, 1); // Don't zoom in beyond 100%
+
+    this.appState.scale = Math.max(newScale, 0.1); // Minimum scale
+    this.appState.offsetX = canvasWidth / 2 - centerX * this.appState.scale;
+    this.appState.offsetY = canvasHeight / 2 - centerY * this.appState.scale;
+
+    // Sync globals and save
+    if (window.app && window.app.syncGlobalVariables) {
+      window.app.syncGlobalVariables();
+    }
+    this.appState.saveHistory(); // View changes should be undoable
+    this.draw();
+
+    console.log(`📐 Framed all pins: scale=${this.appState.scale.toFixed(2)}, center=(${centerX.toFixed(0)}, ${centerY.toFixed(0)})`);
   }
 
   // Cycle through types within a family
@@ -1157,9 +1650,8 @@ class EventHandlers {
     pin.typeId = newType.id;
     pin.variant = newType.variant; // Also update the variant for proper rendering
 
-    // Save history and update UI
+    // Save history (handles persistence automatically)
     this.appState.saveHistory();
-    this.saveAppState(this.appState);
     this.draw();
 
     // Update pin info panel if visible
@@ -1181,7 +1673,7 @@ class EventHandlers {
           const currentIndex = pinTypes.indexOf(pin.typeId);
           const nextIndex = (currentIndex + 1) % pinTypes.length;
           pin.typeId = pinTypes[nextIndex];
-          this.saveAppState(this.appState);
+          this.appState.saveHistory(); // Type changes should be undoable
           this.draw();
         } else {
         }
@@ -1221,70 +1713,69 @@ class EventHandlers {
     }
   }
 
-  // Frame all pins in view
-  frameAllPins() {
-    if (this.appState.pins.length === 0) return;
-
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
-
-    this.appState.pins.forEach(pin => {
-      minX = Math.min(minX, pin.x);
-      maxX = Math.max(maxX, pin.x);
-      minY = Math.min(minY, pin.y);
-      maxY = Math.max(maxY, pin.y);
-    });
-
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const padding = 50;
-
-    const canvasWidth = this.canvas.width;
-    const canvasHeight = this.canvas.height;
-    const contentWidth = maxX - minX + padding * 2;
-    const contentHeight = maxY - minY + padding * 2;
-
-    const scaleX = canvasWidth / contentWidth;
-    const scaleY = canvasHeight / contentHeight;
-    const newScale = Math.min(scaleX, scaleY, 1); // Don't zoom in beyond 100%
-
-    this.appState.scale = Math.max(newScale, 0.1); // Minimum scale
-    this.appState.offsetX = canvasWidth / 2 - centerX * this.appState.scale;
-    this.appState.offsetY = canvasHeight / 2 - centerY * this.appState.scale;
-
-    this.saveAppState(this.appState);
-    this.draw();
-  }
 
   // Cleanup event handlers
   destroy() {
+    // Remove event listeners using pre-bound methods to prevent memory leaks
     // Temporarily disabled pointer events
-    // this.canvas.removeEventListener("pointermove", this.handleCanvasPointerMove.bind(this));
-    // this.canvas.removeEventListener("pointerup", this.handleCanvasPointerUp.bind(this));
-    this.canvas.removeEventListener("mousedown", this.handleCanvasMouseDown.bind(this));
-    this.canvas.removeEventListener("mousemove", this.handleCanvasMouseMove.bind(this));
-    this.canvas.removeEventListener("mouseup", this.handleCanvasMouseUp.bind(this));
-    this.canvas.removeEventListener("dblclick", this.handleCanvasDoubleClick.bind(this));
-    this.canvas.removeEventListener("contextmenu", this.handleCanvasContextMenu.bind(this));
-    this.canvas.removeEventListener("dragover", this.handleCanvasDragOver.bind(this));
-    this.canvas.removeEventListener("drop", this.handleCanvasDrop.bind(this));
-    this.canvas.removeEventListener("wheel", this.handleWheel.bind(this));
-    window.removeEventListener("keydown", this.handleKeyDown.bind(this));
+    // this.canvas.removeEventListener("pointermove", this.handleCanvasPointerMove);
+    // this.canvas.removeEventListener("pointerup", this.handleCanvasPointerUp);
+    this.canvas.removeEventListener("mousedown", this.handleCanvasMouseDown);
+    this.canvas.removeEventListener("mousemove", this.handleCanvasMouseMove);
+    this.canvas.removeEventListener("mouseup", this.handleCanvasMouseUp);
+    this.canvas.removeEventListener("dblclick", this.handleCanvasDoubleClick);
+    this.canvas.removeEventListener("contextmenu", this.handleCanvasContextMenu);
+    this.canvas.removeEventListener("dragover", this.handleCanvasDragOver);
+    this.canvas.removeEventListener("drop", this.handleCanvasDrop);
+    this.canvas.removeEventListener("wheel", this.handleWheel);
+    window.removeEventListener("keydown", this.handleKeyDown);
+    window.removeEventListener("keyup", this.handleKeyUp);
+
+    // Clear any pending timeouts
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+
+    console.log("🧹 Event handlers destroyed - memory leaks prevented");
   }
 
-  // Handle mouse wheel for zooming
+  // Handle mouse wheel for zooming (radial menu wheel events are handled globally)
   handleWheel(e) {
+    // Completely ignore wheel events during any drag operation to prevent accidental zooming
+    if ((window.dragManager && window.dragManager.isCurrentlyDragging()) ||
+        this.isMarqueeSelecting) {
+      return; // Ignore wheel events during drag operations
+    }
+
     e.preventDefault();
 
+    // Radial menu wheel events are now handled globally, so this should only handle zoom
     const zoomSpeed = 1.05;
     // Determine if zooming in (deltaY < 0) or out (deltaY > 0)
     const delta = e.deltaY > 0 ? 1 / zoomSpeed : zoomSpeed;
 
     // Get the mouse position relative to the canvas
-    const canvasContainer = document.getElementById("canvas-container");
-    const rect = canvasContainer.getBoundingClientRect();
+    if (!this.canvasContainer) {
+      this.canvasContainer = document.getElementById("canvas-container");
+      if (!this.canvasContainer) {
+        console.error("Canvas container not found for wheel event!");
+        return;
+      }
+    }
+
+    const rect = this.canvasContainer.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+
+    // Validate coordinates are within reasonable bounds
+    const containerWidth = rect.width;
+    const containerHeight = rect.height;
+    if (screenX < -100 || screenX > containerWidth + 100 ||
+        screenY < -100 || screenY > containerHeight + 100) {
+      console.warn("Wheel event coordinates outside canvas bounds:", screenX, screenY, "container:", containerWidth, containerHeight);
+      return;
+    }
 
     // Calculate the world coordinate under the mouse before scaling
     const worldBeforeZoom = this.screenToWorld(screenX, screenY);
@@ -1304,12 +1795,10 @@ class EventHandlers {
     this.appState.offsetX = screenX - wx * this.appState.scale;
     this.appState.offsetY = screenY - wy * this.appState.scale;
 
-    // Update global variables
-    window.scale = this.appState.scale;
-    window.offsetX = this.appState.offsetX;
-    window.offsetY = this.appState.offsetY;
-
-    // Save state
+    // Sync global variables and save state (single source of truth)
+    if (window.app && window.app.syncGlobalVariables) {
+      window.app.syncGlobalVariables();
+    }
     this.saveAppState(this.appState);
 
     // Redraw

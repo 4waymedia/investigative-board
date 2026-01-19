@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <title>Investigative Board</title>
     <link rel="stylesheet" href="css/board-styles.css" />
+    <link rel="stylesheet" href="css/toolbar.css" />
 
     <!-- Core dependencies -->
     <script src="js/utilities.js"></script>
@@ -19,6 +20,7 @@
 
     <!-- Core application modules -->
     <script src="js/core/state.js"></script>
+    <script src="js/core/dragManager.js"></script>
     <script src="js/events/eventHandlers.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/ui/modal.js"></script>
@@ -57,10 +59,6 @@
 
     <!-- Bottom tray -->
     <div id="tray">
-      <div id="tray-header">
-        <div id="tray-title">Cards</div>
-        <div id="tray-toggle">▼</div>
-      </div>
       <div id="tray-content"></div>
     </div>
 
@@ -85,11 +83,14 @@
           <div class="tab-content active" id="info-tab">
             <div class="form-group">
               <label for="pm-title">Title</label>
-              <input type="text" id="pm-title" placeholder="Pin title">
+              <input type="text" id="pm-title" placeholder="Pin title" />
             </div>
             <div class="form-group">
               <label for="pm-description">Description</label>
-              <textarea id="pm-description" placeholder="Pin description"></textarea>
+              <textarea
+                id="pm-description"
+                placeholder="Pin description"
+              ></textarea>
             </div>
             <div class="form-group">
               <label for="pm-note">Note</label>
@@ -97,7 +98,7 @@
             </div>
             <div class="form-group">
               <label for="pm-date">Date</label>
-              <input type="date" id="pm-date">
+              <input type="date" id="pm-date" />
             </div>
           </div>
 
@@ -114,11 +115,11 @@
             <!-- Custom Color Pickers -->
             <div class="form-group">
               <label for="pm-color">Custom Color</label>
-              <input type="color" id="pm-color">
+              <input type="color" id="pm-color" />
             </div>
             <div class="form-group">
               <label for="pm-text-color">Text Color</label>
-              <input type="color" id="pm-text-color">
+              <input type="color" id="pm-text-color" />
             </div>
           </div>
 
@@ -137,11 +138,21 @@
             </div>
             <div class="form-group">
               <label for="pm-scale">Icon Scale</label>
-              <input type="range" id="pm-scale" min="0.1" max="3" step="0.1">
+              <input type="range" id="pm-scale" min="0.1" max="3" step="0.1" />
             </div>
-            <div class="form-group" id="area-scale-container" style="display: none;">
+            <div
+              class="form-group"
+              id="area-scale-container"
+              style="display: none"
+            >
               <label for="pm-area-scale">Area Scale</label>
-              <input type="range" id="pm-area-scale" min="0.1" max="5" step="0.1">
+              <input
+                type="range"
+                id="pm-area-scale"
+                min="0.1"
+                max="5"
+                step="0.1"
+              />
             </div>
           </div>
         </div>
@@ -162,7 +173,7 @@
           <div id="add-color-modal-close">✕</div>
         </div>
         <div id="add-color-modal-content">
-          <input type="color" id="new-color-picker">
+          <input type="color" id="new-color-picker" />
           <button id="add-color-btn">Add Color</button>
         </div>
       </div>
@@ -178,7 +189,7 @@
         <div id="card-modal-content">
           <div class="form-group">
             <label for="cm-title">Title</label>
-            <input type="text" id="cm-title" placeholder="Card title">
+            <input type="text" id="cm-title" placeholder="Card title" />
           </div>
           <div class="form-group">
             <label for="cm-content">Content</label>
@@ -186,7 +197,7 @@
           </div>
           <div class="form-group">
             <label for="cm-color">Color</label>
-            <input type="color" id="cm-color">
+            <input type="color" id="cm-color" />
           </div>
         </div>
         <div id="card-modal-actions">
@@ -208,7 +219,12 @@
             <button id="load-from-file">Load from File</button>
             <button id="load-example">Load Example</button>
           </div>
-          <input type="file" id="file-input" accept=".json" style="display: none;">
+          <input
+            type="file"
+            id="file-input"
+            accept=".json"
+            style="display: none"
+          />
         </div>
       </div>
     </div>
@@ -221,7 +237,10 @@
           <div id="text-modal-close">✕</div>
         </div>
         <div id="text-modal-content">
-          <textarea id="text-modal-input" placeholder="Enter text..."></textarea>
+          <textarea
+            id="text-modal-input"
+            placeholder="Enter text..."
+          ></textarea>
           <div id="text-modal-options">
             <div class="form-group">
               <label for="text-modal-type">Type</label>
@@ -232,11 +251,11 @@
             </div>
             <div class="form-group">
               <label for="text-modal-color">Bubble Color</label>
-              <input type="color" id="text-modal-color">
+              <input type="color" id="text-modal-color" />
             </div>
             <div class="form-group">
               <label for="text-modal-text-color">Text Color</label>
-              <input type="color" id="text-modal-text-color">
+              <input type="color" id="text-modal-text-color" />
             </div>
           </div>
         </div>
@@ -250,7 +269,7 @@
     <!-- Application initialization -->
     <script>
       // Initialize the application when DOM is ready
-      document.addEventListener('DOMContentLoaded', () => {
+      document.addEventListener("DOMContentLoaded", () => {
         console.log("DOM loaded, checking for Application class...");
         console.log("window.Application:", window.Application);
         if (window.Application) {
@@ -258,13 +277,16 @@
           console.log("🔍 Pre-init check:");
           console.log("🔍 window.drawPinShape:", typeof window.drawPinShape);
           console.log("🔍 window.shapeRenderers:", !!window.shapeRenderers);
-          console.log("🔍 window.openRadialMenu:", typeof window.openRadialMenu);
+          console.log(
+            "🔍 window.openRadialMenu:",
+            typeof window.openRadialMenu
+          );
 
           window.app = new window.Application();
           window.app.initialize().catch(console.error);
 
           // Initialize UI handlers after app is ready
-          if (typeof setupUIHandlers === 'function') {
+          if (typeof setupUIHandlers === "function") {
             setupUIHandlers();
           }
         } else {

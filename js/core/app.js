@@ -2,13 +2,45 @@
 // Handles application initialization and coordination
 
 class Application {
-  constructor() {
+  constructor(deps = {}) {
+    // Store dependencies (with defaults to window objects for backward compatibility)
+    this.deps = {
+      AppState: deps.AppState || window.AppState,
+      ModalManager: deps.ModalManager || window.ModalManager,
+      TrayManager: deps.TrayManager || window.TrayManager,
+      ToolbarManager: deps.ToolbarManager || window.ToolbarManager,
+      EventHandlers: deps.EventHandlers || window.EventHandlers,
+      DragManager: deps.DragManager || window.DragManager,
+      loadThemes: deps.loadThemes || window.loadThemes,
+      loadAppState: deps.loadAppState || window.loadAppState,
+      saveAppState: deps.saveAppState || window.saveAppState,
+      applyTheme: deps.applyTheme || window.applyTheme,
+      DEFAULT_CARDS: deps.DEFAULT_CARDS || window.DEFAULT_CARDS,
+      STORAGE_KEY: deps.STORAGE_KEY || window.STORAGE_KEY,
+      MENU_HEIGHT: deps.MENU_HEIGHT || window.MENU_HEIGHT,
+      TRAY_HEIGHT: deps.TRAY_HEIGHT || window.TRAY_HEIGHT,
+      PIN_BASES: deps.PIN_BASES || window.PIN_BASES,
+      drawPinShape: deps.drawPinShape || window.drawPinShape,
+      drawTextElements: deps.drawTextElements || window.drawTextElements,
+      parseDate: deps.parseDate || window.parseDate,
+      ConnectionsAPI: deps.ConnectionsAPI || window.ConnectionsAPI
+    };
+
     this.appState = null;
     this.eventHandlers = null;
     this.modalManager = null;
     this.trayManager = null;
     this.toolbarManager = null;
     this.canvas = null;
+    this.ctx = null;
+
+    // Animation loop state
+    this.animationFrameId = null;
+    this.isAnimating = false;
+    this.needsRedraw = true;
+
+    // Observer pattern for state changes
+    this.stateObservers = new Set();
 
     // Global state aliases (will be removed)
     this.scale = null;
@@ -21,8 +53,27 @@ class Application {
     this.selectedColor = null;
   }
 
+  // Initialize drag manager early (before event handlers need it)
+  initializeDragManagerEarly() {
+    console.log("🎯 Initializing drag manager early");
+    if (this.deps.DragManager) {
+      this.dragManager = new this.deps.DragManager(this.appState);
+      // Note: Full initialization happens later in initializeManagers()
+      // For now, just make it globally available
+      window.dragManager = this.dragManager;
+      console.log("✅ Drag manager created and available globally");
+    } else {
+      console.warn("⚠️ DragManager dependency not available");
+    }
+  }
+
   // Initialize the application
   async initialize() {
+    console.log("🚀 App.initialize() starting");
+    console.log("📍 Current location:", window.location.href);
+
+    // EARLY DRAG MANAGER INITIALIZATION - needed for event handlers
+    this.initializeDragManagerEarly();
 
     // Get canvas reference
     this.canvas = document.getElementById("board");
@@ -31,21 +82,46 @@ class Application {
     }
 
     // Initialize AppState
-    this.appState = new window.AppState();
+    this.appState = new this.deps.AppState();
 
     // Load themes
-    if (window.loadThemes) {
-      await window.loadThemes();
+    if (this.deps.loadThemes) {
+      await this.deps.loadThemes();
     }
 
     // Load saved state
-    const stateLoaded = window.loadAppState(this.appState);
+    console.log("📥 Loading saved state...");
+    try {
+      const stored = localStorage.getItem(this.deps.STORAGE_KEY || 'msc-investigativeboard');
+      console.log("📥 Raw localStorage data:", stored ? "Found data" : "No data found");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        console.log("📥 Parsed localStorage keys:", Object.keys(parsed));
+        console.log("📥 Sample data - pins:", parsed.pins?.length || 0, "connections:", parsed.connections?.length || 0);
+      }
+    } catch (e) {
+      console.error("📥 Error checking localStorage:", e);
+    }
+
+    const stateLoaded = this.deps.loadAppState(this.appState);
+    console.log("📥 State loaded:", stateLoaded);
+
+    if (stateLoaded) {
+      console.log("📊 Loaded state summary:");
+      console.log("  - Pins:", this.appState.pins?.length || 0);
+      console.log("  - Connections:", this.appState.connections?.length || 0);
+      console.log("  - Scale:", this.appState.scale);
+      console.log("  - Offset:", this.appState.offsetX, this.appState.offsetY);
+    }
 
     // Initialize default cards if no state was loaded
     if (!stateLoaded) {
-      this.appState.cards = window.DEFAULT_CARDS || [];
-    } else {
+      console.log("📝 No saved state found, using defaults");
+      this.appState.cards = this.deps.DEFAULT_CARDS || [];
     }
+
+    // EARLY DRAG MANAGER INITIALIZATION - needed for event handlers
+    this.initializeDragManagerEarly();
 
     // Sync global variables after loading data
     this.syncGlobalVariables();
@@ -60,11 +136,13 @@ class Application {
     this.setupCanvas();
 
     // Render initial state
+    console.log("🎨 Calling initial render...");
     this.render();
+    console.log("✅ Initial render complete");
 
     // Apply current theme
-    if (window.applyTheme && this.appState.currentThemeId) {
-      window.applyTheme(this.appState.currentThemeId);
+    if (this.deps.applyTheme && this.appState.currentThemeId) {
+      this.deps.applyTheme(this.appState.currentThemeId);
     }
 
     // Also render toolbar and tray
@@ -78,8 +156,7 @@ class Application {
     // Set up control button handlers
     this.setupControlHandlers();
 
-    // Initial render
-    this.render();
+    // Initial render is handled earlier in the method
 
   }
 
@@ -117,41 +194,76 @@ class Application {
 
   // Initialize all managers
   initializeManagers() {
+    // Prevent multiple initialization attempts
+    if (this._managersInitialized) {
+      return;
+    }
+
     // Initialize modal manager
-    this.modalManager = new window.ModalManager(this.appState);
+    this.modalManager = new this.deps.ModalManager(this.appState);
     this.modalManager.initialize({
       draw: () => this.render(),
-      saveAppState: window.saveAppState,
+      saveAppState: this.deps.saveAppState,
       renderCards: () => this.trayManager.render()
     });
 
     // Initialize tray manager
-    this.trayManager = new window.TrayManager(this.appState);
+    this.trayManager = new this.deps.TrayManager(this.appState);
     this.trayManager.initialize({
       renderCards: () => this.renderTray()
     });
 
     // Initialize toolbar manager
-    this.toolbarManager = new window.ToolbarManager(this.appState);
+    this.toolbarManager = new this.deps.ToolbarManager(this.appState, {
+      nodeTypes: window.NODE_TYPES,
+      defaultColors: window.DEFAULT_COLORS,
+      themes: window.THEMES || [{ id: "default", name: "Default" }],
+      families: [
+        { id: "pin", name: "Pin", defaultIcon: "●" },
+        { id: "card", name: "Card", defaultIcon: "▤" },
+        { id: "area", name: "Area", defaultIcon: "⭕" },
+      ],
+      mainTools: [
+        { id: "pan", label: "Move", icon: "🖐", key: "M" },
+        { id: "select", label: "Select", icon: "🔳", key: "S" },
+        { id: "text", label: "Text", icon: "📝", key: "T" },
+      ]
+    });
     this.toolbarManager.initialize({
       draw: () => this.render(),
-      saveAppState: window.saveAppState,
+      saveAppState: this.deps.saveAppState,
       openAddColorModal: () => {
         // Placeholder for opening add color modal
       }
     });
 
-    // Initialize event handlers
-    console.log("Creating EventHandlers, window.EventHandlers:", typeof window.EventHandlers);
-    if (!window.EventHandlers) {
-      console.warn("EventHandlers not loaded yet, retrying in 100ms...");
-      setTimeout(() => this.initializeManagers(), 100);
-      return;
+    // Initialize drag manager (continued from early initialization)
+    if (this.dragManager) {
+      this.dragManager.initialize({
+        screenToWorld: this.screenToWorld.bind(this),
+        updateAreaContainment: this.updateAreaContainment.bind(this),
+        draw: () => this.render()
+      });
+      console.log("✅ Drag manager fully initialized with dependencies");
     }
-    this.eventHandlers = new window.EventHandlers(this.appState, this.canvas);
+
+    // Initialize event handlers
+    console.log("Creating EventHandlers, deps.EventHandlers:", typeof this.deps.EventHandlers);
+    if (!this.deps.EventHandlers) {
+      // Limit retries to prevent infinite recursion
+      this._eventHandlerRetries = (this._eventHandlerRetries || 0) + 1;
+      if (this._eventHandlerRetries < 50) { // Max 50 retries (5 seconds at 100ms intervals)
+        console.warn(`EventHandlers not loaded yet, retrying in 100ms... (attempt ${this._eventHandlerRetries}/50)`);
+        setTimeout(() => this.initializeManagers(), 100);
+        return;
+      } else {
+        console.error("EventHandlers failed to load after 50 attempts. Some functionality may be limited.");
+      }
+    }
+    this.eventHandlers = new this.deps.EventHandlers(this.appState, this.canvas, this);
     this.eventHandlers.initialize({
       draw: () => this.render(),
-      saveAppState: window.saveAppState,
+      saveAppState: this.deps.saveAppState,
       screenToWorld: this.screenToWorld.bind(this),
       findPinAt: this.findPinAt.bind(this),
       setSelectedPin: this.setSelectedPin.bind(this),
@@ -160,6 +272,12 @@ class Application {
 
     // Make event handlers available globally for modal access
     window.eventHandlers = this.eventHandlers;
+
+    // Set up state change observers for managers
+    this.setupStateObservers();
+
+    // Mark managers as initialized
+    this._managersInitialized = true;
   }
 
   // Set up canvas
@@ -181,8 +299,8 @@ class Application {
 
   // Resize canvas to fill window (accounting for menu and tray)
   resizeCanvas() {
-    const menuHeight = window.MENU_HEIGHT || 50;
-    const trayHeight = window.TRAY_HEIGHT || 140;
+    const menuHeight = this.deps.MENU_HEIGHT || 50;
+    const trayHeight = this.deps.TRAY_HEIGHT || 140;
 
 
     // Remove any margin since canvas-container positions it correctly
@@ -198,180 +316,284 @@ class Application {
 
   // Main render function
   render() {
-    // Use the complete draw function which handles coordinate transforms
-    this.draw();
+    // Mark that a redraw is needed
+    this.needsRedraw = true;
+
+    // Start animation loop if not already running
+    if (!this.isAnimating) {
+      this.startAnimationLoop();
+    }
+  }
+
+  // Start the animation loop
+  startAnimationLoop() {
+    if (this.isAnimating) return;
+
+    this.isAnimating = true;
+    this.animationLoop();
+  }
+
+  // Stop the animation loop
+  stopAnimationLoop() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    this.isAnimating = false;
+  }
+
+  // Check if animations are currently active
+  hasActiveAnimations() {
+    return (
+      (this.marqueeStart && this.marqueeEnd) || // Marquee selection
+      (window.app && window.app.eventHandlers && window.app.eventHandlers.isDraggingArea) || // Area creation marquee
+      (this.appState.connectStartIndex !== null && this.appState.connectMousePos) // Connection preview
+    );
+  }
+
+  // Animation loop using requestAnimationFrame
+  animationLoop = () => {
+    if (!this.isAnimating) return;
+
+    // Always draw during active animations, otherwise only when needed
+    const shouldDraw = this.hasActiveAnimations() || this.needsRedraw;
+
+    if (shouldDraw) {
+      this.draw();
+      this.needsRedraw = false;
+    }
+
+    // Stop loop if no animations are active and no redraw needed
+    if (!this.hasActiveAnimations() && !this.needsRedraw) {
+      this.stopAnimationLoop();
+      return;
+    }
+
+    // Continue the loop
+    this.animationFrameId = requestAnimationFrame(this.animationLoop);
   }
 
   // Main draw function (made globally available)
   draw() {
-    if (!this.canvas) {
+    if (!this.canvas || !this.ctx) {
+      console.warn("❌ Draw called but canvas or context not available");
       return;
     }
 
-    const ctx = this.canvas.getContext("2d");
-    if (!ctx) {
-      return;
-    }
+    console.log(`🎨 Draw call #${window._drawCallCount || 0} - Canvas: ${this.canvas.width}x${this.canvas.height}, Pins: ${this.appState.pins?.length || 0}, Connections: ${this.appState.connections?.length || 0}`);
+
+    // Debug: Track draw calls to detect loops
+    if (!window._drawCallCount) window._drawCallCount = 0;
+    window._drawCallCount++;
+    const startTime = Date.now();
 
     // Clear canvas first
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Set up coordinate system
-    ctx.save();
-    ctx.translate(this.appState.offsetX, this.appState.offsetY);
-    ctx.scale(this.appState.scale, this.appState.scale);
+    // Draw all rendering layers in correct order
+    this.drawWorldSpaceElements();
+    this.drawScreenSpaceElements();
+    this.drawUIElements();
 
-    // Draw marquee selection rectangle if active (before transforms)
-    if (this.marqueeStart && this.marqueeEnd) {
-      ctx.save();
-      // Temporarily reset transforms to draw in screen space
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const startScreen = this.worldToScreen(this.marqueeStart.x, this.marqueeStart.y);
-      const endScreen = this.worldToScreen(this.marqueeEnd.x, this.marqueeEnd.y);
-
-      const x = Math.min(startScreen.x, endScreen.x);
-      const y = Math.min(startScreen.y, endScreen.y);
-      const w = Math.abs(endScreen.x - startScreen.x);
-      const h = Math.abs(endScreen.y - startScreen.y);
-
-      ctx.fillStyle = "rgba(255, 153, 0, 0.1)";
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = "#f90";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(x, y, w, h);
-      ctx.setLineDash([]);
-      ctx.restore();
+    // Debug: Log excessive draw calls
+    const drawTime = Date.now() - startTime;
+    if (window._drawCallCount % 100 === 0 || drawTime > 50) {
+      console.log(`🎨 Draw call #${window._drawCallCount} took ${drawTime}ms`);
     }
+  }
 
-    // Draw area creation marquee if dragging
-    if (window.app && window.app.eventHandlers && window.app.eventHandlers.isDraggingArea &&
-        window.app.eventHandlers.areaDragStart && window.app.eventHandlers.areaDragCurrent) {
-      const eh = window.app.eventHandlers;
-      ctx.save();
-      // Temporarily reset transforms to draw in screen space
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Draw world-space elements (scaled and translated)
+  drawWorldSpaceElements() {
+    this.ctx.save();
+    this.ctx.translate(this.appState.offsetX, this.appState.offsetY);
+    this.ctx.scale(this.appState.scale, this.appState.scale);
 
-      const startScreen = this.worldToScreen(eh.areaDragStart.x, eh.areaDragStart.y);
-      const currentScreen = this.worldToScreen(eh.areaDragCurrent.x, eh.areaDragCurrent.y);
+    // Draw connection preview first (behind other elements)
+    this.drawConnectionPreview();
 
-      // Calculate dimensions in screen space for proper visual scaling
-      const dx = Math.abs(currentScreen.x - startScreen.x);
-      const dy = Math.abs(currentScreen.y - startScreen.y);
-
-      // Animated marquee for area creation
-      const time = Date.now();
-      ctx.lineDashOffset = -((time * 0.5) % 16); // Animated marching ants
-
-      ctx.strokeStyle = "#ff0000"; // Bright red
-      ctx.lineWidth = 2;
-      ctx.setLineDash([8, 8]);
-      ctx.beginPath();
-
-      // Draw different shapes based on area type
-      if (this.appState.currentTypeId === "area:circle") {
-        // Circular marquee
-        const radius = Math.max(Math.sqrt(dx * dx + dy * dy), 10);
-        ctx.arc(startScreen.x, startScreen.y, radius, 0, Math.PI * 2);
-        console.log(`🎨 Circle marquee: center(${startScreen.x}, ${startScreen.y}), radius=${radius}`);
-      } else {
-        // Rectangular marquee - show the actual area bounds
-        const halfWidth = Math.max(dx, 25);
-        const halfHeight = Math.max(dy, 25);
-        ctx.rect(
-          startScreen.x - halfWidth,
-          startScreen.y - halfHeight,
-          halfWidth * 2,
-          halfHeight * 2
-        );
-        console.log(`🎨 Rectangle marquee: center(${startScreen.x}, ${startScreen.y}), width=${halfWidth * 2}, height=${halfHeight * 2}`);
-      }
-
-      ctx.stroke();
-      ctx.setLineDash([]); // Reset
-
-      ctx.restore();
-    }
-
-    // Draw active connection preview line first (behind existing connections)
-    if (this.appState.connectStartIndex !== null && this.appState.connectMousePos) {
-      const startPin = this.appState.pins[this.appState.connectStartIndex];
-      if (startPin) {
-        ctx.save();
-        ctx.strokeStyle = "#ffffff"; // White line as requested
-        ctx.lineWidth = 4 / this.appState.scale; // Scale line width
-
-        const time = Date.now();
-
-        // Animate the line dash offset for the "moving" effect
-        ctx.lineDashOffset = -((time * 0.5) % 10);
-
-        ctx.strokeStyle = "#ffffff"; // White line
-        ctx.lineWidth = 3; // Thicker line for better visibility
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.moveTo(startPin.x, startPin.y);
-
-        // Calculate distance and number of segments for the wave
-        const dx = this.appState.connectMousePos.x - startPin.x;
-        const dy = this.appState.connectMousePos.y - startPin.y;
-        const distance = Math.hypot(dx, dy);
-        const segments = Math.max(8, Math.floor(distance / (15 * this.appState.scale))); // More segments, smaller spacing
-
-        // Wave parameters - increased magnitude for more visible effect
-        const waveMagnitude = 25 * Math.sqrt(this.appState.scale); // Increased from 10 to 25
-        const waveSpeed = time * 0.02; // Slowed down from 0.05 to 0.02
-
-        console.log(`🎨 Marquee: distance=${distance.toFixed(1)}, segments=${segments}, magnitude=${waveMagnitude.toFixed(1)}, speed=${waveSpeed.toFixed(3)}`);
-
-        for (let i = 1; i <= segments; i++) {
-          const t = i / segments;
-          const x = startPin.x + dx * t;
-          const y = startPin.y + dy * t;
-
-          // Apply sine wave based on time and position (ORIGINAL index2.html style)
-          const wave =
-            Math.sin(t * Math.PI) *
-            Math.sin(t * 10 + waveSpeed) *
-            waveMagnitude;
-
-          const perpX = -dy / distance;
-          const perpY = dx / distance;
-
-          ctx.lineTo(x + perpX * wave, y + perpY * wave);
-        }
-
-        ctx.stroke();
-        ctx.setLineDash([]); // Reset dash
-        ctx.lineDashOffset = 0; // Reset offset
-        ctx.lineWidth = 1; // Reset line width
-      }
-    }
-
-    // Draw connections
-    this.drawConnections(ctx);
+    // LAYERING FIX: Draw connections BEFORE pins so pins sit on top and mask line ends
+    // This creates clean center-to-center connections with pins covering any line overlap
+    this.drawConnections(this.ctx);
 
     // Draw timeline if active
-    this.drawTimeline(ctx);
+    this.drawTimeline(this.ctx);
 
-    // DEBUG: Draw test markers at key locations
-
-    // Test marker at origin (0,0) in world space
-    ctx.fillStyle = "cyan";
-    ctx.fillRect(-5, -5, 10, 10);
-    ctx.fillText("ORIGIN", 10, 0);
-
-
-    // Draw pins
-    this.drawPins(ctx);
+    // Draw pins AFTER connections so they mask the connection line ends
+    this.drawPins(this.ctx);
 
     // Draw text elements
-    this.drawTextElements(ctx);
+    this.drawTextElements(this.ctx);
 
-    ctx.restore();
+    this.ctx.restore();
+  }
 
-    // Draw UI elements (not scaled)
-    this.drawUI(ctx);
+  // Draw screen-space elements (UI overlays, marquees, etc.)
+  drawScreenSpaceElements() {
+    this.drawScreenUI(this.ctx);
+  }
+
+  // Draw UI elements (toolbar, tray, etc.)
+  drawUIElements() {
+    this.drawUI(this.ctx);
+  }
+
+  // Validate and sanitize pin data to prevent rendering issues
+  validatePin(pin) {
+    if (!pin) return pin;
+
+    // Validate and clamp pinScale
+    let pinScale = pin.pinScale || 1;
+    if (typeof pinScale !== 'number' || isNaN(pinScale) || !isFinite(pinScale) || pinScale <= 0) {
+      console.warn(`⚠️ Invalid pinScale for pin: ${pinScale}, using 1.0`);
+      pinScale = 1.0;
+    }
+    pin.pinScale = Math.max(0.1, Math.min(5.0, pinScale));
+
+    // Validate coordinates
+    if (typeof pin.x !== 'number' || isNaN(pin.x)) {
+      console.warn(`⚠️ Invalid x coordinate for pin: ${pin.x}, using 0`);
+      pin.x = 0;
+    }
+    if (typeof pin.y !== 'number' || isNaN(pin.y)) {
+      console.warn(`⚠️ Invalid y coordinate for pin: ${pin.y}, using 0`);
+      pin.y = 0;
+    }
+
+    return pin;
+  }
+
+  // Get the visual center point of a pin for connection anchoring
+  getPinCenter(pin) {
+    // VERIFIED: All pins use (x,y) as their visual center
+    // Every connection to this pin will use these exact coordinates
+
+    // For debugging: verify coordinates are consistent
+    if (window.DEBUG_PIN_CENTERS) {
+      console.log(`📍 Pin center for pin at (${pin.x.toFixed(1)}, ${pin.y.toFixed(1)}): (${pin.x.toFixed(1)}, ${pin.y.toFixed(1)})`);
+    }
+
+    return {
+      x: pin.x,
+      y: pin.y
+    };
+  }
+
+  // VERIFICATION: Test that all connections to a pin use identical coordinates
+  verifyPinConnectionConsistency(pinIndex) {
+    if (!this.appState.pins || !this.appState.connections) {
+      console.log("❌ No pins or connections to verify");
+      return;
+    }
+
+    const pin = this.appState.pins[pinIndex];
+    if (!pin) {
+      console.log(`❌ Pin ${pinIndex} not found`);
+      return;
+    }
+
+    const pinCenter = this.getPinCenter(pin);
+    console.log(`🎯 Verifying connections for pin ${pinIndex} at center (${pinCenter.x.toFixed(1)}, ${pinCenter.y.toFixed(1)})`);
+
+    // Find all connections to/from this pin
+    const connectionsToPin = this.appState.connections.filter(conn =>
+      conn.startIndex === pinIndex || conn.endIndex === pinIndex
+    );
+
+    console.log(`📊 Found ${connectionsToPin.length} connections to pin ${pinIndex}`);
+
+    let allConsistent = true;
+    connectionsToPin.forEach((conn, idx) => {
+      const isStart = conn.startIndex === pinIndex;
+      const otherPinIndex = isStart ? conn.endIndex : conn.startIndex;
+      const otherPin = this.appState.pins[otherPinIndex];
+
+      if (!otherPin) {
+        console.log(`❌ Connection ${idx}: other pin ${otherPinIndex} not found`);
+        allConsistent = false;
+        return;
+      }
+
+      const connectionPoint = isStart ? this.getPinCenter(pin) : this.getPinCenter(otherPin);
+      const expectedPoint = isStart ? pinCenter : this.getPinCenter(otherPin);
+
+      const matches = Math.abs(connectionPoint.x - expectedPoint.x) < 0.01 &&
+                     Math.abs(connectionPoint.y - expectedPoint.y) < 0.01;
+
+      if (!matches) {
+        console.log(`❌ Connection ${idx}: coordinates don't match!`);
+        console.log(`   Expected: (${expectedPoint.x.toFixed(3)}, ${expectedPoint.y.toFixed(3)})`);
+        console.log(`   Actual: (${connectionPoint.x.toFixed(3)}, ${connectionPoint.y.toFixed(3)})`);
+        allConsistent = false;
+      } else {
+        console.log(`✅ Connection ${idx}: coordinates match perfectly`);
+      }
+    });
+
+    if (allConsistent) {
+      console.log(`🎉 SUCCESS: All connections to pin ${pinIndex} use identical center coordinates!`);
+    } else {
+      console.log(`💥 FAILURE: Some connections to pin ${pinIndex} use different coordinates!`);
+    }
+
+    return allConsistent;
+  }
+
+  // Draw connection preview line
+  drawConnectionPreview() {
+    if (this.appState.connectStartIndex === null || !this.appState.connectMousePos) {
+      return;
+    }
+
+    const startPin = this.appState.pins[this.appState.connectStartIndex];
+    if (!startPin) return;
+
+    // Get the visual center of the starting pin
+    const startCenter = this.getPinCenter(startPin);
+
+    // SUB-PIXEL FIX: Round coordinates for sharp preview lines
+    const startX = Math.round(startCenter.x);
+    const startY = Math.round(startCenter.y);
+
+    this.ctx.strokeStyle = "#ffffff"; // White line
+    this.ctx.lineWidth = 3; // Thicker line for better visibility
+    this.ctx.setLineDash([5, 5]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(startX, startY);
+
+    const time = Date.now();
+    // Animate the line dash offset for the "moving" effect
+    this.ctx.lineDashOffset = -((time * 0.4) % 10);
+
+    // Calculate distance and number of segments for the wave
+    const dx = this.appState.connectMousePos.x - startCenter.x;
+    const dy = this.appState.connectMousePos.y - startCenter.y;
+    const distance = Math.hypot(dx, dy);
+    const segments = Math.max(8, Math.floor(distance / (15 * this.appState.scale)));
+
+    // Wave parameters - balanced for smooth animation
+    const waveMagnitude = 12.5 * Math.sqrt(this.appState.scale);
+    const waveSpeed = time * 0.03;
+
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const x = startCenter.x + dx * t;
+      const y = startCenter.y + dy * t;
+
+      // Apply sine wave based on time and position
+      const wave =
+        Math.sin(t * Math.PI) *
+        Math.sin(t * 8 + waveSpeed) * waveMagnitude;
+
+      const perpX = -dy / distance;
+      const perpY = dx / distance;
+
+      this.ctx.lineTo(x + perpX * wave, y + perpY * wave);
+    }
+
+    this.ctx.stroke();
+    this.ctx.setLineDash([]); // Reset dash
+    this.ctx.lineDashOffset = 0; // Reset offset
+    this.ctx.lineWidth = 1; // Reset line width
   }
 
   // Draw all connections
@@ -391,7 +613,7 @@ class Application {
 
     this.appState.connections.forEach((connection, idx) => {
       ctx.strokeStyle = connection.color || "#666";
-      ctx.lineWidth = 2 / this.appState.scale; // Scale the line width
+      ctx.lineWidth = 2; // World-space line width (context is already scaled)
       ctx.setLineDash([]); // Ensure solid line (not dashed)
       ctx.beginPath();
 
@@ -400,63 +622,74 @@ class Application {
 
       if (!startPin || !endPin) return;
 
+      // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
+      // getPinCenter() returns uniform center coordinates for all pin types
+      const startAnchor = this.getPinCenter(startPin);
+      const endAnchor = this.getPinCenter(endPin);
+
+      // SUB-PIXEL FIX: Round coordinates to prevent anti-aliasing blur/shift
+      const startX = Math.round(startAnchor.x);
+      const startY = Math.round(startAnchor.y);
+      const endX = Math.round(endAnchor.x);
+      const endY = Math.round(endAnchor.y);
+
+      // VERIFICATION: All connections to a pin use identical coordinates
+      if (window.DEBUG_PIN_CENTERS) {
+        console.log(`🔗 Connection ${idx}: pin ${connection.startIndex}→${connection.endIndex}`);
+        console.log(`   Start: (${startX}, ${startY}) [from pin center: (${startAnchor.x.toFixed(1)}, ${startAnchor.y.toFixed(1)})]`);
+        console.log(`   End: (${endX}, ${endY}) [from pin center: (${endAnchor.x.toFixed(1)}, ${endAnchor.y.toFixed(1)})]`);
+      }
+
+
       // Determine connection type (use connection's type, or default to global setting)
       const connType = connection.type || this.appState.connectionType;
 
+      // CENTER-CONNECTION LOGIC: All connections go directly to pin centers
+      // No fan-out or spreading - every connection uses the exact same anchor point
+      const fanOutOffset = 0; // All connections go to the same center point
+
       if (connType === "curved") {
-        // Calculate fan-out for curved connections
-        // Find how many connections share the same endpoint
-        const endConnections = connectionsByEndpoint[connection.endIndex] || [];
-        const startConnections = connectionsByEndpoint[connection.startIndex] || [];
-
-        // Use the endpoint with more connections for fan-out
-        let fanOutCount = 1;
-        let fanOutIndex = 0;
-        let useStart = false;
-
-        if (endConnections.length > startConnections.length && endConnections.length > 1) {
-          fanOutCount = endConnections.length;
-          fanOutIndex = endConnections.indexOf(idx);
-          useStart = false;
-        } else if (startConnections.length > 1) {
-          fanOutCount = startConnections.length;
-          fanOutIndex = startConnections.indexOf(idx);
-          useStart = true;
-        }
-
         // Calculate curve
-        const dx = endPin.x - startPin.x;
-        const dy = endPin.y - startPin.y;
+        const dx = endX - startX;
+        const dy = endY - startY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > 0) {
-          const midX = (startPin.x + endPin.x) / 2;
-          const midY = (startPin.y + endPin.y) / 2;
+          const midX = (startX + endX) / 2;
+          const midY = (startY + endY) / 2;
 
           // Perpendicular vector
           const perpX = -dy / dist;
           const perpY = dx / dist;
 
-          // Fan out curve based on connection index
-          const curveAmount = 40 * this.appState.scale; // Base curve amount
-          const fanOutOffset = fanOutCount > 1
-            ? ((fanOutIndex - (fanOutCount - 1) / 2) / (fanOutCount - 1)) * 30 * this.appState.scale
-            : 0;
+          // CENTER-BASED CURVING: Curve connects directly to centers
+          const curveAmount = 40; // World-space curve amount (context is already scaled)
 
           const controlX = midX + perpX * curveAmount;
-          const controlY = midY + perpY * curveAmount + fanOutOffset;
+          const controlY = midY + perpY * curveAmount; // No fan-out offset
 
-          ctx.moveTo(startPin.x, startPin.y);
-          ctx.quadraticCurveTo(controlX, controlY, endPin.x, endPin.y);
+          ctx.moveTo(startX, startY);
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY);
         } else {
           // Fallback to straight line if pins are at same position
-          ctx.moveTo(startPin.x, startPin.y);
-          ctx.lineTo(endPin.x, endPin.y);
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
         }
       } else {
-        // Straight line
-        ctx.moveTo(startPin.x, startPin.y);
-        ctx.lineTo(endPin.x, endPin.y);
+        // Straight line with fan-out offset
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 0) {
+          // DIRECT CENTER-TO-CENTER CONNECTION: No offsets, straight to center
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+        } else {
+          // Fallback if pins are at same position
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+        }
       }
 
       ctx.stroke();
@@ -505,23 +738,38 @@ class Application {
       return;
     }
 
+    // Initialize label collision tracking for this frame
+    window._drawnLabels = [];
+
     this.appState.pins.forEach((pin, index) => {
-      if (window.drawPinShape) {
+      // DEBUG: Add crosshair to first pin to check alignment
+      if (index === 0 && window.DEBUG_CONNECTIONS) {
+        ctx.save();
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pin.x - 20, pin.y); ctx.lineTo(pin.x + 20, pin.y);
+        ctx.moveTo(pin.x, pin.y - 20); ctx.lineTo(pin.x, pin.y + 20);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (this.deps.drawPinShape) {
         // Use the existing drawPinShape function from drawing.js
-        const pinBase = window.PIN_BASES?.[pin.typeId] || { shape: "circle", baseRadius: 9 };
+        const pinBase = this.deps.PIN_BASES?.[pin.typeId] || { shape: "circle", baseRadius: 9 };
 
         // Use the correct shape from PIN_BASES
 
         // Pin shape determined from PIN_BASES lookup
 
         // Fallback if PIN_BASES not available
-        if (!window.PIN_BASES) {
+        if (!this.deps.PIN_BASES) {
           pinBase.shape = 'circle';
         }
 
         const isSelected = index === this.appState.selectedPinIndex;
-        // isMarquee should only be true for the pin that's the source of connection preview
-        const isMarquee = isSelected && this.appState.connectionMode === 'sequential';
+        // Show marquee whenever pin is selected (for visual feedback)
+        const isMarquee = isSelected;
         const metrics = {
           x: pin.x,
           y: pin.y,
@@ -534,7 +782,7 @@ class Application {
         };
 
         try {
-          window.drawPinShape(ctx, pin, metrics, index);
+          this.deps.drawPinShape(ctx, pin, metrics, index, this.appState.scale);
         } catch (error) {
         }
       } else {
@@ -544,7 +792,7 @@ class Application {
 
   // Draw text elements
   drawTextElements(ctx) {
-    if (!this.appState.textElements || !window.drawTextElements) return;
+    if (!this.appState.textElements || !this.deps.drawTextElements) return;
 
     // Calculate viewport bounds (world coordinates)
     const viewportLeft = -this.appState.offsetX / this.appState.scale;
@@ -555,7 +803,72 @@ class Application {
     const margin = 100 / this.appState.scale; // Extra margin for text elements
 
     // Use the drawing.js text rendering function
-    window.drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBottom, margin);
+    this.deps.drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBottom, margin);
+  }
+
+  // Draw screen-space UI elements (marquees, selections, etc.)
+  drawScreenUI(ctx) {
+    // Draw marquee selection rectangle if active
+    if (this.marqueeStart && this.marqueeEnd) {
+      const startScreen = this.worldToScreen(this.marqueeStart.x, this.marqueeStart.y);
+      const endScreen = this.worldToScreen(this.marqueeEnd.x, this.marqueeEnd.y);
+
+      const x = Math.min(startScreen.x, endScreen.x);
+      const y = Math.min(startScreen.y, endScreen.y);
+      const w = Math.abs(endScreen.x - startScreen.x);
+      const h = Math.abs(endScreen.y - startScreen.y);
+
+      ctx.fillStyle = "rgba(255, 153, 0, 0.1)";
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = "#f90";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+
+    // Draw area creation marquee if dragging
+    if (window.app && window.app.eventHandlers && window.app.eventHandlers.isDraggingArea &&
+        window.app.eventHandlers.areaDragStart && window.app.eventHandlers.areaDragCurrent) {
+      const eh = window.app.eventHandlers;
+      const startScreen = this.worldToScreen(eh.areaDragStart.x, eh.areaDragStart.y);
+      const currentScreen = this.worldToScreen(eh.areaDragCurrent.x, eh.areaDragCurrent.y);
+
+      // Calculate dimensions in screen space for proper visual scaling
+      const dx = Math.abs(currentScreen.x - startScreen.x);
+      const dy = Math.abs(currentScreen.y - startScreen.y);
+
+      // Animated marquee for area creation
+      const time = Date.now();
+      ctx.lineDashOffset = -((time * 0.5) % 16); // Animated marching ants
+
+      ctx.strokeStyle = "#ff0000"; // Bright red
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+
+      // Draw different shapes based on area type
+      if (this.appState.currentTypeId === "area:circle") {
+        // Circular marquee
+        const radius = Math.max(Math.sqrt(dx * dx + dy * dy), 10);
+        ctx.arc(startScreen.x, startScreen.y, radius, 0, Math.PI * 2);
+        console.log(`🎨 Circle marquee: center(${startScreen.x}, ${startScreen.y}), radius=${radius}`);
+      } else {
+        // Rectangular marquee - show the actual area bounds
+        const halfWidth = Math.max(dx, 25);
+        const halfHeight = Math.max(dy, 25);
+        ctx.rect(
+          startScreen.x - halfWidth,
+          startScreen.y - halfHeight,
+          halfWidth * 2,
+          halfHeight * 2
+        );
+        console.log(`🎨 Rectangle marquee: center(${startScreen.x}, ${startScreen.y}), width=${halfWidth * 2}, height=${halfHeight * 2}`);
+      }
+
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset
+    }
   }
 
   // Draw UI elements
@@ -595,7 +908,7 @@ class Application {
 
       // Use pin scale for hit detection
       const scale = pin.pinScale || 1;
-      const baseRadius = window.PIN_BASES?.[pin.typeId]?.baseRadius || 10;
+      const baseRadius = this.deps.PIN_BASES?.[pin.typeId]?.baseRadius || 10;
       // Make hit detection more generous (2x radius for easier clicking)
       const hitRadius = baseRadius * scale * 2;
 
@@ -607,9 +920,11 @@ class Application {
   }
 
   setSelectedPin(index) {
+    const oldIndex = this.appState.selectedPinIndex;
     this.appState.selectedPinIndex = index;
     this.syncGlobalVariables();
     this.updatePinInfo();
+    this.notifyStateChange({ selectedPinIndex: { old: oldIndex, new: index } });
   }
 
   updatePinInfo() {
@@ -646,6 +961,7 @@ class Application {
 
   // Sync global variables for backward compatibility
   syncGlobalVariables() {
+    console.log("🔄 Syncing global variables...");
     window.appState = this.appState;
     window.scale = this.appState.scale;
     window.offsetX = this.appState.offsetX;
@@ -656,6 +972,32 @@ class Application {
     window.selectedPinIndex = this.appState.selectedPinIndex;
     window.selectedPins = this.appState.selectedPins;
     window.selectedColor = this.appState.selectedColor;
+
+    console.log(`✅ Global variables synced: pins=${window.pins?.length || 0}, connections=${window.connections?.length || 0}, scale=${window.scale}`);
+
+    // Debug flags
+    window.DEBUG_CONNECTIONS = false; // Set to true to show crosshairs on first pin for alignment debugging
+  }
+
+  // Set up state observers for managers
+  setupStateObservers() {
+    // Tray manager updates when cards change
+    if (this.trayManager) {
+      this.subscribeToStateChanges((changes) => {
+        if (changes.cards || changes.selectedPinIndex) {
+          this.trayManager.render();
+        }
+      });
+    }
+
+    // Toolbar manager updates when various states change
+    if (this.toolbarManager) {
+      this.subscribeToStateChanges((changes) => {
+        if (changes.selectedPinIndex || changes.selectedColor || changes.scale || changes.connectionType) {
+          this.toolbarManager.render();
+        }
+      });
+    }
   }
 
   // Render tray
@@ -665,6 +1007,22 @@ class Application {
     }
   }
 
+  // Observer pattern methods
+  subscribeToStateChanges(callback) {
+    this.stateObservers.add(callback);
+    return () => this.stateObservers.delete(callback); // Return unsubscribe function
+  }
+
+  notifyStateChange(changes = {}) {
+    this.stateObservers.forEach(callback => {
+      try {
+        callback(changes, this.appState);
+      } catch (error) {
+        console.error('Error in state change observer:', error);
+      }
+    });
+  }
+
   // Get application state
   getState() {
     return this.appState;
@@ -672,13 +1030,24 @@ class Application {
 
   // Save application state
   saveState() {
-    if (window.saveAppState && this.appState) {
-      window.saveAppState(this.appState);
+    if (this.deps.saveAppState && this.appState) {
+      this.deps.saveAppState(this.appState);
+    }
+  }
+
+  // Update pin scales based on connection counts
+  updatePinScales() {
+    for (let i = 0; i < this.appState.pins.length; i++) {
+      const connectionCount = this.deps.ConnectionsAPI?.getConnectionCount(i, this.appState.connections) || 0;
+      // Scale increases with square root of connections for smoother scaling
+      const newScale = 1 + Math.sqrt(connectionCount) * 0.3;
+      this.appState.pins[i].pinScale = Math.max(0.5, Math.min(3.0, newScale)); // Clamp between 0.5 and 3.0
     }
   }
 
   // Cleanup application
   destroy() {
+    this.stopAnimationLoop();
     if (this.eventHandlers) {
       this.eventHandlers.destroy();
     }
@@ -760,7 +1129,7 @@ class Application {
     this.saveState();
 
     // Parse dates and sort chronologically
-    timedPins.forEach((tp) => (tp.timestamp = window.parseDate(tp.dateStr)));
+    timedPins.forEach((tp) => (tp.timestamp = this.deps.parseDate(tp.dateStr)));
     timedPins.sort((a, b) => a.timestamp - b.timestamp);
     this.appState.timelinePins = timedPins;
 
@@ -809,7 +1178,7 @@ class Application {
   resetBoard() {
     if (confirm("Are you sure you want to reset the entire board? This cannot be undone from local storage!")) {
       // Clear localStorage
-      localStorage.removeItem(window.STORAGE_KEY);
+      localStorage.removeItem(this.deps.STORAGE_KEY);
 
       // Reset state
       this.appState.pins = [];
@@ -835,7 +1204,7 @@ class Application {
       }
 
       // Save the reset state
-      window.saveAppState(this.appState);
+      this.deps.saveAppState(this.appState);
 
       // Reload the page to fully reset
       window.location.reload();

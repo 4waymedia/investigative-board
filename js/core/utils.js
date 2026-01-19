@@ -15,10 +15,10 @@
  * @param {Object} state - Application state with scale, offsetX, offsetY
  * @returns {Object} Screen coordinates {x, y}
  */
-function worldToScreen(wx, wy, state) {
+function worldToScreen(wx, wy, { scale, offsetX, offsetY }) {
   return {
-    x: wx * state.scale + state.offsetX,
-    y: wy * state.scale + state.offsetY,
+    x: wx * scale + offsetX,
+    y: wy * scale + offsetY,
   };
 }
 
@@ -29,10 +29,10 @@ function worldToScreen(wx, wy, state) {
  * @param {Object} state - Application state with scale, offsetX, offsetY
  * @returns {Object} World coordinates {x, y}
  */
-function screenToWorld(sx, sy, state) {
+function screenToWorld(sx, sy, { scale, offsetX, offsetY }) {
   return {
-    x: (sx - state.offsetX) / state.scale,
-    y: (sy - state.offsetY) / state.scale,
+    x: (sx - offsetX) / scale,
+    y: (sy - offsetY) / scale,
   };
 }
 
@@ -41,23 +41,27 @@ function screenToWorld(sx, sy, state) {
 // ============================================================================
 
 function lightenColor(color, percent) {
-  // Simple color lightening
-  const num = parseInt(color.replace("#", ""), 16);
+  // Validate hex color format
+  const hexRegex = /^#([A-Fa-f0-9]{3}){1,2}$/;
+  if (!hexRegex.test(color)) {
+    console.warn(`Invalid hex color: ${color}, returning original`);
+    return color;
+  }
+
+  // Expand 3-digit hex to 6-digit
+  let hex = color.slice(1);
+  if (hex.length === 3) {
+    hex = hex.split('').map(char => char + char).join('');
+  }
+
+  const num = parseInt(hex, 16);
   const amt = Math.round(2.55 * percent);
-  const R = (num >> 16) + amt;
-  const G = ((num >> 8) & 0x00ff) + amt;
-  const B = (num & 0x0000ff) + amt;
-  return (
-    "#" +
-    (
-      0x1000000 +
-      (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
-      (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
-      (B < 255 ? (B < 1 ? 0 : B) : 255)
-    )
-      .toString(16)
-      .slice(1)
-  );
+
+  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+  const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) + amt));
+  const B = Math.max(0, Math.min(255, (num & 0x0000ff) + amt));
+
+  return "#" + ((R << 16) | (G << 8) | B).toString(16).padStart(6, '0');
 }
 
 /**
@@ -67,12 +71,27 @@ function lightenColor(color, percent) {
  * @returns {string} Darkened hex color
  */
 function darkenColor(hex, percent) {
-  const num = parseInt(hex.slice(1), 16);
+  // Validate hex color format
+  const hexRegex = /^#([A-Fa-f0-9]{3}){1,2}$/;
+  if (!hexRegex.test(hex)) {
+    console.warn(`Invalid hex color: ${hex}, returning original`);
+    return hex;
+  }
+
+  // Expand 3-digit hex to 6-digit
+  let hexValue = hex.slice(1);
+  if (hexValue.length === 3) {
+    hexValue = hexValue.split('').map(char => char + char).join('');
+  }
+
+  const num = parseInt(hexValue, 16);
   const amt = Math.round(2.55 * percent);
+
   const R = Math.max(0, Math.min(255, (num >> 16) - amt));
   const G = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) - amt));
   const B = Math.max(0, Math.min(255, (num & 0x0000ff) - amt));
-  return "#" + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+
+  return "#" + ((R << 16) | (G << 8) | B).toString(16).padStart(6, '0');
 }
 
 /**
@@ -102,6 +121,9 @@ function generateColorVariants(hex) {
  * @param {number} r - Corner radius
  */
 function roundRectPath(ctx, x, y, w, h, r) {
+  // Ensure radius doesn't exceed half the dimensions to prevent invalid geometry
+  r = Math.min(r, w / 2, h / 2);
+
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -154,9 +176,59 @@ function lerp(a, b, t) {
  * @param {Object} pin - Pin object with typeId, pinScale, etc.
  * @returns {Object} Metrics object with shape, radius, width, height, etc.
  */
-function getPinMetrics(pin) {
+/**
+ * Update pin scales based on connection counts (connection-driven growth)
+ * @param {Array} pins - Array of pin objects
+ * @param {Array} connections - Array of connection objects
+ */
+function updatePinScales(pins, connections) {
+  console.log(`🎯 updatePinScales called with ${pins.length} pins, ${connections.length} connections`);
+
+  // Prevent excessive calls that could cause rendering loops
+  const now = Date.now();
+  if (window._lastScaleUpdate && now - window._lastScaleUpdate < 100) {
+    console.log(`⚠️ updatePinScales called too frequently, skipping`);
+    return;
+  }
+  window._lastScaleUpdate = now;
+
+  // Safe guard for API dependency
+  if (!window.ConnectionsAPI?.getConnectionCount) {
+    console.warn(`⚠️ ConnectionsAPI not available, skipping pin scale updates`);
+    return;
+  }
+
+  pins.forEach((pin, index) => {
+    if (!pin) return; // Skip invalid pins
+
+    const connectionCount = window.ConnectionsAPI.getConnectionCount(index, connections) || 0;
+    console.log(`📊 Pin ${index} has ${connectionCount} connections`);
+
+    // Scale formula: Base 1.0, add 0.1 for every 2 connections, max 1.4
+    const scaleMultiplier = 1 + (Math.floor(connectionCount / 2) * 0.1);
+    const newScale = clamp(scaleMultiplier, 0.5, 1.4);
+
+    // Validate the new scale is a valid number
+    if (isNaN(newScale) || !isFinite(newScale)) {
+      console.error(`❌ Invalid scale calculated for pin ${index}: ${newScale}, using 1.0`);
+      pin.pinScale = 1.0;
+      return;
+    }
+
+    const oldScale = pin.pinScale || 1;
+    pin.pinScale = newScale;
+
+    // Debug logging for scaling changes
+    if (oldScale !== newScale) {
+      console.log(`📏 Pin ${index} SCALED: ${oldScale} → ${newScale} (connections: ${connectionCount})`);
+    }
+  });
+}
+
+function getPinMetrics(pin, config = {}) {
   const typeId = pin.typeId || "pin:circle";
-  const base = window.PIN_BASES?.[typeId];
+  const pinBases = config.pinBases || window.PIN_BASES;
+  const base = pinBases?.[typeId];
 
   if (!base) {
     return {
@@ -169,8 +241,9 @@ function getPinMetrics(pin) {
     };
   }
 
-  // Get node type details
-  const typeDetail = window.NodeTypesAPI?.getNodeType(typeId) || { variant: "circle" };
+  // Get node type details - prefer config API over global
+  const nodeTypesAPI = config.nodeTypesAPI || window.NodeTypesAPI;
+  const typeDetail = nodeTypesAPI?.getNodeType(typeId) || { variant: "circle" };
 
   // All pins can scale, but area pins use areaScale for the area size and pinScale for the icon
   const pinScale = pin.pinScale || 1;
@@ -197,18 +270,40 @@ function getPinMetrics(pin) {
  * @returns {number|null} Timestamp or null if invalid
  */
 function parseDate(dateStr) {
-  if (!dateStr) return null;
-  const yearMatch = dateStr.match(/\d{4}/);
-  if (yearMatch) return new Date(yearMatch[0], 0, 1).getTime();
+  if (!dateStr || typeof dateStr !== 'string') return null;
+
+  // Trim whitespace
+  dateStr = dateStr.trim();
+
+  // Try to extract a 4-digit year more robustly
+  const yearMatch = dateStr.match(/\b(\d{4})\b/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1], 10);
+    // Validate reasonable year range
+    if (year >= 1900 && year <= 2100) {
+      return new Date(year, 0, 1).getTime();
+    }
+  }
+
+  // Try standard Date parsing for more complex formats
   const parsed = Date.parse(dateStr);
-  return isNaN(parsed) ? null : parsed;
+  if (!isNaN(parsed) && isFinite(parsed)) {
+    // Additional validation - ensure the parsed date makes sense
+    const date = new Date(parsed);
+    const year = date.getFullYear();
+    if (year >= 1900 && year <= 2100) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 // ============================================================================
-// GLOBAL EXPORTS
+// GLOBAL EXPORTS (No ES6 modules - loaded as regular script)
 // ============================================================================
 
-// Make utilities available globally
+// Main DrawingUtils export to window
 window.DrawingUtils = {
   // Coordinate transformation functions
   worldToScreen,
@@ -227,7 +322,7 @@ window.DrawingUtils = {
   lerp,
 };
 
-// Individual exports for backward compatibility
+// Individual function exports for backward compatibility
 window.worldToScreen = worldToScreen;
 window.screenToWorld = screenToWorld;
 window.lightenColor = lightenColor;
@@ -237,4 +332,23 @@ window.roundRectPath = roundRectPath;
 window.clamp = clamp;
 window.lerp = lerp;
 window.getPinMetrics = getPinMetrics;
+window.updatePinScales = updatePinScales;
+window.parseDate = parseDate;
+
+// ============================================================================
+// BACKWARD COMPATIBILITY - Global exports
+// ============================================================================
+
+// Keep global exports for backward compatibility with existing code
+window.DrawingUtils = DrawingUtils;
+window.worldToScreen = worldToScreen;
+window.screenToWorld = screenToWorld;
+window.lightenColor = lightenColor;
+window.darkenColor = darkenColor;
+window.generateColorVariants = generateColorVariants;
+window.roundRectPath = roundRectPath;
+window.clamp = clamp;
+window.lerp = lerp;
+window.getPinMetrics = getPinMetrics;
+window.updatePinScales = updatePinScales;
 window.parseDate = parseDate;

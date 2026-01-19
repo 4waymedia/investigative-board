@@ -10,69 +10,381 @@
 
 class AppState {
   constructor() {
-    // View/Camera State
-    this.scale = 1;
-    this.offsetX = 0;
-    this.offsetY = 0;
-
-    // Data State
-    this.pins = [];
-    this.connections = [];
-    this.cards = [];
-    this.textElements = [];
-    this.history = [];
-
-    // Selection State
-    this.selectedPinIndex = null;
-    this.selectedPins = [];
-    this.selectedTextIndex = null;
-    this.connectStartIndex = null;
-    this.connectMousePos = null;
-    this.connectionMode = null; // 'sequential' or 'hub'
-
-    // Marquee Selection State
-    this.marqueeStart = null;
-    this.marqueeEnd = null;
-
-    // Interaction State
-    this.mouseScreenX = 0;
-    this.mouseScreenY = 0;
-    this.didDrag = false;
-    this.time = 0;
-
-    // Tool State
-    this.currentTool = "pin";
-    this.currentFamily = "pin";
-    this.currentTypeId = "pin:circle";
-    this.selectedColor = "#58a6ff";
-    this.connectionType = "straight";
-
-    // Additional tool state
-    this.selectedTypeByFamily = {
-      pin: 0,  // Index into pin family types
-      card: 0, // Index into card family types
-      area: 0, // Index into area family types
+    // ============================================================================
+    // VIEW STATE - Camera, zoom, and rendering
+    // ============================================================================
+    this.view = {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      isLayoutSimulating: false,
     };
 
-    // Theme State
-    this.currentThemeId = "default";
-    this.palette = [
-      { name: "Red", value: "#f85149" },
-      { name: "Blue", value: "#58a6ff" },
-      { name: "Green", value: "#3fb950" },
-      { name: "Yellow", value: "#f1c40f" },
-      { name: "Purple", value: "#a471f7" },
-    ];
+    // ============================================================================
+    // DOCUMENT STATE - Persistent data that gets saved/loaded
+    // ============================================================================
+    this.document = {
+      pins: [],
+      connections: [],
+      cards: [],
+      textElements: [],
+      areas: [], // Future: for area objects
+      currentThemeId: "default",
+      palette: [
+        { name: "Red", value: "#f85149" },
+        { name: "Blue", value: "#58a6ff" },
+        { name: "Green", value: "#3fb950" },
+        { name: "Yellow", value: "#f1c40f" },
+        { name: "Purple", value: "#a471f7" },
+      ],
+      // Timeline State (if used)
+      timelineActive: false,
+      timelinePins: [],
+      timelineY: 0,
+      timelineLeft: 0,
+      timelineRight: 0,
+    };
 
-    // Timeline State (if used)
-    this.timelineActive = false;
-    this.timelinePins = [];
-    this.timelineY = 0;
-    this.timelineLeft = 0;
-    this.timelineRight = 0;
+    // ============================================================================
+    // SESSION STATE - Transient state that resets on page load
+    // ============================================================================
+    this.session = {
+      // Selection State
+      selectedPins: [], // Primary selection array (replaces selectedPinIndex)
+      selectedTextIndex: null,
+      connectStartIndex: null,
+      connectMousePos: null,
+      connectionMode: null, // 'sequential' or 'hub'
 
-    // UI State
-    this.isLayoutSimulating = false;
+      // Marquee Selection State
+      marqueeStart: null,
+      marqueeEnd: null,
+
+      // Interaction State (resets on page load)
+      mouseScreenX: 0,
+      mouseScreenY: 0,
+      didDrag: false,
+      time: 0,
+
+      // Tool State
+      currentTool: "pin",
+      currentFamily: "pin",
+      currentTypeId: "pin:circle",
+      selectedColor: "#58a6ff",
+      connectionType: "straight",
+
+      // Additional tool state
+      selectedTypeByFamily: {
+        pin: 0,  // Index into pin family types
+        card: 0, // Index into card family types
+        area: 0, // Index into area family types
+      },
+    };
+
+    // ============================================================================
+    // HISTORY STATE - Undo/Redo functionality
+    // ============================================================================
+    this.history = [];
+  }
+
+  // ============================================================================
+  // BACKWARD COMPATIBILITY GETTERS/SETTERS
+  // ============================================================================
+
+  // View state backward compatibility
+  get scale() { return this.view.scale; }
+  set scale(value) { this.view.scale = value; }
+
+  get offsetX() { return this.view.offsetX; }
+  set offsetX(value) { this.view.offsetX = value; }
+
+  get offsetY() { return this.view.offsetY; }
+  set offsetY(value) { this.view.offsetY = value; }
+
+  get isLayoutSimulating() { return this.view.isLayoutSimulating; }
+  set isLayoutSimulating(value) { this.view.isLayoutSimulating = value; }
+
+  // Document state backward compatibility
+  get pins() { return this.document.pins; }
+  set pins(value) { this.document.pins = value; }
+
+  get connections() { return this.document.connections; }
+  set connections(value) { this.document.connections = value; }
+
+  get cards() { return this.document.cards; }
+  set cards(value) { this.document.cards = value; }
+
+  get textElements() { return this.document.textElements; }
+  set textElements(value) { this.document.textElements = value; }
+
+  get areas() { return this.document.areas; }
+  set areas(value) { this.document.areas = value; }
+
+  get currentThemeId() { return this.document.currentThemeId; }
+  set currentThemeId(value) { this.document.currentThemeId = value; }
+
+  get palette() { return this.document.palette; }
+  set palette(value) { this.document.palette = value; }
+
+  get timelineActive() { return this.document.timelineActive; }
+  set timelineActive(value) { this.document.timelineActive = value; }
+
+  get timelinePins() { return this.document.timelinePins; }
+  set timelinePins(value) { this.document.timelinePins = value; }
+
+  get timelineY() { return this.document.timelineY; }
+  set timelineY(value) { this.document.timelineY = value; }
+
+  get timelineLeft() { return this.document.timelineLeft; }
+  set timelineLeft(value) { this.document.timelineLeft = value; }
+
+  get timelineRight() { return this.document.timelineRight; }
+  set timelineRight(value) { this.document.timelineRight = value; }
+
+  // Session state backward compatibility (selection state updated)
+  get selectedPins() { return this.session.selectedPins; }
+  set selectedPins(value) { this.session.selectedPins = value; }
+
+  get selectedTextIndex() { return this.session.selectedTextIndex; }
+  set selectedTextIndex(value) { this.session.selectedTextIndex = value; }
+
+  get connectStartIndex() { return this.session.connectStartIndex; }
+  set connectStartIndex(value) { this.session.connectStartIndex = value; }
+
+  get connectMousePos() { return this.session.connectMousePos; }
+  set connectMousePos(value) { this.session.connectMousePos = value; }
+
+  get connectionMode() { return this.session.connectionMode; }
+  set connectionMode(value) { this.session.connectionMode = value; }
+
+  get marqueeStart() { return this.session.marqueeStart; }
+  set marqueeStart(value) { this.session.marqueeStart = value; }
+
+  get marqueeEnd() { return this.session.marqueeEnd; }
+  set marqueeEnd(value) { this.session.marqueeEnd = value; }
+
+  get mouseScreenX() { return this.session.mouseScreenX; }
+  set mouseScreenX(value) { this.session.mouseScreenX = value; }
+
+  get mouseScreenY() { return this.session.mouseScreenY; }
+  set mouseScreenY(value) { this.session.mouseScreenY = value; }
+
+  get didDrag() { return this.session.didDrag; }
+  set didDrag(value) { this.session.didDrag = value; }
+
+  get time() { return this.session.time; }
+  set time(value) { this.session.time = value; }
+
+  get currentTool() { return this.session.currentTool; }
+  set currentTool(value) { this.session.currentTool = value; }
+
+  get currentFamily() { return this.session.currentFamily; }
+  set currentFamily(value) { this.session.currentFamily = value; }
+
+  get currentTypeId() { return this.session.currentTypeId; }
+  set currentTypeId(value) { this.session.currentTypeId = value; }
+
+  get selectedColor() { return this.session.selectedColor; }
+  set selectedColor(value) { this.session.selectedColor = value; }
+
+  get connectionType() { return this.session.connectionType; }
+  set connectionType(value) { this.session.connectionType = value; }
+
+  get selectedTypeByFamily() { return this.session.selectedTypeByFamily; }
+  set selectedTypeByFamily(value) { this.session.selectedTypeByFamily = value; }
+
+  // Computed properties for backward compatibility
+  get selectedPinIndex() {
+    return this.session.selectedPins.length > 0 ? this.session.selectedPins[0] : null;
+  }
+  set selectedPinIndex(value) {
+    if (value === null || value === undefined) {
+      this.session.selectedPins = [];
+    } else {
+      this.session.selectedPins = [value];
+    }
+  }
+
+  // ============================================================================
+  // ENCAPSULATED SETTER METHODS
+  // ============================================================================
+
+  /**
+   * Add a pin to the document with validation and ID generation
+   * @param {number} x - World X coordinate
+   * @param {number} y - World Y coordinate
+   * @param {Object} properties - Additional pin properties
+   * @returns {number} Index of the added pin
+   */
+  addPin(x, y, properties = {}) {
+    const pin = {
+      id: this._generateId('pin'),
+      x: x,
+      y: y,
+      typeId: properties.typeId || this.session.currentTypeId,
+      color: properties.color || this.session.selectedColor,
+      note: properties.note || '',
+      ...properties
+    };
+
+    this.document.pins.push(pin);
+    return this.document.pins.length - 1;
+  }
+
+  /**
+   * Update a pin's position with optional bounds checking
+   * @param {number} index - Pin index
+   * @param {number} x - New X coordinate
+   * @param {number} y - New Y coordinate
+   * @param {Object} bounds - Optional bounds {minX, maxX, minY, maxY}
+   * @returns {boolean} True if update was successful
+   */
+  updatePinPosition(index, x, y, bounds = null) {
+    if (index < 0 || index >= this.document.pins.length) return false;
+
+    let finalX = x;
+    let finalY = y;
+
+    // Apply bounds if provided
+    if (bounds) {
+      finalX = Math.max(bounds.minX, Math.min(bounds.maxX, x));
+      finalY = Math.max(bounds.minY, Math.min(bounds.maxY, y));
+    }
+
+    this.document.pins[index].x = finalX;
+    this.document.pins[index].y = finalY;
+    return true;
+  }
+
+  /**
+   * Add a text element to the document
+   * @param {number} x - World X coordinate
+   * @param {number} y - World Y coordinate
+   * @param {string} text - Text content
+   * @param {Object} properties - Additional text properties
+   * @returns {number} Index of the added text element
+   */
+  addTextElement(x, y, text = '', properties = {}) {
+    const textElement = {
+      id: this._generateId('text'),
+      x: x,
+      y: y,
+      text: text,
+      typeId: properties.typeId || 'plain',
+      color: properties.color || this.session.selectedColor,
+      fontSize: properties.fontSize || 16,
+      width: properties.width || 200,
+      height: properties.height || 50,
+      ...properties
+    };
+
+    this.document.textElements.push(textElement);
+    return this.document.textElements.length - 1;
+  }
+
+  /**
+   * Add a connection between two pins
+   * @param {number} fromIndex - Source pin index
+   * @param {number} toIndex - Target pin index
+   * @param {Object} properties - Additional connection properties
+   * @returns {number} Index of the added connection
+   */
+  addConnection(fromIndex, toIndex, properties = {}) {
+    const connection = {
+      id: this._generateId('connection'),
+      from: fromIndex,
+      to: toIndex,
+      type: properties.type || this.session.connectionType,
+      color: properties.color || '#666666',
+      ...properties
+    };
+
+    this.document.connections.push(connection);
+    return this.document.connections.length - 1;
+  }
+
+  /**
+   * Remove a pin and clean up related connections
+   * @param {number} index - Pin index to remove
+   * @returns {boolean} True if removal was successful
+   */
+  removePin(index) {
+    if (index < 0 || index >= this.document.pins.length) return false;
+
+    // Remove the pin
+    this.document.pins.splice(index, 1);
+
+    // Remove connections that reference this pin
+    this.document.connections = this.document.connections.filter(conn =>
+      conn.from !== index && conn.to !== index
+    );
+
+    // Update connection indices that reference higher indices
+    this.document.connections.forEach(conn => {
+      if (conn.from > index) conn.from--;
+      if (conn.to > index) conn.to--;
+    });
+
+    // Update selection indices
+    this.session.selectedPins = this.session.selectedPins
+      .filter(i => i !== index)
+      .map(i => i > index ? i - 1 : i);
+
+    return true;
+  }
+
+  /**
+   * Generate a unique ID for a given type
+   * @param {string} type - Type of object ('pin', 'text', 'connection')
+   * @returns {string} Unique ID
+   * @private
+   */
+  _generateId(type) {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substr(2, 5);
+    return `${type}_${timestamp}_${random}`;
+  }
+
+  // ============================================================================
+  // COORDINATE TRANSFORMATION HELPERS
+  // ============================================================================
+
+  /**
+   * Get the current view transformation
+   * @returns {Object} Transform object with scale, offsetX, offsetY
+   */
+  get transform() {
+    return {
+      scale: this.view.scale,
+      x: this.view.offsetX,
+      y: this.view.offsetY
+    };
+  }
+
+  /**
+   * Convert screen coordinates to world coordinates
+   * @param {number} screenX - Screen X coordinate
+   * @param {number} screenY - Screen Y coordinate
+   * @returns {Object} World coordinates {x, y}
+   */
+  screenToWorld(screenX, screenY) {
+    return {
+      x: (screenX - this.view.offsetX) / this.view.scale,
+      y: (screenY - this.view.offsetY) / this.view.scale
+    };
+  }
+
+  /**
+   * Convert world coordinates to screen coordinates
+   * @param {number} worldX - World X coordinate
+   * @param {number} worldY - World Y coordinate
+   * @returns {Object} Screen coordinates {x, y}
+   */
+  worldToScreen(worldX, worldY) {
+    return {
+      x: worldX * this.view.scale + this.view.offsetX,
+      y: worldY * this.view.scale + this.view.offsetY
+    };
   }
 
   // ============================================================================
@@ -81,16 +393,31 @@ class AppState {
 
   /**
    * Save current state to history for undo functionality
+   * Uses surgical cloning for better performance
    */
   saveHistory() {
     const snapshot = {
-      pins: JSON.parse(JSON.stringify(this.pins)),
-      connections: JSON.parse(JSON.stringify(this.connections)),
-      cards: JSON.parse(JSON.stringify(this.cards)),
-      textElements: JSON.parse(JSON.stringify(this.textElements)),
-      scale: this.scale,
-      offsetX: this.offsetX,
-      offsetY: this.offsetY,
+      // Surgical clone: only copy the essential data properties
+      document: {
+        pins: this.document.pins.map(pin => ({ ...pin })),
+        connections: this.document.connections.map(conn => ({ ...conn })),
+        cards: this.document.cards.map(card => ({ ...card })),
+        textElements: this.document.textElements.map(text => ({ ...text })),
+        areas: this.document.areas.map(area => ({ ...area })),
+        currentThemeId: this.document.currentThemeId,
+        palette: [...this.document.palette],
+        timelineActive: this.document.timelineActive,
+        timelinePins: [...this.document.timelinePins],
+        timelineY: this.document.timelineY,
+        timelineLeft: this.document.timelineLeft,
+        timelineRight: this.document.timelineRight,
+      },
+      view: {
+        scale: this.view.scale,
+        offsetX: this.view.offsetX,
+        offsetY: this.view.offsetY,
+        isLayoutSimulating: this.view.isLayoutSimulating,
+      }
     };
     this.history.push(snapshot);
     if (this.history.length > window.MAX_HISTORY) {
@@ -105,20 +432,18 @@ class AppState {
   undo() {
     if (this.history.length > 0) {
       const snapshot = this.history.pop();
-      this.pins = snapshot.pins;
-      this.connections = snapshot.connections;
-      this.cards = snapshot.cards;
-      this.textElements = snapshot.textElements;
-      this.scale = snapshot.scale;
-      this.offsetX = snapshot.offsetX;
-      this.offsetY = snapshot.offsetY;
 
-      // Clear selections after undo
-      this.selectedPinIndex = null;
-      this.selectedPins = [];
-      this.selectedTextIndex = null;
-      this.connectStartIndex = null;
-      this.connectMousePos = null;
+      // Restore document and view state
+      this.document = { ...snapshot.document };
+      this.view = { ...snapshot.view };
+
+      // Clear transient session state after undo
+      this.session.selectedPins = [];
+      this.session.selectedTextIndex = null;
+      this.session.connectStartIndex = null;
+      this.session.connectMousePos = null;
+      this.session.marqueeStart = null;
+      this.session.marqueeEnd = null;
 
       return true;
     }
@@ -130,29 +455,36 @@ class AppState {
   // ============================================================================
 
   /**
-   * Set the selected pin
+   * Set the selected pins (standardized selection method)
+   * @param {number|number[]|null} selection - Pin index, array of indices, or null to clear
+   */
+  setSelectedPins(selection) {
+    if (selection === null || selection === undefined) {
+      this.session.selectedPins = [];
+    } else if (Array.isArray(selection)) {
+      this.session.selectedPins = [...selection];
+    } else if (typeof selection === "number") {
+      this.session.selectedPins = [selection];
+    }
+  }
+
+  /**
+   * Select a single pin (clears previous selection)
    * @param {number|null} index - Pin index to select, or null to clear
    */
   setSelectedPin(index) {
-    if (typeof index === "number" && index !== null && index !== undefined) {
-      this.selectedPinIndex = index;
-      this.selectedPins = [index];
-    } else {
-      this.selectedPinIndex = null;
-      this.selectedPins = [];
-    }
+    this.setSelectedPins(index);
   }
 
   /**
    * Clear all selections
    */
   clearSelection() {
-    this.selectedPinIndex = null;
-    this.selectedPins = [];
-    this.selectedTextIndex = null;
-    this.connectStartIndex = null;
-    this.marqueeStart = null;
-    this.marqueeEnd = null;
+    this.session.selectedPins = [];
+    this.session.selectedTextIndex = null;
+    this.session.connectStartIndex = null;
+    this.session.marqueeStart = null;
+    this.session.marqueeEnd = null;
   }
 
   /**
@@ -160,11 +492,8 @@ class AppState {
    * @param {number} index - Pin index to add
    */
   addToSelection(index) {
-    if (!this.selectedPins.includes(index)) {
-      this.selectedPins.push(index);
-      if (this.selectedPinIndex === null) {
-        this.selectedPinIndex = index;
-      }
+    if (!this.session.selectedPins.includes(index)) {
+      this.session.selectedPins.push(index);
     }
   }
 
@@ -173,9 +502,18 @@ class AppState {
    * @param {number} index - Pin index to remove
    */
   removeFromSelection(index) {
-    this.selectedPins = this.selectedPins.filter(i => i !== index);
-    if (this.selectedPinIndex === index) {
-      this.selectedPinIndex = this.selectedPins.length > 0 ? this.selectedPins[0] : null;
+    this.session.selectedPins = this.session.selectedPins.filter(i => i !== index);
+  }
+
+  /**
+   * Toggle pin selection (add if not selected, remove if selected)
+   * @param {number} index - Pin index to toggle
+   */
+  togglePinSelection(index) {
+    if (this.session.selectedPins.includes(index)) {
+      this.removeFromSelection(index);
+    } else {
+      this.addToSelection(index);
     }
   }
 
@@ -184,26 +522,14 @@ class AppState {
   // ============================================================================
 
   /**
-   * Convert state to a serializable object for localStorage
+   * Convert persistent state to a serializable object for localStorage
+   * Only serializes document and view state, not transient session state
    * @returns {Object} Serializable state object
    */
   toSerializable() {
     return {
-      pins: this.pins,
-      connections: this.connections,
-      cards: this.cards,
-      textElements: this.textElements,
-      scale: this.scale,
-      offsetX: this.offsetX,
-      offsetY: this.offsetY,
-      selectedColor: this.selectedColor,
-      palette: this.palette,
-      currentThemeId: this.currentThemeId,
-      timelineActive: this.timelineActive,
-      timelinePins: this.timelinePins,
-      timelineY: this.timelineY,
-      timelineLeft: this.timelineLeft,
-      timelineRight: this.timelineRight,
+      document: { ...this.document },
+      view: { ...this.view },
     };
   }
 
@@ -212,12 +538,59 @@ class AppState {
    * @param {Object} data - Serializable state object
    */
   fromSerializable(data) {
-    Object.assign(this, data);
-    // Ensure arrays exist
-    this.pins = this.pins || [];
-    this.connections = this.connections || [];
-    this.cards = this.cards || [];
-    this.textElements = this.textElements || [];
+    // Handle both old format (direct properties) and new format (document/view objects)
+    if (data.document && data.view) {
+      // New format
+      this.document = { ...data.document };
+      this.view = { ...data.view };
+    } else {
+      // Backward compatibility: old format with direct properties
+      this.document = {
+        pins: data.pins || [],
+        connections: data.connections || [],
+        cards: data.cards || [],
+        textElements: data.textElements || [],
+        areas: data.areas || [],
+        currentThemeId: data.currentThemeId || "default",
+        palette: data.palette || this.document.palette,
+        timelineActive: data.timelineActive || false,
+        timelinePins: data.timelinePins || [],
+        timelineY: data.timelineY || 0,
+        timelineLeft: data.timelineLeft || 0,
+        timelineRight: data.timelineRight || 0,
+      };
+      this.view = {
+        scale: data.scale || 1,
+        offsetX: data.offsetX || 0,
+        offsetY: data.offsetY || 0,
+        isLayoutSimulating: false,
+      };
+    }
+
+    // Reset session state and history
+    this.session = {
+      selectedPins: [],
+      selectedTextIndex: null,
+      connectStartIndex: null,
+      connectMousePos: null,
+      connectionMode: null,
+      marqueeStart: null,
+      marqueeEnd: null,
+      mouseScreenX: 0,
+      mouseScreenY: 0,
+      didDrag: false,
+      time: 0,
+      currentTool: "pin",
+      currentFamily: "pin",
+      currentTypeId: "pin:circle",
+      selectedColor: data.selectedColor || "#58a6ff",
+      connectionType: "straight",
+      selectedTypeByFamily: {
+        pin: 0,
+        card: 0,
+        area: 0,
+      },
+    };
     this.history = [];
   }
 
@@ -226,13 +599,22 @@ class AppState {
   // ============================================================================
 
   /**
-   * Get the currently selected pin object
-   * @returns {Object|null} Selected pin or null
+   * Get the primary selected pin object (first in selection)
+   * @returns {Object|null} Primary selected pin or null
    */
   getSelectedPin() {
-    return this.selectedPinIndex !== null && this.pins[this.selectedPinIndex]
-      ? this.pins[this.selectedPinIndex]
+    const primaryIndex = this.getPrimarySelectedPinIndex();
+    return primaryIndex !== null && this.document.pins[primaryIndex]
+      ? this.document.pins[primaryIndex]
       : null;
+  }
+
+  /**
+   * Get the primary selected pin index
+   * @returns {number|null} Primary selected pin index or null
+   */
+  getPrimarySelectedPinIndex() {
+    return this.session.selectedPins.length > 0 ? this.session.selectedPins[0] : null;
   }
 
   /**
@@ -240,7 +622,9 @@ class AppState {
    * @returns {Array} Array of selected pin objects
    */
   getSelectedPins() {
-    return this.selectedPins.map(i => this.pins[i]).filter(p => p);
+    return this.session.selectedPins
+      .map(i => this.document.pins[i])
+      .filter(p => p !== undefined);
   }
 
   /**
@@ -249,7 +633,15 @@ class AppState {
    * @returns {boolean} True if selected
    */
   isPinSelected(index) {
-    return this.selectedPins.includes(index);
+    return this.session.selectedPins.includes(index);
+  }
+
+  /**
+   * Get the count of selected pins
+   * @returns {number} Number of selected pins
+   */
+  getSelectedPinCount() {
+    return this.session.selectedPins.length;
   }
 }
 
@@ -267,12 +659,42 @@ function saveAppState(appState) {
     return;
   }
 
+  console.log("🔍 saveAppState called, appState type:", typeof appState);
+  console.log("🔍 appState.pins:", appState.pins, "length:", appState.pins?.length);
+  console.log("🔍 appState.document:", appState.document, "document.pins:", appState.document?.pins);
+
   const stateData = appState.toSerializable();
+  console.log("🔍 saveAppState serialized data:", {
+    hasDocument: !!stateData.document,
+    pinsCount: stateData.document?.pins?.length || 0,
+    connectionsCount: stateData.document?.connections?.length || 0,
+    pinsType: typeof stateData.document?.pins,
+    isPinsArray: Array.isArray(stateData.document?.pins),
+    storageKey: window.STORAGE_KEY
+  });
 
   try {
-    localStorage.setItem(window.STORAGE_KEY, JSON.stringify(stateData));
+    const jsonString = JSON.stringify(stateData);
+    console.log("🔍 Attempting to save JSON string of length:", jsonString.length);
+    localStorage.setItem(window.STORAGE_KEY, jsonString);
+    console.log("✅ Successfully saved to localStorage with key:", window.STORAGE_KEY);
+
+    // Verify the save worked immediately
+    const verifyStored = localStorage.getItem(window.STORAGE_KEY);
+    if (verifyStored) {
+      try {
+        const verifyParsed = JSON.parse(verifyStored);
+        console.log("✅ Verification: localStorage contains", verifyParsed.document?.pins?.length || 0, "pins");
+      } catch (parseError) {
+        console.error("❌ Verification failed: could not parse stored data:", parseError);
+        console.log("❌ Stored data:", verifyStored.substring(0, 500));
+      }
+    } else {
+      console.error("❌ Verification failed: localStorage.getItem returned null after save");
+    }
   } catch (e) {
-    console.error("Failed to save AppState to localStorage:", e);
+    console.error("❌ Failed to save AppState to localStorage:", e);
+    console.error("❌ Error details:", e.message, e.stack);
   }
 }
 

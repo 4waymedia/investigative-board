@@ -3,28 +3,122 @@
 // ============================================================================
 
 // ============================================================================
+// PIN GEOMETRY CONSTANTS
+// ============================================================================
+
+/**
+ * Default pin dimensions and hitbox settings
+ */
+const PIN_GEOMETRY = {
+  DEFAULT_WIDTH: 46,
+  DEFAULT_HEIGHT: 30,
+  DEFAULT_RADIUS: 10,
+  HITBOX_PADDING_RATIO: 0.2, // 20% padding around pin dimensions
+  CARD_HALF_WIDTH: 75,
+  CARD_HALF_HEIGHT: 50,
+};
+
+// ============================================================================
+// EVENT SYSTEM
+// ============================================================================
+
+/**
+ * Simple event emitter for decoupling pins module from global functions
+ */
+const pinEvents = {
+  listeners: new Map(),
+
+  /**
+   * Add an event listener
+   * @param {string} event - Event name
+   * @param {Function} callback - Event handler
+   */
+  on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event).push(callback);
+  },
+
+  /**
+   * Remove an event listener
+   * @param {string} event - Event name
+   * @param {Function} callback - Event handler to remove
+   */
+  off(event, callback) {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      const index = eventListeners.indexOf(callback);
+      if (index !== -1) {
+        eventListeners.splice(index, 1);
+      }
+    }
+  },
+
+  /**
+   * Emit an event to all listeners
+   * @param {string} event - Event name
+   * @param {*} data - Event data
+   */
+  emit(event, data) {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`Error in pin event listener for '${event}':`, error);
+        }
+      });
+    }
+  }
+};
+
+// ============================================================================
 // PIN SELECTION MANAGEMENT
 // ============================================================================
 
 /**
- * Get all pins connected to a starting pin (including the start pin itself)
- * @param {number} startIdx - Index of the starting pin
- * @returns {number[]} Array of connected pin indices
+ * Get all pin IDs connected to a starting pin ID
+ * @param {string} startId - ID of the starting pin
+ * @returns {string[]} Array of connected pin IDs
  */
-function getConnectedComponent(startIdx) {
+function getConnectedComponent(startId) {
+  if (!startId) return [];
+
+  // 1. Build Adjacency List using IDs directly
+  const adj = new Map();
+  for (const c of connections) {
+    // Use IDs directly (assuming connections have been migrated to ID-based)
+    const connStartId = c.startId || pins[c.startIndex]?.id;
+    const connEndId = c.endId || pins[c.endIndex]?.id;
+
+    if (!connStartId || !connEndId) continue; // Skip invalid connections
+
+    if (!adj.has(connStartId)) adj.set(connStartId, []);
+    if (!adj.has(connEndId)) adj.set(connEndId, []);
+    adj.get(connStartId).push(connEndId);
+    adj.get(connEndId).push(connStartId);
+  }
+
+  // 2. Traversal
   const visited = new Set();
-  const stack = [startIdx];
-  while (stack.length) {
-    const i = stack.pop();
-    if (visited.has(i)) continue;
-    visited.add(i);
-    for (const c of connections) {
-      if (c.startIndex === i && !visited.has(c.endIndex))
-        stack.push(c.endIndex);
-      if (c.endIndex === i && !visited.has(c.startIndex))
-        stack.push(c.startIndex);
+  const stack = [startId];
+
+  while (stack.length > 0) {
+    const currentId = stack.pop();
+    if (visited.has(currentId)) continue;
+
+    visited.add(currentId);
+
+    const neighbors = adj.get(currentId) || [];
+    for (const neighborId of neighbors) {
+      if (!visited.has(neighborId)) {
+        stack.push(neighborId);
+      }
     }
   }
+
   return Array.from(visited);
 }
 
@@ -48,23 +142,17 @@ function getTargetPins() {
  * @param {number|null} index - Pin index to select, or null to clear selection
  */
 function setSelectedPin(index) {
-  // If a pin is selected (index is a number), set both single and marquee selection
-  if (
-    typeof index === "number" &&
-    index !== null &&
-    index !== undefined
-  ) {
+  if (typeof index === "number") {
     selectedPinIndex = index;
     selectedPins = [index];
   } else {
-    // If called with null or undefined, clear all selection state
+    // Clear selection for null, undefined, or invalid values
     selectedPinIndex = null;
     selectedPins = [];
   }
 
-  renderSelectedPinInfo();
-  closeRadialMenu(); // Close radial menu if a different pin is selected
-  draw();
+  // Emit events for decoupled state management
+  pinEvents.emit('selectionChanged', { selectedPinIndex, selectedPins });
 }
 
 /**
@@ -73,7 +161,7 @@ function setSelectedPin(index) {
 function clearPinSelection() {
   selectedPinIndex = null;
   selectedPins = [];
-  renderSelectedPinInfo();
+  pinEvents.emit('selectionChanged', { selectedPinIndex, selectedPins });
 }
 
 /**
@@ -93,7 +181,7 @@ function togglePinSelection(index) {
     selectedPins.push(index);
     selectedPinIndex = index;
   }
-  renderSelectedPinInfo();
+  pinEvents.emit('selectionChanged', { selectedPinIndex, selectedPins });
 }
 
 /**
@@ -102,54 +190,159 @@ function togglePinSelection(index) {
 function selectAllPins() {
   selectedPins = pins.map((_, index) => index);
   selectedPinIndex = selectedPins.length > 0 ? selectedPins[0] : null;
+  pinEvents.emit('selectionChanged', { selectedPinIndex, selectedPins });
+}
+
+// ============================================================================
+// ID-BASED SELECTION FUNCTIONS (New UUID Architecture)
+// ============================================================================
+
+// New State Variables for ID-based selection
+let selectedPinId = null;
+let selectedPinIds = [];
+
+/**
+ * Set the selected pin(s) by ID
+ * @param {string|null} id - Pin ID to select, or null to clear selection
+ */
+function setSelectedPinById(id) {
+  if (id) {
+    selectedPinId = id;
+    selectedPinIds = [id];
+  } else {
+    selectedPinId = null;
+    selectedPinIds = [];
+  }
   renderSelectedPinInfo();
+  pinEvents.emit('selectionChanged', { selectedPinId, selectedPinIds });
 }
 
 /**
- * Delete the currently selected pin(s)
+ * Clear all pin selections (ID-based)
+ */
+function clearPinSelectionById() {
+  selectedPinId = null;
+  selectedPinIds = [];
+  renderSelectedPinInfo();
+  pinEvents.emit('selectionChanged', { selectedPinId, selectedPinIds });
+}
+
+/**
+ * Toggle pin selection by ID (for multi-select)
+ * @param {string} id - Pin ID to toggle
+ */
+function togglePinSelectionById(id) {
+  const currentIndex = selectedPinIds.indexOf(id);
+  if (currentIndex !== -1) {
+    // Remove from selection
+    selectedPinIds.splice(currentIndex, 1);
+    if (selectedPinId === id) {
+      selectedPinId = selectedPinIds.length > 0 ? selectedPinIds[0] : null;
+    }
+  } else {
+    // Add to selection
+    selectedPinIds.push(id);
+    selectedPinId = id;
+  }
+  renderSelectedPinInfo();
+  pinEvents.emit('selectionChanged', { selectedPinId, selectedPinIds });
+}
+
+/**
+ * Delete the currently selected pin(s) and safely update connection indices
  */
 function deleteSelectedPin() {
   if (selectedPins.length === 0) return;
 
   saveHistory();
 
-  // Sort in descending order to delete from highest index first
-  const sortedIndices = [...selectedPins].sort((a, b) => b - a);
+  // 1. Create a Map to track how indices change
+  const indexMap = new Map();
+  const remainingPins = [];
 
-  // Remove pins
-  sortedIndices.forEach((index) => {
-    pins.splice(index, 1);
+  // 2. Filter pins and build the index map (O(N))
+  pins.forEach((pin, oldIndex) => {
+    if (!selectedPins.includes(oldIndex)) {
+      const newIndex = remainingPins.length;
+      indexMap.set(oldIndex, newIndex);
+      remainingPins.push(pin);
+    }
   });
 
-  // Remove connections that reference deleted pins
+  // 3. Update or remove connections (O(M))
   connections = connections.filter((c) => {
-    return (
-      c.startIndex < pins.length &&
-      c.endIndex < pins.length &&
-      !sortedIndices.includes(c.startIndex) &&
-      !sortedIndices.includes(c.endIndex)
-    );
+    // Keep connection only if both start and end pins still exist
+    return indexMap.has(c.startIndex) && indexMap.has(c.endIndex);
+  }).map((c) => {
+    // Re-map the indices to their new positions in the pins array
+    return {
+      ...c,
+      startIndex: indexMap.get(c.startIndex),
+      endIndex: indexMap.get(c.endIndex)
+    };
   });
 
-  // Adjust connection indices for removed pins
-  connections.forEach((c) => {
-    let adjustment = 0;
-    sortedIndices.forEach((removedIndex) => {
-      if (c.startIndex > removedIndex) adjustment++;
-    });
-    c.startIndex -= adjustment;
-
-    adjustment = 0;
-    sortedIndices.forEach((removedIndex) => {
-      if (c.endIndex > removedIndex) adjustment++;
-    });
-    c.endIndex -= adjustment;
-  });
-
-  // Clear selection
+  // 4. Update state
+  pins = remainingPins;
   clearPinSelection();
-  saveState();
-  draw();
+  pinEvents.emit('pinsDeleted', { deletedIndices: selectedPins, remainingPins: pins.length });
+}
+
+/**
+ * Delete the currently selected pin(s) by ID (UUID Architecture)
+ * This is the simplified version that works with unique IDs
+ */
+function deleteSelectedPinsById() {
+  if (selectedPinIds.length === 0) return;
+
+  saveHistory();
+
+  // 1. Remove the pins
+  pins = pins.filter(p => !selectedPinIds.includes(p.id));
+
+  // 2. Remove connections that reference the deleted IDs
+  // Note: This requires connections to store IDs, but for now we'll keep index-based
+  // In a full UUID migration, this would be:
+  // connections = connections.filter(c =>
+  //   !selectedPinIds.includes(c.startId) &&
+  //   !selectedPinIds.includes(c.endId)
+  // );
+
+  // For now, convert IDs to indices and use existing logic
+  const deletedIndices = selectedPinIds.map(id => {
+    // This is inefficient but works for demonstration
+    return pins.findIndex(p => p.id === id);
+  }).filter(idx => idx !== -1);
+
+  if (deletedIndices.length > 0) {
+    // Use the existing index-based deletion for connections
+    const indexMap = new Map();
+    const remainingPins = [];
+
+    pins.forEach((pin, oldIndex) => {
+      if (!deletedIndices.includes(oldIndex)) {
+        const newIndex = remainingPins.length;
+        indexMap.set(oldIndex, newIndex);
+        remainingPins.push(pin);
+      }
+    });
+
+    connections = connections.filter((c) => {
+      return indexMap.has(c.startIndex) && indexMap.has(c.endIndex);
+    }).map((c) => {
+      return {
+        ...c,
+        startIndex: indexMap.get(c.startIndex),
+        endIndex: indexMap.get(c.endIndex)
+      };
+    });
+
+    pins = remainingPins;
+  }
+
+  selectedPinIds = [];
+  selectedPinId = null;
+  pinEvents.emit('pinsDeleted', { deletedIds: selectedPinIds, remainingPins: pins.length });
 }
 
 // ============================================================================
@@ -157,24 +350,32 @@ function deleteSelectedPin() {
 // ============================================================================
 
 /**
- * Render information about the currently selected pin(s)
+ * Render information about the currently selected pin(s) using Unique IDs
  */
 function renderSelectedPinInfo() {
-  // Handle selection for single pin or the first pin in a group selection
-  let displayIndex = selectedPinIndex;
-  if (displayIndex === null && selectedPins.length > 0) {
-    displayIndex = selectedPins[0];
+  // 1. Identify which pin to display
+  // Fallback to the first ID in a multi-selection if the primary ID is null
+  let displayId = selectedPinId;
+  if (displayId === null && selectedPinIds.length > 0) {
+    displayId = selectedPinIds[0];
   }
 
-  if (displayIndex === null || !pins[displayIndex]) {
+  // 2. Clear display if nothing is selected or pin isn't found
+  if (displayId === null) {
     pinInfo.style.display = "none";
     return;
   }
 
-  const pin = pins[displayIndex];
-  const card =
-    pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+  const pin = pins.find(p => p.id === displayId);
+  if (!pin) {
+    pinInfo.style.display = "none";
+    return;
+  }
 
+  // 3. Resolve Card data if linked
+  const card = pin.cardId != null ? cards.find((c) => c.id === pin.cardId) : null;
+
+  // 4. Determine display text
   let title = pin.label || (card ? card.title : "Untitled Pin");
   let subtitle = card
     ? card.subtitle || ""
@@ -182,14 +383,16 @@ function renderSelectedPinInfo() {
     ? "Free pin (no source card)"
     : "";
 
-  if (selectedPins.length > 1) {
-    title = `${selectedPins.length} Pins Selected`;
-    subtitle = "Use batch actions in the future!";
+  // Handle multi-select context
+  if (selectedPinIds.length > 1) {
+    title = `${selectedPinIds.length} Pins Selected`;
+    subtitle = "Batch actions available";
   }
 
   const note = pin.note || "";
   const dateStr = pin.date || (card ? card.date : "");
 
+  // 5. Update DOM elements
   pinInfoTitle.textContent = title;
   pinInfoSub.textContent = subtitle;
   pinInfoNote.textContent = note;
@@ -199,63 +402,53 @@ function renderSelectedPinInfo() {
   pinInfo.style.display = "block";
 }
 
+
 // ============================================================================
 // PIN UTILITY FUNCTIONS
 // ============================================================================
 
 /**
- * Find a pin at the given world coordinates
+ * Find a pin ID at the given world coordinates
  * @param {number} wx - World X coordinate
  * @param {number} wy - World Y coordinate
- * @returns {number|null} Pin index or null if not found
+ * @returns {string|null} Pin ID or null if not found
  */
 function getPinAtPosition(wx, wy) {
-  // Search from topmost pin (highest z-index) downwards
+  // Search from topmost pin (highest index) downwards
   for (let i = pins.length - 1; i >= 0; i--) {
     const pin = pins[i];
-    const metrics = getPinMetrics(i);
+    const metrics = getPinMetrics(i); // Use the existing source of truth
     const shape = metrics.shape;
 
-    if (shape === "area-circle") {
-      const distance = Math.sqrt(
-        (wx - pin.x) ** 2 + (wy - pin.y) ** 2
-      );
-      if (distance <= metrics.radius) return i;
-    } else if (shape === "area-rect") {
-      const halfWidth = metrics.width / 2;
-      const halfHeight = metrics.height / 2;
-      if (
-        wx >= pin.x - halfWidth &&
-        wx <= pin.x + halfWidth &&
-        wy >= pin.y - halfHeight &&
-        wy <= pin.y + halfHeight
-      ) {
-        return i;
+    // Use specific geometric logic based on the shape defined in metrics
+    switch (shape) {
+      case "area-circle":
+      case "circle": {
+        const r = shape === "circle" ? (metrics.radius || 10) : metrics.radius;
+        // Optimization: use squared distance to avoid expensive Math.sqrt()
+        const dx = wx - pin.x;
+        const dy = wy - pin.y;
+        if (dx * dx + dy * dy <= r * r) return pin.id;
+        break;
       }
-    } else {
-      // Regular pins (circle, card, pill, rect)
-      const w = metrics.width || 46;
-      const h = metrics.height || 30;
-      const padding = Math.max(w, h) * 0.2;
-      const halfW = w / 2 + padding;
-      const halfH = h / 2 + padding;
-      const r = metrics.radius || 10;
 
-      if (shape === "circle") {
-        const distance = Math.sqrt(
-          (wx - pin.x) ** 2 + (wy - pin.y) ** 2
-        );
-        if (distance <= r + padding) return i;
-      } else {
-        // Rectangular shapes (card, pill, rect)
+      case "area-rect":
+      case "card":
+      case "pill":
+      case "rect": {
+        // Standardize dimensions from metrics, falling back to 0 if undefined
+        const halfW = (metrics.width || 0) / 2;
+        const halfH = (metrics.height || 0) / 2;
+
         if (
           wx >= pin.x - halfW &&
           wx <= pin.x + halfW &&
           wy >= pin.y - halfH &&
           wy <= pin.y + halfH
         ) {
-          return i;
+          return pin.id;
         }
+        break;
       }
     }
   }
@@ -272,14 +465,12 @@ function getCardAtPosition(wx, wy) {
   // Search from topmost card downwards
   for (let i = cards.length - 1; i >= 0; i--) {
     const card = cards[i];
-    // Simple rectangular hit test for cards
-    const halfWidth = 75; // Approximate card width
-    const halfHeight = 50; // Approximate card height
+    // Simple rectangular hit test for cards using centralized geometry
     if (
-      wx >= card.x - halfWidth &&
-      wx <= card.x + halfWidth &&
-      wy >= card.y - halfHeight &&
-      wy <= card.y + halfHeight
+      wx >= card.x - PIN_GEOMETRY.CARD_HALF_WIDTH &&
+      wx <= card.x + PIN_GEOMETRY.CARD_HALF_WIDTH &&
+      wy >= card.y - PIN_GEOMETRY.CARD_HALF_HEIGHT &&
+      wy <= card.y + PIN_GEOMETRY.CARD_HALF_HEIGHT
     ) {
       return i;
     }
@@ -297,12 +488,13 @@ function selectCard(index) {
 }
 
 /**
- * Create a pin at the specified position
+ * Create a pin at the specified position with a Unique ID
  * @param {number} x - World X coordinate
  * @param {number} y - World Y coordinate
  */
 function createPinAtPosition(x, y) {
   const newPin = {
+    id: crypto.randomUUID(), // Generates a unique string like "550e8400-e29b..."
     x: x,
     y: y,
     color: selectedColor,
@@ -313,10 +505,8 @@ function createPinAtPosition(x, y) {
   };
 
   pins.push(newPin);
-  const newIndex = pins.length - 1;
-  setSelectedPin(newIndex);
-  saveState();
-  draw();
+  setSelectedPinById(newPin.id);
+  pinEvents.emit('pinCreated', { pin: newPin });
 }
 
 /**
@@ -328,6 +518,7 @@ function createPinAtPosition(x, y) {
 function createPinWithSize(x, y, dragDistance) {
   const size = Math.max(20, Math.min(100, dragDistance));
   const newPin = {
+    id: crypto.randomUUID(), // Generates a unique string like "550e8400-e29b..."
     x: x,
     y: y,
     color: selectedColor,
@@ -340,8 +531,191 @@ function createPinWithSize(x, y, dragDistance) {
   };
 
   pins.push(newPin);
-  const newIndex = pins.length - 1;
-  setSelectedPin(newIndex);
+  setSelectedPinById(newPin.id);
+  pinEvents.emit('pinCreated', { pin: newPin });
+}
+
+// ============================================================================
+// EVENT SYSTEM API
+// ============================================================================
+
+// ============================================================================
+// ID-BASED CONNECTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Create a connection between two pins using their Unique IDs
+ * @param {string} startId - ID of the source pin
+ * @param {string} endId - ID of the target pin
+ * @param {string} type - Connection type (default: "default")
+ */
+function createConnection(startId, endId, type = "default") {
+  // 1. Validation: Prevent self-connection or duplicates
+  if (startId === endId) return;
+
+  const alreadyConnected = connections.some(c =>
+    (c.startId === startId && c.endId === endId) ||
+    (c.startId === endId && c.endId === startId)
+  );
+
+  if (alreadyConnected) return;
+
+  // 2. Store the connection using stable IDs
+  const newConnection = {
+    startId: startId,
+    endId: endId,
+    type: type,
+    createdAt: Date.now()
+  };
+
+  saveHistory();
+  connections.push(newConnection);
   saveState();
   draw();
+}
+
+/**
+ * Check if two pins are connected by their IDs
+ * @param {string} startId - ID of the first pin
+ * @param {string} endId - ID of the second pin
+ * @returns {boolean} True if pins are connected
+ */
+function arePinsConnected(startId, endId) {
+  return connections.some(c =>
+    (c.startId === startId && c.endId === endId) ||
+    (c.startId === endId && c.endId === startId)
+  );
+}
+
+/**
+ * Get all connections for a specific pin by ID
+ * @param {string} pinId - ID of the pin
+ * @returns {Array} Array of connection objects
+ */
+function getConnectionsForPin(pinId) {
+  return connections.filter(c =>
+    c.startId === pinId || c.endId === pinId
+  );
+}
+
+/**
+ * Remove a connection between two pins by their IDs
+ * @param {string} startId - ID of the first pin
+ * @param {string} endId - ID of the second pin
+ */
+function removeConnection(startId, endId) {
+  const initialLength = connections.length;
+  connections = connections.filter(c =>
+    !(c.startId === startId && c.endId === endId) &&
+    !(c.startId === endId && c.endId === startId)
+  );
+
+  if (connections.length < initialLength) {
+    saveHistory();
+    saveState();
+    draw();
+  }
+}
+
+/**
+ * Helper function for drawing connections in the render loop
+ * Creates a Map of pin IDs to pin objects for efficient lookups
+ * @returns {Map<string, Object>} Map of pin IDs to pin objects
+ */
+function createPinLookupMap() {
+  const pinMap = new Map();
+  pins.forEach(pin => pinMap.set(pin.id, pin));
+  return pinMap;
+}
+
+/**
+ * Migrate existing index-based connections to ID-based connections
+ * This function can be called once to update legacy connection data
+ */
+function migrateConnectionsToIds() {
+  const migratedConnections = [];
+  const processed = new Set();
+
+  for (const c of connections) {
+    // Skip if already migrated
+    if (c.startId && c.endId) {
+      migratedConnections.push(c);
+      continue;
+    }
+
+    // Convert indices to IDs
+    const startId = pins[c.startIndex]?.id;
+    const endId = pins[c.endIndex]?.id;
+
+    if (startId && endId) {
+      // Create new ID-based connection
+      const migratedConnection = {
+        startId: startId,
+        endId: endId,
+        type: c.type || "default",
+        createdAt: c.createdAt || Date.now()
+      };
+      migratedConnections.push(migratedConnection);
+    }
+    // Skip invalid connections silently
+  }
+
+  connections = migratedConnections;
+  console.log(`Migrated ${connections.length} connections to ID-based format`);
+}
+
+// ============================================================================
+// ID-BASED UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Find a pin by its ID
+ * @param {string} id - Pin ID to search for
+ * @returns {Object|null} Pin object or null if not found
+ */
+function getPinById(id) {
+  return pins.find(p => p.id === id) || null;
+}
+
+/**
+ * Find the index of a pin by its ID
+ * @param {string} id - Pin ID to search for
+ * @returns {number} Pin index or -1 if not found
+ */
+function getPinIndexById(id) {
+  return pins.findIndex(p => p.id === id);
+}
+
+/**
+ * Get all pin IDs
+ * @returns {string[]} Array of all pin IDs
+ */
+function getAllPinIds() {
+  return pins.map(p => p.id);
+}
+
+/**
+ * Subscribe to pin events for decoupled state management
+ * Available events:
+ * - 'selectionChanged': Fired when pin selection changes { selectedPinIndex, selectedPins, selectedPinId, selectedPinIds }
+ * - 'pinsDeleted': Fired when pins are deleted { deletedIndices, remainingPins, deletedIds }
+ * - 'pinCreated': Fired when a new pin is created { pin }
+ *
+ * Note: UI updates (renderSelectedPinInfo) are handled automatically by ID-based selection functions.
+ * Use events for additional listeners that need to respond to selection changes.
+ *
+ * @param {string} event - Event name to listen for
+ * @param {Function} callback - Callback function
+ */
+function onPinEvent(event, callback) {
+  pinEvents.on(event, callback);
+}
+
+/**
+ * Unsubscribe from pin events
+ * @param {string} event - Event name
+ * @param {Function} callback - Callback function to remove
+ */
+function offPinEvent(event, callback) {
+  pinEvents.off(event, callback);
 }

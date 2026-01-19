@@ -1,0 +1,303 @@
+/* Toolbar Styles - Complementing the refactored toolbar.js logic */
+
+/* Toolbar Container */
+#menu {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: #222; /* Example dark theme */
+  color: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Toolbar Sections for better organization */
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Tools Section */
+.tools-section {
+  border-right: 1px solid #444;
+  padding-right: 12px;
+  margin-right: 4px;
+}
+
+/* Types Section */
+.types-section {
+  border-right: 1px solid #444;
+  padding-right: 12px;
+  margin-right: 4px;
+}
+
+/* Base Tool Button Styling */
+.tool-btn,
+.color-option,
+.type-dropdown-option,
+.type-option {
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+/* Hover States */
+.tool-btn:hover,
+.color-option:hover,
+.type-dropdown-option:hover,
+.type-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+/* The Active State (The Core Change) */
+.tool-btn.active,
+.color-option.active,
+.type-option.active {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #007bff; /* Highlight color */
+}
+
+/* Tool Button Specific Styles */
+.tool-btn {
+  min-height: 32px;
+}
+
+.tool-btn .icon {
+  font-size: 16px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.tool-btn .key {
+  opacity: 0.7;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* Separator */
+.tool-separator {
+  color: #666;
+  font-weight: bold;
+  padding: 0 4px;
+}
+
+/* Color Palette Container */
+.color-palette-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Color Options */
+.color-option {
+  position: relative;
+  padding: 6px 8px;
+  border-radius: 6px;
+  min-width: 60px;
+}
+
+.color-option .label {
+  font-size: 12px;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Add Color Button */
+.add-color-option .add-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px dashed rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.6);
+  transition: all 0.2s ease;
+}
+
+.add-color-option:hover .add-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.8);
+  color: white;
+  transform: scale(1.1);
+}
+
+/* Type Groups */
+.type-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.type-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.type-option {
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+}
+
+.type-option .type-option-icon {
+  font-size: 16px;
+  min-width: 16px;
+  text-align: center;
+  margin-right: 6px;
+}
+
+.type-option .label {
+  font-size: 13px;
+}
+
+.type-caret {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 0.2s ease;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.type-caret:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+/* Dropdown specific styling */
+.type-dropdown {
+  background: #333;
+  border: 1px solid #444;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.type-dropdown-option {
+  padding: 10px 15px;
+  border-radius: 0;
+}
+
+.type-dropdown-option .icon {
+  margin-right: 10px;
+  font-size: 14px;
+  min-width: 14px;
+  text-align: center;
+}
+
+/* Connection Type Toggle */
+.connection-type-toggle {
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  min-width: 80px;
+  justify-content: center;
+}
+
+.connection-type-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Theme Selector */
+.theme-selector {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #444;
+  color: white;
+  font-size: 13px;
+  min-width: 100px;
+}
+
+.theme-selector:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  #menu {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .toolbar-section {
+    border-right: none !important;
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  #menu {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .tool-btn,
+  .color-option,
+  .type-option {
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+
+  .tool-btn .key {
+    display: none; /* Hide keyboard shortcuts on mobile */
+  }
+}
+
+/* Animation for active state changes */
+@keyframes activePulse {
+  0% { box-shadow: 0 0 8px rgba(0, 123, 255, 0.3); }
+  50% { box-shadow: 0 0 12px rgba(0, 123, 255, 0.5); }
+  100% { box-shadow: 0 0 8px rgba(0, 123, 255, 0.3); }
+}
+
+.tool-btn.active,
+.color-option.active,
+.type-option.active {
+  animation: activePulse 2s infinite;
+}
+
+/* Loading state for async operations */
+.toolbar-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.toolbar-loading::after {
+  content: "⟳";
+  animation: spin 1s linear infinite;
+  margin-left: 8px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

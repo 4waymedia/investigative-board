@@ -2,7 +2,6 @@
 // DRAWING MODULE - Refactored 2025/2026 style
 // ============================================================================
 
-
 // Utilities are available globally from js/utilities.js via window.DrawingUtils
 
 // ============================================================================
@@ -38,18 +37,26 @@ const baseShapes = {
       ctx.save();
       ctx.fillStyle = pin.color || "#58a6ff";
       ctx.beginPath();
+      // CENTERING: scr.x, scr.y is the center of the circle
+      // Connection lines connect to this center point
       ctx.arc(scr.x, scr.y, r, 0, Math.PI * 2);
       ctx.fill();
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 2 * s;
-    ctx.stroke();
-    // White highlight dot (light reflection) - 15% size, top-left quadrant, inside circle
-    const highlightRadius = r * 0.15; // 15% of main circle radius
-    const highlightOffset = r * 0.4; // Position toward top-left, keeping highlight inside
-    ctx.fillStyle = "#FFFFFF";
-    ctx.beginPath();
-    ctx.arc(scr.x - highlightOffset, scr.y - highlightOffset, highlightRadius, 0, Math.PI * 2);
-    ctx.fill();
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 2 * s;
+      ctx.stroke();
+      // White highlight dot (light reflection) - 15% size, top-left quadrant, inside circle
+      const highlightRadius = r * 0.15; // 15% of main circle radius
+      const highlightOffset = r * 0.4; // Position toward top-left, keeping highlight inside
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();
+      ctx.arc(
+        scr.x - highlightOffset,
+        scr.y - highlightOffset,
+        highlightRadius,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
       ctx.restore();
     },
     drawDecoration: () => {},
@@ -69,6 +76,8 @@ const baseShapes = {
     drawMain: (ctx, pin, m, scr, s) => {
       const w = m.width * s;
       const h = m.height * s;
+      // CENTERING FIX: Subtract half width/height so (x, y) is the CENTER of the pin
+      // This ensures connection lines connect to the visual center, not the corner
       const x = scr.x - w / 2;
       const y = scr.y - h / 2;
       const r = (m.baseRadius || 3) * s;
@@ -188,7 +197,6 @@ window.shapeRenderers = shapeRenderers; // Make immediately available globally
  */
 function registerShape(shapeName, config) {
   try {
-
     let rendererConfig;
 
     // If referencing a base shape, inherit from it
@@ -222,7 +230,6 @@ function registerShape(shapeName, config) {
     }
 
     shapeRenderers.set(shapeName, rendererConfig);
-
   } catch (error) {
     // Shape registration failed - silently continue
   }
@@ -320,20 +327,22 @@ function defaultGetMetrics(pin, scale) {
 }
 
 // Default shadow — subtle offset drop shadow (used by most shapes)
+// Performance optimized: No shadowBlur/shadowColor - uses simple offset fills instead
 function defaultDrawShadow(ctx, pin, metrics, scr, s) {
   const m = metrics;
 
-  // Most common cases
+  // Most common cases - optimized shadow using simple offset fill
   if (m.shape === "circle" || m.shape === "area-circle") {
     const r = (m.radius || 24) * s;
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    // Performance: Single fill operation with rgba color instead of shadow properties
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; // Reduced opacity for better performance
     ctx.beginPath();
-    ctx.arc(scr.x + 3 * s, scr.y + 4 * s, r * 1.05, 0, Math.PI * 2);
+    ctx.arc(scr.x + 2 * s, scr.y + 3 * s, r, 0, Math.PI * 2); // Smaller offset, no size increase
     ctx.fill();
     return;
   }
 
-  // Rectangular / card-like shapes
+  // Rectangular / card-like shapes - optimized shadow
   if (m.width && m.height) {
     const w = m.width * s;
     const h = m.height * s;
@@ -341,16 +350,16 @@ function defaultDrawShadow(ctx, pin, metrics, scr, s) {
     const y = scr.y - h / 2;
     const r = (m.baseRadius || 6) * s;
 
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    window.DrawingUtils.roundRectPath(ctx, x + 3 * s, y + 4 * s, w, h, r);
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; // Reduced opacity
+    window.DrawingUtils.roundRectPath(ctx, x + 2 * s, y + 3 * s, w, h, r); // Smaller offset
     ctx.fill();
     return;
   }
 
   // Ultimate fallback — small circle
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
   ctx.beginPath();
-  ctx.arc(scr.x + 3 * s, scr.y + 3 * s, 24 * s, 0, Math.PI * 2);
+  ctx.arc(scr.x + 2 * s, scr.y + 2 * s, 20 * s, 0, Math.PI * 2); // Smaller, optimized
   ctx.fill();
 }
 
@@ -361,11 +370,13 @@ function defaultDrawBackground(ctx, pin, metrics, scr, s) {
   // Many modern designs actually skip this phase
 
   const m = metrics;
-  ctx.globalAlpha = 0.15;
+  const baseColor = pin.color || "#58a6ff";
+  // Performance optimization: Use RGBA directly instead of globalAlpha
+  const glowColor = baseColor + "26"; // 0.15 opacity in hex
 
   if (m.shape === "circle" || m.shape === "area-circle") {
     const r = (m.radius || 24) * s;
-    ctx.fillStyle = pin.color || "#58a6ff";
+    ctx.fillStyle = glowColor;
     ctx.beginPath();
     ctx.arc(scr.x, scr.y, r * 1.25, 0, Math.PI * 2);
     ctx.fill();
@@ -376,7 +387,7 @@ function defaultDrawBackground(ctx, pin, metrics, scr, s) {
     const y = scr.y - h / 2;
     const r = (m.baseRadius || 6) * s;
 
-    ctx.fillStyle = pin.color || "#58a6ff";
+    ctx.fillStyle = glowColor;
     window.DrawingUtils.roundRectPath(
       ctx,
       x - 4 * s,
@@ -387,8 +398,6 @@ function defaultDrawBackground(ctx, pin, metrics, scr, s) {
     );
     ctx.fill();
   }
-
-  ctx.globalAlpha = 1.0; // always restore
 }
 
 // Default main body — the actual visible filled shape
@@ -476,8 +485,11 @@ function defaultDrawSelection(
   ctx.restore();
 }
 
-function defaultDrawLabel(ctx, pin, metrics, scr, s) {
+function defaultDrawLabel(ctx, pin, metrics, scr, s, scale) {
   if (!pin.label) return;
+
+  // Level of Detail (LOD): Only draw labels when zoomed in enough to read them
+  if (scale < 0.5) return;
 
   const m = metrics;
   let yOffset = 0;
@@ -488,17 +500,39 @@ function defaultDrawLabel(ctx, pin, metrics, scr, s) {
     yOffset = (m.height * s) / 2 + 23 * s;
   }
 
+  // Collision detection: Simple distance-based culling to prevent overlap
+  // This is a basic implementation - could be enhanced with spatial partitioning
+  const labelX = scr.x;
+  const labelY = scr.y + yOffset;
+  const minDistance = 60 * s; // Minimum distance between labels
+
+  // Check against other pins in viewport (simplified collision detection)
+  if (window._drawnLabels) {
+    for (const drawnLabel of window._drawnLabels) {
+      const dx = labelX - drawnLabel.x;
+      const dy = labelY - drawnLabel.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minDistance) {
+        return; // Skip drawing this label to prevent overlap
+      }
+    }
+  }
+
   ctx.save();
   ctx.font = `bold ${15 * s}px system-ui`;
   ctx.textAlign = "center";
 
-  // Shadow
+  // Shadow - optimized: single fill operation instead of separate shadow
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillText(pin.label, scr.x, scr.y + yOffset + 2 * s);
 
   // Text
   ctx.fillStyle = pin.textColor || window._currentThemeTextColor || "#ffffff";
   ctx.fillText(pin.label, scr.x, scr.y + yOffset);
+
+  // Track drawn labels for collision detection
+  if (!window._drawnLabels) window._drawnLabels = [];
+  window._drawnLabels.push({ x: labelX, y: labelY });
 
   ctx.restore();
 }
@@ -513,17 +547,41 @@ registerShape("card", {
     // Adjust dimensions based on variant (reduced by ~2.5x for proper sizing)
     if (variant === "card") {
       // Note card - wider
-      return { shape: "card", width: 72, height: 36, variant: variant, baseRadius: 3 };
+      return {
+        shape: "card",
+        width: 72,
+        height: 36,
+        variant: variant,
+        baseRadius: 3,
+      };
     } else if (variant === "document") {
       // Document card - taller
-      return { shape: "card", width: 56, height: 48, variant: variant, baseRadius: 3 };
+      return {
+        shape: "card",
+        width: 56,
+        height: 48,
+        variant: variant,
+        baseRadius: 3,
+      };
     } else if (variant === "folder") {
       // Folder card - slightly different proportions
-      return { shape: "card", width: 64, height: 44, variant: variant, baseRadius: 3 };
+      return {
+        shape: "card",
+        width: 64,
+        height: 44,
+        variant: variant,
+        baseRadius: 3,
+      };
     }
 
     // Default fallback
-    return { shape: "card", width: 64, height: 40, variant: variant, baseRadius: 3 };
+    return {
+      shape: "card",
+      width: 64,
+      height: 40,
+      variant: variant,
+      baseRadius: 3,
+    };
 
     return {
       shape: "card",
@@ -654,7 +712,7 @@ registerShape("circle", {
 // ── Area Rectangle ───────────────────────────────────────────────────────
 
 registerShape("area-rect", {
-  baseShape: "areaRect",
+  baseShape: "area-rect",
   drawDecoration(ctx, pin, m, scr, s) {
     // Center pin
     drawCenterPin(ctx, pin, scr);
@@ -664,7 +722,7 @@ registerShape("area-rect", {
 // ── Area Circle ──────────────────────────────────────────────────────────
 
 registerShape("area-circle", {
-  baseShape: "areaCircle",
+  baseShape: "area-circle",
   drawLabel(ctx, pin, m, scr, s) {
     // Area pins don't show their own labels - everything is handled by center pin
     return;
@@ -687,18 +745,37 @@ registerShape("rect", {
 // ── Pill shape ─────────────────────────────────────────────────────────────
 
 registerShape("pill", {
-  baseShape: "rect",
+  getMetrics(pin, scale) {
+    // Pill shape: wider than tall, with fully rounded ends
+    return {
+      shape: "pill",
+      width: 32 * scale,  // 32px wide (elongated)
+      height: 16 * scale, // 16px tall (standard pin height)
+    };
+  },
+  drawShadow: defaultDrawShadow,
+  drawBackground: defaultDrawBackground,
   drawMain(ctx, pin, m, scr, s) {
     const w = m.width * s;
     const h = m.height * s;
     const x = scr.x - w / 2;
     const y = scr.y - h / 2;
-    const r = Math.min(w, h) / 2; // Fully rounded - pill shape
+    const r = h / 2; // Fully rounded - radius equals half height for perfect pill shape
 
+    ctx.save();
     ctx.fillStyle = pin.color || "#58a6ff";
     window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
     ctx.fill();
+
+    // Add subtle border for definition
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1 * s;
+    ctx.stroke();
+    ctx.restore();
   },
+  drawDecoration: () => {},
+  drawSelection: defaultDrawSelection,
+  drawLabel: defaultDrawLabel,
 });
 
 // ── Diamond shape ──────────────────────────────────────────────────────────
@@ -916,7 +993,6 @@ registerShape("business-building", {
   },
 
   drawLabel(ctx, pin, m, scr, s) {
-
     let textToShow = pin.label;
     let descriptionOffset = 0;
 
@@ -962,7 +1038,7 @@ registerShape("business-building", {
 
 // ── Main drawing loop ────────────────────────────────────────────────────
 
-function drawPinShape(ctx, pin, metrics, index) {
+function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   // Get complete metrics from getPinMetrics and merge with passed metrics
   const fullMetrics = window.getPinMetrics
     ? window.getPinMetrics(pin)
@@ -972,13 +1048,56 @@ function drawPinShape(ctx, pin, metrics, index) {
   // Use world coordinates directly since canvas is already transformed
   const scr = { x: pin.x, y: pin.y };
 
+  // FIRST: Check for custom theme icons
+  if (window.themeManager) {
+    const currentTheme = window.themeManager.getCurrentTheme();
+    const pinType = pin.typeId || 'pin:circle';
+
+    // Check theme-specific icons first
+    const iconSrc = currentTheme?.icons?.[pinType];
+
+    if (iconSrc) {
+      // Cache the Image object so we don't reload every frame
+      if (!window.themeManager.customIcons[iconSrc]) {
+        const img = new Image();
+        img.src = iconSrc;
+        window.themeManager.customIcons[iconSrc] = img;
+      }
+
+      const cachedImg = window.themeManager.customIcons[iconSrc];
+      if (cachedImg.complete && cachedImg.naturalWidth > 0) {
+        // Calculate icon size and position
+        const iconSize = (mergedMetrics.radius || 10) * 2 * (pin.pinScale || 1);
+        const x = scr.x - iconSize / 2;
+        const y = scr.y - iconSize / 2;
+
+        ctx.save();
+        ctx.drawImage(cachedImg, x, y, iconSize, iconSize);
+        ctx.restore();
+        return; // Skip default rendering
+      }
+    }
+  }
+
   // SECOND: Try normal renderer (will draw on top if it works)
   const renderer = window.shapeRenderers?.get(mergedMetrics.shape);
   if (renderer) {
     try {
       // Get shape-specific metrics and merge them
+      let pinScale = pin.pinScale || 1;
+
+      // Validate pinScale to prevent rendering issues
+      if (typeof pinScale !== 'number' || isNaN(pinScale) || !isFinite(pinScale) || pinScale <= 0) {
+        console.warn(`⚠️ Invalid pinScale for pin ${index}: ${pinScale}, using 1.0`);
+        pinScale = 1.0;
+        pin.pinScale = 1.0; // Fix the invalid value
+      }
+
+      // Clamp pinScale to reasonable bounds
+      pinScale = Math.max(0.1, Math.min(5.0, pinScale));
+
       const shapeMetrics = renderer.getMetrics
-        ? renderer.getMetrics(pin, 1)
+        ? renderer.getMetrics(pin, pinScale)
         : {};
       const finalMetrics = { ...mergedMetrics, ...shapeMetrics };
 
@@ -987,22 +1106,22 @@ function drawPinShape(ctx, pin, metrics, index) {
 
       // 1. Shadow phase
       if (renderer.drawPhase.shadow) {
-        renderer.drawPhase.shadow(ctx, pin, finalMetrics, scr, 1);
+        renderer.drawPhase.shadow(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 2. Background phase
       if (renderer.drawPhase.background) {
-        renderer.drawPhase.background(ctx, pin, finalMetrics, scr, 1);
+        renderer.drawPhase.background(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 3. Main body phase
       if (renderer.drawPhase.main) {
-        renderer.drawPhase.main(ctx, pin, finalMetrics, scr, 1);
+        renderer.drawPhase.main(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 4. Decoration phase
       if (renderer.drawPhase.decoration) {
-        renderer.drawPhase.decoration(ctx, pin, finalMetrics, scr, 1);
+        renderer.drawPhase.decoration(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 5. Selection phase (only if selected or marquee)
@@ -1015,7 +1134,7 @@ function drawPinShape(ctx, pin, metrics, index) {
           pin,
           finalMetrics,
           scr,
-          1,
+          pinScale,
           finalMetrics.isSelected,
           finalMetrics.isMarquee
         );
@@ -1023,12 +1142,11 @@ function drawPinShape(ctx, pin, metrics, index) {
 
       // 6. Label phase
       if (renderer.drawPhase.label) {
-        renderer.drawPhase.label(ctx, pin, finalMetrics, scr, 1);
+        renderer.drawPhase.label(ctx, pin, finalMetrics, scr, pinScale, appScale);
       }
 
       ctx.restore();
-    } catch (error) {
-    }
+    } catch (error) {}
   } else {
   }
 }
