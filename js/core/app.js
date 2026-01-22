@@ -120,6 +120,10 @@ class Application {
       this.appState.cards = this.deps.DEFAULT_CARDS || [];
     }
 
+    // Save initial state to history for undo functionality
+    this.appState.saveHistory();
+    console.log("📝 Initial state saved to history for undo functionality");
+
     // EARLY DRAG MANAGER INITIALIZATION - needed for event handlers
     this.initializeDragManagerEarly();
 

@@ -1099,6 +1099,11 @@ registerShape("business-building", {
 // ── Main drawing loop ────────────────────────────────────────────────────
 
 function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
+  // Debug: check if pin has image
+  if (window.DEBUG_IMAGES && pin.image && pin.image.dataUrl) {
+    console.log("drawPinShape: pin", index, "has image:", pin.image.originalFileName);
+  }
+
   // Get complete metrics from getPinMetrics and merge with passed metrics
   const fullMetrics = window.getPinMetrics
     ? window.getPinMetrics(pin)
@@ -1108,7 +1113,19 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   // Use world coordinates directly since canvas is already transformed
   const scr = { x: pin.x, y: pin.y };
 
-  // FIRST: Check for custom theme icons
+  // FIRST: Check for pin images (draw underneath the pin shape)
+  if (pin.image && pin.image.dataUrl) {
+    if (window.DEBUG_IMAGES) {
+      console.log("🎨 Drawing pin image for pin:", pin.id, "style:", pin.image.style, "at:", scr.x, scr.y);
+    }
+    drawPinImage(ctx, pin, mergedMetrics, scr, appScale);
+    if (window.DEBUG_IMAGES) {
+      console.log("🎨 Image drawn, now drawing pin shape on top");
+    }
+    // Continue to draw the pin shape on top of the image
+  }
+
+  // SECOND: Check for custom theme icons
   if (window.themeManager) {
     const currentTheme = window.themeManager.getCurrentTheme();
     const pinType = pin.typeId || 'pin:circle';
@@ -1210,6 +1227,275 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   } else {
   }
 }
+
+/**
+ * Draw a pin with an image
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {Object} pin - Pin object with image data
+ * @param {Object} metrics - Pin metrics
+ * @param {Object} scr - Screen coordinates {x, y}
+ * @param {number} appScale - Application scale
+ */
+function drawPinImage(ctx, pin, metrics, scr, appScale) {
+  if (!pin.image || !pin.image.dataUrl) return;
+
+  // Debug logging (enable by setting window.DEBUG_IMAGES = true)
+  if (window.DEBUG_IMAGES) {
+    console.log("drawPinImage called for pin with image:", pin.image.originalFileName, "style:", pin.image.style);
+  }
+
+  // Use global image cache keyed by pin ID + filename to ensure each pin has its own image
+  const cacheKey = `pin_${pin.id}_${pin.image.originalFileName}`;
+  if (!window.imageCache) {
+    window.imageCache = new Map();
+  }
+
+  let img;
+  if (window.imageCache.has(cacheKey)) {
+    img = window.imageCache.get(cacheKey);
+    if (window.DEBUG_IMAGES) {
+      console.log("Using cached image for pin", pin.id, ":", pin.image.originalFileName);
+    }
+  } else {
+    if (window.DEBUG_IMAGES) {
+      console.log("Creating new cached image for pin", pin.id, ":", pin.image.originalFileName);
+    }
+    img = new Image();
+    img.onload = function() {
+      if (window.DEBUG_IMAGES) {
+        console.log("Image loaded successfully for pin", pin.id, ":", pin.image.originalFileName, "size:", img.naturalWidth, "x", img.naturalHeight);
+      }
+      // Force a redraw when image loads
+      if (window.draw) window.draw();
+    };
+    img.onerror = function() {
+      console.error("Failed to load image for pin", pin.id, ":", pin.image.originalFileName);
+      window.imageCache.delete(cacheKey); // Remove from cache on error
+    };
+    img.src = pin.image.dataUrl;
+    window.imageCache.set(cacheKey, img);
+  }
+
+  if (!img.complete || img.naturalWidth === 0) {
+    // Debug: only log occasionally to avoid spam
+    if (window.DEBUG_IMAGES && !img._debugLogged) {
+      console.log("Image not ready yet for pin", pin.id, ":", pin.image.originalFileName, "complete:", img.complete, "width:", img.naturalWidth);
+      img._debugLogged = true;
+    }
+    return;
+  }
+
+  // Debug: log successful image rendering
+  if (window.DEBUG_IMAGES && !img._renderLogged) {
+    console.log("Rendering image:", pin.image.originalFileName, "at position:", scr.x, scr.y, "size:", img.naturalWidth, "x", img.naturalHeight);
+    img._renderLogged = true;
+  }
+
+  ctx.save();
+
+  // Calculate image display size - use custom size if set, otherwise up to 100px at default scale
+  const pinScale = pin.pinScale || 1;
+  const radius = metrics.radius || 10;
+  const pinDiameter = radius * 2 * pinScale; // Actual pin size
+
+  // Use custom size if set, otherwise calculate automatic size
+  let imageSize;
+  if (pin.image && pin.image.size) {
+    // Use custom size, scaled by appScale
+    imageSize = pin.image.size * appScale;
+  } else {
+    // Automatic sizing: up to 100px or 4x pin size
+    imageSize = Math.min(100 * appScale, pinDiameter * 4);
+  }
+
+  // Position and size for image
+  let imgX, imgY, imgWidth, imgHeight;
+
+  // Calculate position offset based on image position setting
+  const imagePosition = pin.image.position || 'center';
+  let positionOffsetX = 0;
+  let positionOffsetY = 0;
+
+  // We'll calculate the offset after determining imgWidth and imgHeight
+  let useRoundedCorners = true;
+  let cornerRadius = 4 * appScale;
+
+  const imageStyle = pin.image.style || 'circular';
+  switch (imageStyle) {
+    case 'portrait':
+      // Portrait: fit image maintaining aspect ratio, optimize for portrait images
+      const portraitAspect = img.naturalWidth / img.naturalHeight;
+      if (portraitAspect < 1) {
+        // Image is portrait, fit to height
+        imgHeight = imageSize;
+        imgWidth = imageSize * portraitAspect;
+      } else {
+        // Image is landscape, fit to width but limit height
+        imgWidth = imageSize;
+        imgHeight = imageSize / portraitAspect;
+      }
+      break;
+
+    case 'landscape':
+      // Landscape: fit image maintaining aspect ratio, optimize for landscape images
+      const landscapeAspect = img.naturalWidth / img.naturalHeight;
+      if (landscapeAspect > 1) {
+        // Image is landscape, fit to width
+        imgWidth = imageSize;
+        imgHeight = imageSize / landscapeAspect;
+      } else {
+        // Image is portrait, fit to height but limit width
+        imgHeight = imageSize;
+        imgWidth = imageSize * landscapeAspect;
+      }
+      break;
+
+    case 'oval':
+      // Oval: fit image in oval shape
+      const ovalAspect = img.naturalWidth / img.naturalHeight;
+      if (ovalAspect > 1) {
+        // Landscape - fit to width
+        imgWidth = imageSize;
+        imgHeight = imageSize / ovalAspect;
+      } else {
+        // Portrait - fit to height
+        imgHeight = imageSize;
+        imgWidth = imageSize * ovalAspect;
+      }
+      useRoundedCorners = false; // We'll use oval clipping instead
+      break;
+
+    case 'circular':
+    default:
+      // Circular: crop to circle, center the image
+      // For circular, we want to fill the circle, so find the larger dimension
+      const imgAspect = img.naturalWidth / img.naturalHeight;
+      if (imgAspect > 1) {
+        // Landscape - fit to height, crop width
+        imgHeight = imageSize;
+        imgWidth = imageSize * imgAspect;
+      } else {
+        // Portrait - fit to width, crop height
+        imgWidth = imageSize;
+        imgHeight = imageSize / imgAspect;
+      }
+      useRoundedCorners = false; // We'll use circular clipping instead
+      break;
+  }
+
+  // Apply position offset based on the selected position
+  switch (imagePosition) {
+    case 'center':
+      positionOffsetX = 0;
+      positionOffsetY = 0;
+      break;
+    case 'top':
+      positionOffsetX = 0;
+      positionOffsetY = -imgHeight / 2;
+      break;
+    case 'bottom':
+      positionOffsetX = 0;
+      positionOffsetY = imgHeight / 2;
+      break;
+    case 'left':
+      positionOffsetX = -imgWidth / 2;
+      positionOffsetY = 0;
+      break;
+    case 'right':
+      positionOffsetX = imgWidth / 2;
+      positionOffsetY = 0;
+      break;
+    case 'top-left':
+      positionOffsetX = -imgWidth / 2;
+      positionOffsetY = -imgHeight / 2;
+      break;
+    case 'top-right':
+      positionOffsetX = imgWidth / 2;
+      positionOffsetY = -imgHeight / 2;
+      break;
+    case 'bottom-left':
+      positionOffsetX = -imgWidth / 2;
+      positionOffsetY = imgHeight / 2;
+      break;
+    case 'bottom-right':
+      positionOffsetX = imgWidth / 2;
+      positionOffsetY = imgHeight / 2;
+      break;
+  }
+
+  // Apply the position offset to center the image at the pin location plus offset
+  imgX = scr.x - imgWidth / 2 + positionOffsetX;
+  imgY = scr.y - imgHeight / 2 + positionOffsetY;
+
+  // Draw the image based on style
+  if (imageStyle === 'circular') {
+    // Draw circular image - clip to circle shape at offset position
+    const clipCenterX = scr.x + positionOffsetX;
+    const clipCenterY = scr.y + positionOffsetY;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(clipCenterX, clipCenterY, imageSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
+    ctx.restore();
+  } else if (imageStyle === 'oval') {
+    // Draw oval image - clip to oval shape at offset position
+    const clipCenterX = scr.x + positionOffsetX;
+    const clipCenterY = scr.y + positionOffsetY;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(clipCenterX, clipCenterY, imgWidth / 2, imgHeight / 2, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
+    ctx.restore();
+  } else if (useRoundedCorners) {
+    // Draw with rounded corners
+    drawRoundedImage(ctx, img, imgX, imgY, imgWidth, imgHeight, cornerRadius);
+  } else {
+    // Draw rectangular image
+    ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Draw an image with rounded corners
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {Image} img - Image to draw
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {number} width - Width
+ * @param {number} height - Height
+ * @param {number} radius - Corner radius
+ */
+function drawRoundedImage(ctx, img, x, y, width, height, radius) {
+  ctx.save();
+
+  // Create rounded rectangle path
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+
+  // Clip to rounded rectangle
+  ctx.clip();
+
+  // Draw image
+  ctx.drawImage(img, x, y, width, height);
+
+  ctx.restore();
+}
+
+// Make drawPinImage globally available
+window.drawPinImage = drawPinImage;
 
 // ── Draw Text Elements ───────────────────────────────────────────────────
 function drawTextElements(

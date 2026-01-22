@@ -8,6 +8,7 @@
 
     <!-- Core dependencies -->
     <script src="js/utilities.js"></script>
+    <script src="js/utilities/imageUtils.js"></script>
     <script src="js/themes.js"></script>
     <script src="js/core/constants.js"></script>
     <script src="js/core/utils.js"></script>
@@ -24,6 +25,7 @@
     <script src="js/events/eventHandlers.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/ui/modal.js"></script>
+    <script src="js/ui/systemMenu.js"></script>
     <script src="js/ui/tray.js"></script>
     <script src="js/ui/toolbar.js"></script>
 
@@ -36,6 +38,14 @@
   <body>
     <!-- Top menu -->
     <div id="menu">
+      <!-- System Menu (App Logo + File Menu) -->
+      <div id="system-menu" class="toolbar-section system-section">
+        <div id="app-logo" class="system-menu-item app-logo" title="App Info">🎙️</div>
+        <div id="file-menu" class="system-menu-item file-menu" title="File Menu">
+          File
+          <span class="menu-arrow">▼</span>
+        </div>
+      </div>
       <div id="toolset"></div>
     </div>
 
@@ -75,6 +85,7 @@
           <div class="tab-button active" data-tab="info">Info</div>
           <div class="tab-button" data-tab="style">Style</div>
           <div class="tab-button" data-tab="settings">Settings</div>
+          <div class="tab-button" data-tab="image">Image</div>
         </div>
 
         <!-- Tab Content -->
@@ -163,6 +174,50 @@
               />
             </div>
           </div>
+
+          <!-- Image Tab -->
+          <div class="tab-content" id="image-tab">
+            <div class="form-group">
+              <label>Current Image</label>
+              <div id="pm-image-preview" class="image-preview">
+                <div class="no-image">No image selected</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="pm-image-file">Upload Image</label>
+              <input type="file" id="pm-image-file" accept="image/*" />
+            </div>
+            <div class="form-group">
+              <label for="pm-image-style">Display Style</label>
+              <select id="pm-image-style">
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+                <option value="oval">Oval</option>
+                <option value="circular">Circular</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="pm-image-position">Position</label>
+              <select id="pm-image-position">
+                <option value="center">Center</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="top-left">Top-Left</option>
+                <option value="top-right">Top-Right</option>
+                <option value="bottom-left">Bottom-Left</option>
+                <option value="bottom-right">Bottom-Right</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="pm-image-size">Size: <span id="pm-image-size-value">100</span>px</label>
+              <input type="range" id="pm-image-size" min="20" max="200" step="5" value="100">
+            </div>
+            <div class="form-group">
+              <button id="pm-remove-image" class="secondary-button">Remove Image</button>
+            </div>
+          </div>
         </div>
 
         <!-- Modal Actions -->
@@ -233,6 +288,40 @@
             accept=".json"
             style="display: none"
           />
+        </div>
+      </div>
+    </div>
+
+    <!-- App Info Modal -->
+    <div id="app-info-modal-backdrop">
+      <div id="app-info-modal">
+        <div id="app-info-modal-header">
+          <div id="app-info-modal-title">MyShortCasts - Investigative Board</div>
+          <div id="app-info-modal-close">✕</div>
+        </div>
+        <div id="app-info-modal-content">
+          <div class="app-info-section">
+            <h3>About</h3>
+            <p><strong>Created by:</strong> Paul G.</p>
+            <p><strong>Created for:</strong> MyShortCasts</p>
+            <p><strong>Published:</strong> 2026</p>
+            <p><strong>Version:</strong> 0.26</p>
+          </div>
+          <div class="app-info-section">
+            <h3>Description</h3>
+            <p>A powerful visual investigation and mapping tool for creating interactive boards with pins, connections, and multimedia content.</p>
+          </div>
+          <div class="app-info-section">
+            <h3>Features</h3>
+            <ul>
+              <li>Interactive pin-based investigation boards</li>
+              <li>Dynamic connections between elements</li>
+              <li>Image support with multiple display styles</li>
+              <li>Customizable themes and colors</li>
+              <li>Data import/export capabilities</li>
+              <li>Real-time collaboration ready</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>

@@ -399,7 +399,50 @@ function renderSelectedPinInfo() {
   pinInfoColor.style.backgroundColor = pin.color;
   pinInfoMeta.textContent = dateStr;
 
+  // 6. Update image preview if pin has an image
+  this.updatePinInfoImage(pin);
+
   pinInfo.style.display = "block";
+}
+
+/**
+ * Update the image preview in the pin info display
+ * @param {Object} pin - Pin object
+ */
+function updatePinInfoImage(pin) {
+  // Find or create image preview element
+  let imagePreview = document.getElementById('pin-info-image-preview');
+  if (!imagePreview) {
+    imagePreview = document.createElement('div');
+    imagePreview.id = 'pin-info-image-preview';
+    imagePreview.className = 'pin-info-image-preview';
+
+    // Insert after the color indicator
+    const pinInfoColor = document.getElementById('pin-info-color');
+    if (pinInfoColor && pinInfoColor.parentNode) {
+      pinInfoColor.parentNode.insertBefore(imagePreview, pinInfoColor.nextSibling);
+    }
+  }
+
+  // Clear existing content
+  imagePreview.innerHTML = '';
+
+  if (pin.image && pin.image.dataUrl) {
+    // Create thumbnail
+    const img = document.createElement('img');
+    img.src = pin.image.dataUrl;
+    img.alt = 'Pin image';
+    img.style.width = '32px';
+    img.style.height = '32px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '2px';
+    img.style.border = '1px solid #30363d';
+
+    imagePreview.appendChild(img);
+    imagePreview.style.display = 'block';
+  } else {
+    imagePreview.style.display = 'none';
+  }
 }
 
 
@@ -502,9 +545,11 @@ function createPinAtPosition(x, y) {
     note: "",
     date: "",
     typeId: currentTypeId,
+    image: null, // { dataUrl: string, style: string, position: string, size: number, originalFileName: string }
   };
 
   pins.push(newPin);
+  saveHistory();
   setSelectedPinById(newPin.id);
   pinEvents.emit('pinCreated', { pin: newPin });
 }
@@ -528,9 +573,11 @@ function createPinWithSize(x, y, dragDistance) {
     typeId: currentTypeId,
     width: size,
     height: size,
+    image: null, // { dataUrl: string, style: string, position: string, size: number, originalFileName: string }
   };
 
   pins.push(newPin);
+  saveHistory();
   setSelectedPinById(newPin.id);
   pinEvents.emit('pinCreated', { pin: newPin });
 }

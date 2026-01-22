@@ -27,10 +27,16 @@ class ToolbarManager {
     // Family tool IDs for configuration-driven logic
     this.familyToolIds = new Set(this.families.map(f => f.id));
 
+    // Initialize system menu manager
+    this.systemMenuManager = new SystemMenuManager(appState);
+
     // Get references to global functions
     this.draw = null;
     this.saveAppState = null;
     this.openAddColorModal = null;
+    this.loadFromFile = null;
+    this.exportData = null;
+    this.importData = null;
   }
 
   // Initialize toolbar
@@ -38,12 +44,23 @@ class ToolbarManager {
     this.draw = dependencies.draw;
     this.saveAppState = dependencies.saveAppState;
     this.openAddColorModal = dependencies.openAddColorModal;
+    this.loadFromFile = dependencies.loadFromFile;
+    this.exportData = dependencies.exportData;
+    this.importData = dependencies.importData;
 
     // Ensure appState has safe defaults
     this.initializeAppState();
 
     // Create separate containers for different sections
     this.createContainers();
+
+    // Initialize system menu manager
+    this.systemMenuManager.initialize({
+      saveAppState: this.saveAppState,
+      loadFromFile: this.loadFromFile,
+      exportData: this.exportData,
+      importData: this.importData,
+    });
 
     // Render initial toolbar
     this.render();

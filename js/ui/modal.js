@@ -201,6 +201,9 @@ class ModalManager {
       }
     }
 
+    // Set up image tab
+    this.setupImageTab(pin, pinIndex);
+
     // Set up event listeners
     const titleHandler = () => {
       pin.label = pmTitle.value;
@@ -378,6 +381,185 @@ class ModalManager {
     const selectedButton = document.querySelector(`[data-tab="${tabName}"]`);
     if (selectedButton) {
       selectedButton.classList.add("active");
+    }
+  }
+
+  // Set up image tab functionality
+  setupImageTab(pin, pinIndex) {
+    const imagePreview = document.getElementById("pm-image-preview");
+    const imageFileInput = document.getElementById("pm-image-file");
+    const imageStyleSelect = document.getElementById("pm-image-style");
+    const imagePositionSelect = document.getElementById("pm-image-position");
+    const imageSizeSlider = document.getElementById("pm-image-size");
+    const imageSizeValue = document.getElementById("pm-image-size-value");
+    const removeImageBtn = document.getElementById("pm-remove-image");
+
+    if (!imagePreview || !imageFileInput || !imageStyleSelect || !imagePositionSelect || !imageSizeSlider || !imageSizeValue || !removeImageBtn) {
+      console.warn("Image tab elements not found");
+      return;
+    }
+
+    // Update image preview
+    this.updateImagePreview(pin);
+
+    // Set current image style
+    if (pin.image && pin.image.style) {
+      imageStyleSelect.value = pin.image.style;
+    } else {
+      imageStyleSelect.value = "circular"; // Default style
+    }
+
+    // Set current image position
+    if (pin.image && pin.image.position) {
+      imagePositionSelect.value = pin.image.position;
+    } else {
+      imagePositionSelect.value = "center"; // Default position
+    }
+
+    // Set current image size
+    if (pin.image && pin.image.size) {
+      imageSizeSlider.value = pin.image.size;
+      imageSizeValue.textContent = pin.image.size;
+    } else {
+      imageSizeSlider.value = 100; // Default size
+      imageSizeValue.textContent = "100";
+    }
+
+    // Handle file input change
+    const fileInputHandler = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        // Validate file
+        const validation = window.ImageUtils.validateImageFile(file);
+        if (!validation.valid) {
+          alert(validation.error);
+          return;
+        }
+
+        // Process image
+        console.log("🎨 Processing image file:", file.name, "size:", file.size);
+        const processedImage = await window.ImageUtils.processImage(file, {
+          maxDimension: 600,
+          format: 'jpeg',
+          quality: 0.85
+        });
+        console.log("🎨 Processed image data URL length:", processedImage.length);
+
+        // Store image data in pin
+        const imagePositionSelect = document.getElementById("pm-image-position");
+        const imageSizeSlider = document.getElementById("pm-image-size");
+        pin.image = {
+          dataUrl: processedImage,
+          style: imageStyleSelect.value,
+          position: imagePositionSelect ? imagePositionSelect.value : "center",
+          size: imageSizeSlider ? parseInt(imageSizeSlider.value) : 100,
+          originalFileName: file.name,
+          uploadedAt: Date.now()
+        };
+        console.log("🎨 Image stored on pin:", pin.image);
+
+        // Update preview
+        this.updateImagePreview(pin);
+
+        // Save changes
+        this.appState.saveHistory();
+        this.saveAppState(this.appState);
+        this.draw();
+
+      } catch (error) {
+        console.error("Error processing image:", error);
+        alert("Failed to process image. Please try again.");
+      }
+    };
+
+    // Handle style change
+    const styleChangeHandler = () => {
+      if (pin.image) {
+        pin.image.style = imageStyleSelect.value;
+        this.appState.saveHistory();
+        this.saveAppState(this.appState);
+        this.draw();
+      }
+    };
+
+    // Handle position change
+    const positionChangeHandler = () => {
+      if (pin.image) {
+        pin.image.position = imagePositionSelect.value;
+        this.appState.saveHistory();
+        this.saveAppState(this.appState);
+        this.draw();
+      }
+    };
+
+    // Handle size change
+    const sizeChangeHandler = () => {
+      if (pin.image) {
+        const newSize = parseInt(imageSizeSlider.value);
+        pin.image.size = newSize;
+        imageSizeValue.textContent = newSize;
+        this.appState.saveHistory();
+        this.saveAppState(this.appState);
+        this.draw();
+      }
+    };
+
+    // Handle remove image
+    const removeImageHandler = () => {
+      if (confirm("Are you sure you want to remove this image?")) {
+        pin.image = null;
+        this.updateImagePreview(pin);
+        this.appState.saveHistory();
+        this.saveAppState(this.appState);
+        this.draw();
+      }
+    };
+
+    // Add event listeners for cleanup
+    this.addModalListener(() => imageFileInput.removeEventListener("change", fileInputHandler));
+    this.addModalListener(() => imageStyleSelect.removeEventListener("change", styleChangeHandler));
+    this.addModalListener(() => imagePositionSelect.removeEventListener("change", positionChangeHandler));
+    this.addModalListener(() => imageSizeSlider.removeEventListener("input", sizeChangeHandler));
+    this.addModalListener(() => removeImageBtn.removeEventListener("click", removeImageHandler));
+
+    // Add event listeners
+    imageFileInput.addEventListener("change", fileInputHandler);
+    imageStyleSelect.addEventListener("change", styleChangeHandler);
+    imagePositionSelect.addEventListener("change", positionChangeHandler);
+    imageSizeSlider.addEventListener("input", sizeChangeHandler);
+    removeImageBtn.addEventListener("click", removeImageHandler);
+  }
+
+  // Update the image preview in the modal
+  updateImagePreview(pin) {
+    const imagePreview = document.getElementById("pm-image-preview");
+    if (!imagePreview) return;
+
+    const previewContent = imagePreview.querySelector('.no-image') || imagePreview.querySelector('img');
+
+    if (pin.image && pin.image.dataUrl) {
+      // Remove existing content
+      if (previewContent) previewContent.remove();
+
+      // Add image
+      const img = document.createElement('img');
+      img.src = pin.image.dataUrl;
+      img.alt = pin.image.originalFileName || 'Pin image';
+      imagePreview.appendChild(img);
+    } else {
+      // Remove existing image
+      const existingImg = imagePreview.querySelector('img');
+      if (existingImg) existingImg.remove();
+
+      // Add no-image placeholder
+      if (!imagePreview.querySelector('.no-image')) {
+        const noImageDiv = document.createElement('div');
+        noImageDiv.className = 'no-image';
+        noImageDiv.textContent = 'No image selected';
+        imagePreview.appendChild(noImageDiv);
+      }
     }
   }
 
