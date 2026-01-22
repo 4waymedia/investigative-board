@@ -150,9 +150,18 @@ class ModalManager {
     pmTextColor.value = pin.textColor || "#ffffff";
 
     // Populate settings tab fields
-    if (pin.typeId && pin.typeId.startsWith("pin:")) {
-      const pinType = pin.typeId.replace("pin:", "");
-      pmPinSelector.value = pinType;
+    if (pin.typeId) {
+      let selectorValue;
+      if (pin.typeId.startsWith("pin:")) {
+        selectorValue = pin.typeId.replace("pin:", "");
+      } else if (pin.typeId.startsWith("card:")) {
+        selectorValue = pin.typeId.replace("card:", "");
+      } else if (pin.typeId.startsWith("area:")) {
+        selectorValue = pin.typeId.replace("area:", "area-");
+      }
+      if (selectorValue && pmPinSelector) {
+        pmPinSelector.value = selectorValue;
+      }
     }
     pmScale.value = pin.pinScale || 1;
 
@@ -178,9 +187,18 @@ class ModalManager {
     pmScale.value = pin.pinScale || 1;
 
     // Set up pin type selector
-    if (pin.typeId && pin.typeId.startsWith("pin:")) {
-      const pinType = pin.typeId.replace("pin:", "");
-      pmPinSelector.value = pinType;
+    if (pin.typeId) {
+      let selectorValue;
+      if (pin.typeId.startsWith("pin:")) {
+        selectorValue = pin.typeId.replace("pin:", "");
+      } else if (pin.typeId.startsWith("card:")) {
+        selectorValue = pin.typeId.replace("card:", "");
+      } else if (pin.typeId.startsWith("area:")) {
+        selectorValue = pin.typeId.replace("area:", "area-");
+      }
+      if (selectorValue && pmPinSelector) {
+        pmPinSelector.value = selectorValue;
+      }
     }
 
     // Set up event listeners
@@ -232,7 +250,27 @@ class ModalManager {
     };
 
     const textColorHandler = createAutoSaveHandler('textColor', () => pmTextColor.value);
-    const pinTypeHandler = createAutoSaveHandler('typeId', () => "pin:" + pmPinSelector.value);
+    const pinTypeHandler = () => {
+      let typeId;
+      const selectedValue = pmPinSelector.value;
+
+      // Determine the family based on the selected value
+      if (selectedValue.startsWith('area-')) {
+        // Area types
+        typeId = selectedValue.replace('area-', 'area:');
+      } else if (['card', 'doc', 'folder'].includes(selectedValue)) {
+        // Card types
+        typeId = 'card:' + selectedValue;
+      } else {
+        // Pin types (default)
+        typeId = 'pin:' + selectedValue;
+      }
+
+      pin.typeId = typeId;
+      this.appState.saveHistory();
+      this.saveAppState(this.appState);
+      this.draw();
+    };
     const scaleHandler = () => {
       pin.pinScale = parseFloat(pmScale.value);
       this.appState.saveHistory();

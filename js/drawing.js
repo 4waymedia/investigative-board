@@ -245,8 +245,10 @@ function drawCenterPin(ctx, areaPin, centerPos) {
     return;
   }
 
-  let cardTypeId = "card:card";
-  if (areaPin.icon) {
+  // Use pinType if available, otherwise determine from icon for backward compatibility
+  let cardTypeId = areaPin.pinType || "card:card";
+  if (!areaPin.pinType && areaPin.icon) {
+    // Fallback to icon-based logic for backward compatibility
     switch (areaPin.icon) {
       case "▤":
         cardTypeId = "card:card";
@@ -271,11 +273,25 @@ function drawCenterPin(ctx, areaPin, centerPos) {
   const title = areaPin.title || "";
   const description = areaPin.description || "";
 
+  // Determine variant based on card type
+  let variant = "card";
+  if (cardTypeId === "card:doc") {
+    variant = "document";
+  } else if (cardTypeId === "card:folder") {
+    variant = "folder";
+  } else if (cardTypeId === "card:card") {
+    variant = "card";
+  } else if (cardTypeId.startsWith("pin:")) {
+    // For pin types, use the pin type as variant
+    variant = cardTypeId.replace("pin:", "");
+  }
+
   const centerPin = {
     x: areaPin.x || 0,
     y: areaPin.y || 0,
     color: areaPin.color || "#58a6ff",
     typeId: cardTypeId,
+    variant: variant,
     label: title,
     title: title,
     description: description,
@@ -713,6 +729,30 @@ registerShape("circle", {
 
 registerShape("area-rect", {
   baseShape: "area-rect",
+  drawMain(ctx, pin, m, scr, s) {
+    // Draw the area rectangle boundary using areaSize
+    const halfSize = pin.areaSize || 50;
+    const width = pin.width || (halfSize * 2);
+    const height = pin.height || (halfSize * 2);
+    const fillColor = pin.fillColor || pin.color + "40";
+    const borderColor = pin.borderColor || pin.color;
+    const borderWidth = pin.borderWidth || 2;
+
+    // Calculate rectangle bounds (centered on pin position)
+    const x = scr.x - width / 2;
+    const y = scr.y - height / 2;
+
+    // Fill the area
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(x, y, width, height);
+
+    // Draw border
+    if (borderWidth > 0) {
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = borderWidth;
+      ctx.strokeRect(x, y, width, height);
+    }
+  },
   drawDecoration(ctx, pin, m, scr, s) {
     // Center pin
     drawCenterPin(ctx, pin, scr);
@@ -723,6 +763,26 @@ registerShape("area-rect", {
 
 registerShape("area-circle", {
   baseShape: "area-circle",
+  drawMain(ctx, pin, m, scr, s) {
+    // Draw the area circle boundary using areaSize
+    const radius = pin.areaSize || pin.radius || 50;
+    const fillColor = pin.fillColor || pin.color + "40";
+    const borderColor = pin.borderColor || pin.color;
+    const borderWidth = pin.borderWidth || 2;
+
+    // Fill the area
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.arc(scr.x, scr.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw border
+    if (borderWidth > 0) {
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = borderWidth;
+      ctx.stroke();
+    }
+  },
   drawLabel(ctx, pin, m, scr, s) {
     // Area pins don't show their own labels - everything is handled by center pin
     return;

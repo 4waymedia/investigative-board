@@ -266,6 +266,7 @@ class Application {
       saveAppState: this.deps.saveAppState,
       screenToWorld: this.screenToWorld.bind(this),
       findPinAt: this.findPinAt.bind(this),
+      findConnectionNear: this.findConnectionNear.bind(this),
       setSelectedPin: this.setSelectedPin.bind(this),
       updateAreaContainment: this.updateAreaContainment.bind(this)
     });
@@ -302,16 +303,72 @@ class Application {
     const menuHeight = this.deps.MENU_HEIGHT || 50;
     const trayHeight = this.deps.TRAY_HEIGHT || 140;
 
-
     // Remove any margin since canvas-container positions it correctly
     this.canvas.style.marginTop = "0px";
 
-    // Set canvas size to fill the container
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight - menuHeight - trayHeight;
+    // Calculate content bounds to ensure canvas extends to show all content
+    const contentBounds = this.calculateContentBounds();
+    const minCanvasHeight = contentBounds ? contentBounds.bottom * this.appState.scale + 100 : 0;
 
+    // Set canvas size to fill the container, but extend height if content goes below
+    this.canvas.width = window.innerWidth;
+    const baseHeight = window.innerHeight - menuHeight - trayHeight;
+    this.canvas.height = Math.max(baseHeight, minCanvasHeight);
+
+    // Adjust container height if canvas extends beyond viewport
+    const container = document.getElementById('canvas-container');
+    if (container) {
+      const currentBottom = parseInt(container.style.bottom) || 140;
+      const requiredHeight = this.canvas.height + currentBottom;
+      if (requiredHeight > window.innerHeight) {
+        // Content extends below viewport, adjust container
+        container.style.height = this.canvas.height + 'px';
+      } else {
+        // Reset to default if content fits
+        container.style.height = '';
+      }
+    }
 
     this.render();
+  }
+
+  // Calculate the bounding box of all content (pins, text, etc.)
+  calculateContentBounds() {
+    if (!this.appState.pins || this.appState.pins.length === 0) {
+      return null;
+    }
+
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+
+    // Check all pins
+    this.appState.pins.forEach(pin => {
+      if (pin.x < minX) minX = pin.x;
+      if (pin.x > maxX) maxX = pin.x;
+      if (pin.y < minY) minY = pin.y;
+      if (pin.y > maxY) maxY = pin.y;
+    });
+
+    // Check text elements if they exist
+    if (this.appState.textElements) {
+      this.appState.textElements.forEach(textEl => {
+        if (textEl.x < minX) minX = textEl.x;
+        if (textEl.x > maxX) maxX = textEl.x;
+        if (textEl.y < minY) minY = textEl.y;
+        if (textEl.y > maxY) maxY = textEl.y;
+      });
+    }
+
+    // Add some padding
+    const padding = 200;
+    return {
+      left: minX - padding,
+      top: minY - padding,
+      right: maxX + padding,
+      bottom: maxY + padding,
+      width: maxX - minX + 2 * padding,
+      height: maxY - minY + 2 * padding
+    };
   }
 
   // Main render function
@@ -842,7 +899,7 @@ class Application {
       const time = Date.now();
       ctx.lineDashOffset = -((time * 0.5) % 16); // Animated marching ants
 
-      ctx.strokeStyle = "#ff0000"; // Bright red
+      ctx.strokeStyle = this.appState.selectedColor || "#58a6ff"; // Use selected color
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
@@ -917,6 +974,50 @@ class Application {
       }
     }
     return null;
+  }
+
+  findConnectionNear(wx, wy) {
+    // Find connection line near the given world coordinates
+    const hitDistance = 8; // pixels in world space
+    let closestConnection = null;
+    let closestDistance = hitDistance;
+
+    for (let i = this.appState.connections.length - 1; i >= 0; i--) {
+      const conn = this.appState.connections[i];
+      if (!conn) continue;
+
+      const startPin = this.appState.pins[conn.startIndex];
+      const endPin = this.appState.pins[conn.endIndex];
+
+      if (!startPin || !endPin) continue;
+
+      // Check if point is near the line segment
+      const distance = this.pointToLineDistance(wx, wy, startPin.x, startPin.y, endPin.x, endPin.y);
+      if (distance <= hitDistance && distance < closestDistance) {
+        closestConnection = i;
+        closestDistance = distance;
+      }
+    }
+
+
+    return closestConnection;
+  }
+
+  pointToLineDistance(px, py, x1, y1, x2, y2) {
+    // Calculate distance from point (px, py) to line segment (x1,y1)-(x2,y2)
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    if (dx === 0 && dy === 0) {
+      // Line segment is a point
+      return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    }
+
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
+    const closestX = x1 + t * dx;
+    const closestY = y1 + t * dy;
+
+    return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
   }
 
   setSelectedPin(index) {
