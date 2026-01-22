@@ -732,8 +732,8 @@ registerShape("area-rect", {
   drawMain(ctx, pin, m, scr, s) {
     // Draw the area rectangle boundary using areaSize
     const halfSize = pin.areaSize || 50;
-    const width = pin.width || (halfSize * 2);
-    const height = pin.height || (halfSize * 2);
+    const width = pin.width || halfSize * 2;
+    const height = pin.height || halfSize * 2;
     const fillColor = pin.fillColor || pin.color + "40";
     const borderColor = pin.borderColor || pin.color;
     const borderWidth = pin.borderWidth || 2;
@@ -809,7 +809,7 @@ registerShape("pill", {
     // Pill shape: wider than tall, with fully rounded ends
     return {
       shape: "pill",
-      width: 32 * scale,  // 32px wide (elongated)
+      width: 32 * scale, // 32px wide (elongated)
       height: 16 * scale, // 16px tall (standard pin height)
     };
   },
@@ -867,7 +867,7 @@ registerShape("person", {
   getMetrics(pin, scale) {
     // 2x smaller than original
     const headRadius = 13; // 26 / 2
-    const bodyHeight = 15; // 40 / 2
+    const bodyHeight = 2; // 40 / 2
     const bodyWidth = 25; // 46 / 2 (rounded)
     const paddingBottom = 10; // 20 / 2
     const totalHeight = headRadius * 2 + bodyHeight + paddingBottom;
@@ -880,7 +880,7 @@ registerShape("person", {
       bodyH: bodyHeight,
       bodyW: bodyWidth,
       labelPadding: 5, // 10 / 2
-      headYOffset: -5, // -20 / 2 - adjusted offset to position icon higher for better centering
+      headYOffset: -10, // -20 / 2 - adjusted offset to position icon higher for better centering
     };
   },
 
@@ -1101,7 +1101,12 @@ registerShape("business-building", {
 function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   // Debug: check if pin has image
   if (window.DEBUG_IMAGES && pin.image && pin.image.dataUrl) {
-    console.log("drawPinShape: pin", index, "has image:", pin.image.originalFileName);
+    console.log(
+      "drawPinShape: pin",
+      index,
+      "has image:",
+      pin.image.originalFileName
+    );
   }
 
   // Get complete metrics from getPinMetrics and merge with passed metrics
@@ -1116,7 +1121,15 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   // FIRST: Check for pin images (draw underneath the pin shape)
   if (pin.image && pin.image.dataUrl) {
     if (window.DEBUG_IMAGES) {
-      console.log("🎨 Drawing pin image for pin:", pin.id, "style:", pin.image.style, "at:", scr.x, scr.y);
+      console.log(
+        "🎨 Drawing pin image for pin:",
+        pin.id,
+        "style:",
+        pin.image.style,
+        "at:",
+        scr.x,
+        scr.y
+      );
     }
     drawPinImage(ctx, pin, mergedMetrics, scr, appScale);
     if (window.DEBUG_IMAGES) {
@@ -1128,7 +1141,7 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   // SECOND: Check for custom theme icons
   if (window.themeManager) {
     const currentTheme = window.themeManager.getCurrentTheme();
-    const pinType = pin.typeId || 'pin:circle';
+    const pinType = pin.typeId || "pin:circle";
 
     // Check theme-specific icons first
     const iconSrc = currentTheme?.icons?.[pinType];
@@ -1164,8 +1177,15 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
       let pinScale = pin.pinScale || 1;
 
       // Validate pinScale to prevent rendering issues
-      if (typeof pinScale !== 'number' || isNaN(pinScale) || !isFinite(pinScale) || pinScale <= 0) {
-        console.warn(`⚠️ Invalid pinScale for pin ${index}: ${pinScale}, using 1.0`);
+      if (
+        typeof pinScale !== "number" ||
+        isNaN(pinScale) ||
+        !isFinite(pinScale) ||
+        pinScale <= 0
+      ) {
+        console.warn(
+          `⚠️ Invalid pinScale for pin ${index}: ${pinScale}, using 1.0`
+        );
         pinScale = 1.0;
         pin.pinScale = 1.0; // Fix the invalid value
       }
@@ -1219,7 +1239,14 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
 
       // 6. Label phase
       if (renderer.drawPhase.label) {
-        renderer.drawPhase.label(ctx, pin, finalMetrics, scr, pinScale, appScale);
+        renderer.drawPhase.label(
+          ctx,
+          pin,
+          finalMetrics,
+          scr,
+          pinScale,
+          appScale
+        );
       }
 
       ctx.restore();
@@ -1241,7 +1268,12 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
 
   // Debug logging (enable by setting window.DEBUG_IMAGES = true)
   if (window.DEBUG_IMAGES) {
-    console.log("drawPinImage called for pin with image:", pin.image.originalFileName, "style:", pin.image.style);
+    console.log(
+      "drawPinImage called for pin with image:",
+      pin.image.originalFileName,
+      "style:",
+      pin.image.style
+    );
   }
 
   // Use global image cache keyed by pin ID + filename to ensure each pin has its own image
@@ -1254,22 +1286,46 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   if (window.imageCache.has(cacheKey)) {
     img = window.imageCache.get(cacheKey);
     if (window.DEBUG_IMAGES) {
-      console.log("Using cached image for pin", pin.id, ":", pin.image.originalFileName);
+      console.log(
+        "Using cached image for pin",
+        pin.id,
+        ":",
+        pin.image.originalFileName
+      );
     }
   } else {
     if (window.DEBUG_IMAGES) {
-      console.log("Creating new cached image for pin", pin.id, ":", pin.image.originalFileName);
+      console.log(
+        "Creating new cached image for pin",
+        pin.id,
+        ":",
+        pin.image.originalFileName
+      );
     }
     img = new Image();
-    img.onload = function() {
+    img.onload = function () {
       if (window.DEBUG_IMAGES) {
-        console.log("Image loaded successfully for pin", pin.id, ":", pin.image.originalFileName, "size:", img.naturalWidth, "x", img.naturalHeight);
+        console.log(
+          "Image loaded successfully for pin",
+          pin.id,
+          ":",
+          pin.image.originalFileName,
+          "size:",
+          img.naturalWidth,
+          "x",
+          img.naturalHeight
+        );
       }
       // Force a redraw when image loads
       if (window.draw) window.draw();
     };
-    img.onerror = function() {
-      console.error("Failed to load image for pin", pin.id, ":", pin.image.originalFileName);
+    img.onerror = function () {
+      console.error(
+        "Failed to load image for pin",
+        pin.id,
+        ":",
+        pin.image.originalFileName
+      );
       window.imageCache.delete(cacheKey); // Remove from cache on error
     };
     img.src = pin.image.dataUrl;
@@ -1279,7 +1335,16 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   if (!img.complete || img.naturalWidth === 0) {
     // Debug: only log occasionally to avoid spam
     if (window.DEBUG_IMAGES && !img._debugLogged) {
-      console.log("Image not ready yet for pin", pin.id, ":", pin.image.originalFileName, "complete:", img.complete, "width:", img.naturalWidth);
+      console.log(
+        "Image not ready yet for pin",
+        pin.id,
+        ":",
+        pin.image.originalFileName,
+        "complete:",
+        img.complete,
+        "width:",
+        img.naturalWidth
+      );
       img._debugLogged = true;
     }
     return;
@@ -1287,7 +1352,17 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
 
   // Debug: log successful image rendering
   if (window.DEBUG_IMAGES && !img._renderLogged) {
-    console.log("Rendering image:", pin.image.originalFileName, "at position:", scr.x, scr.y, "size:", img.naturalWidth, "x", img.naturalHeight);
+    console.log(
+      "Rendering image:",
+      pin.image.originalFileName,
+      "at position:",
+      scr.x,
+      scr.y,
+      "size:",
+      img.naturalWidth,
+      "x",
+      img.naturalHeight
+    );
     img._renderLogged = true;
   }
 
@@ -1312,7 +1387,7 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   let imgX, imgY, imgWidth, imgHeight;
 
   // Calculate position offset based on image position setting
-  const imagePosition = pin.image.position || 'center';
+  const imagePosition = pin.image.position || "center";
   let positionOffsetX = 0;
   let positionOffsetY = 0;
 
@@ -1320,9 +1395,9 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   let useRoundedCorners = true;
   let cornerRadius = 4 * appScale;
 
-  const imageStyle = pin.image.style || 'circular';
+  const imageStyle = pin.image.style || "circular";
   switch (imageStyle) {
-    case 'portrait':
+    case "portrait":
       // Portrait: fit image maintaining aspect ratio, optimize for portrait images
       const portraitAspect = img.naturalWidth / img.naturalHeight;
       if (portraitAspect < 1) {
@@ -1336,7 +1411,7 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
       }
       break;
 
-    case 'landscape':
+    case "landscape":
       // Landscape: fit image maintaining aspect ratio, optimize for landscape images
       const landscapeAspect = img.naturalWidth / img.naturalHeight;
       if (landscapeAspect > 1) {
@@ -1350,7 +1425,7 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
       }
       break;
 
-    case 'oval':
+    case "oval":
       // Oval: fit image in oval shape
       const ovalAspect = img.naturalWidth / img.naturalHeight;
       if (ovalAspect > 1) {
@@ -1365,7 +1440,7 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
       useRoundedCorners = false; // We'll use oval clipping instead
       break;
 
-    case 'circular':
+    case "circular":
     default:
       // Circular: crop to circle, center the image
       // For circular, we want to fill the circle, so find the larger dimension
@@ -1385,39 +1460,39 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
 
   // Apply position offset based on the selected position
   switch (imagePosition) {
-    case 'center':
+    case "center":
       positionOffsetX = 0;
       positionOffsetY = 0;
       break;
-    case 'top':
+    case "top":
       positionOffsetX = 0;
       positionOffsetY = -imgHeight / 2;
       break;
-    case 'bottom':
+    case "bottom":
       positionOffsetX = 0;
       positionOffsetY = imgHeight / 2;
       break;
-    case 'left':
+    case "left":
       positionOffsetX = -imgWidth / 2;
       positionOffsetY = 0;
       break;
-    case 'right':
+    case "right":
       positionOffsetX = imgWidth / 2;
       positionOffsetY = 0;
       break;
-    case 'top-left':
+    case "top-left":
       positionOffsetX = -imgWidth / 2;
       positionOffsetY = -imgHeight / 2;
       break;
-    case 'top-right':
+    case "top-right":
       positionOffsetX = imgWidth / 2;
       positionOffsetY = -imgHeight / 2;
       break;
-    case 'bottom-left':
+    case "bottom-left":
       positionOffsetX = -imgWidth / 2;
       positionOffsetY = imgHeight / 2;
       break;
-    case 'bottom-right':
+    case "bottom-right":
       positionOffsetX = imgWidth / 2;
       positionOffsetY = imgHeight / 2;
       break;
@@ -1428,7 +1503,7 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   imgY = scr.y - imgHeight / 2 + positionOffsetY;
 
   // Draw the image based on style
-  if (imageStyle === 'circular') {
+  if (imageStyle === "circular") {
     // Draw circular image - clip to circle shape at offset position
     const clipCenterX = scr.x + positionOffsetX;
     const clipCenterY = scr.y + positionOffsetY;
@@ -1438,13 +1513,21 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
     ctx.clip();
     ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
     ctx.restore();
-  } else if (imageStyle === 'oval') {
+  } else if (imageStyle === "oval") {
     // Draw oval image - clip to oval shape at offset position
     const clipCenterX = scr.x + positionOffsetX;
     const clipCenterY = scr.y + positionOffsetY;
     ctx.save();
     ctx.beginPath();
-    ctx.ellipse(clipCenterX, clipCenterY, imgWidth / 2, imgHeight / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      clipCenterX,
+      clipCenterY,
+      imgWidth / 2,
+      imgHeight / 2,
+      0,
+      0,
+      Math.PI * 2
+    );
     ctx.clip();
     ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
     ctx.restore();
