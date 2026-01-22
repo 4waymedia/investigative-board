@@ -420,7 +420,7 @@ class ToolbarManager {
       el.className = "color-option" + (col.value === this.appState.selectedColor ? " active" : "");
       // Store the color value in a data attribute
       el.dataset.colorValue = col.value;
-      el.innerHTML = `<div class="label">${col.name}</div><div class="swatch" style="background:${col.value}"></div>`;
+      el.innerHTML = `<div class="swatch" style="background:${col.value}"></div>`;
       colorContainer.appendChild(el);
     });
 
@@ -456,6 +456,13 @@ class ToolbarManager {
     this.saveAppState(this.appState);
     this.updateActiveColorUI(colorValue);
     this.draw();
+  }
+
+  // Update the color palette with new colors (for theme changes)
+  updateColorPalette(newColors) {
+    this.defaultColors = newColors;
+    this.renderColorPalette();
+    console.log(`🔄 Toolbar color palette updated with ${newColors.length} colors`);
   }
 
   // Update active color UI without full re-render

@@ -186,6 +186,11 @@ class ThemeManager {
       draw();
     }
 
+    // Update toolbar color palette
+    if (window.app && window.app.toolbarManager && window.app.toolbarManager.updateColorPalette) {
+      window.app.toolbarManager.updateColorPalette(theme.colors);
+    }
+
     console.log(`Applied theme: ${theme.name} (${theme.colors?.length || 0} colors)`);
   }
 
