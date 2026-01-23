@@ -256,10 +256,6 @@ if (typeof window !== 'undefined') {
     init, // Added init
     openTextModal,
     closeTextModal,
-    renderTextTypeSelectorInModal,
-    updateShadowColorFieldVisibility,
-    renderColorPicker,
-    renderTextColorPickers,
     createTextWithSize,
     setupTextModalHandlers
   };
@@ -273,10 +269,6 @@ window.TextAPI = {
   init,
   openTextModal,
   closeTextModal,
-  renderTextTypeSelectorInModal,
-  updateShadowColorFieldVisibility,
-  renderColorPicker,
-  renderTextColorPickers,
   createTextWithSize,
   setupTextModalHandlers
 };
@@ -285,4 +277,3 @@ window.TextAPI = {
 window.openTextModal = openTextModal;
 window.closeTextModal = closeTextModal;
 window.createTextWithSize = createTextWithSize;
-window.handleColorChange = handleColorChange;

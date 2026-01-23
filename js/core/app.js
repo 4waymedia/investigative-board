@@ -48,7 +48,6 @@ class Application {
     this.offsetY = null;
     this.pins = null;
     this.connections = null;
-    this.textElements = null;
     this.selectedPinIndex = null;
     this.selectedColor = null;
   }
@@ -171,7 +170,6 @@ class Application {
     this.offsetY = this.appState.offsetY;
     this.pins = this.appState.pins;
     this.connections = this.appState.connections;
-    this.textElements = this.appState.textElements;
     this.selectedPinIndex = this.appState.selectedPinIndex;
     this.selectedColor = this.appState.selectedColor;
 
@@ -181,7 +179,6 @@ class Application {
     window.appOffsetY = this.offsetY;
     window.appPins = this.pins;
     window.appConnections = this.connections;
-    window.appTextElements = this.textElements;
     window.appSelectedPinIndex = this.selectedPinIndex;
     window.appSelectedColor = this.selectedColor;
 
@@ -272,7 +269,6 @@ class Application {
       saveAppState: this.deps.saveAppState,
       screenToWorld: this.screenToWorld.bind(this),
       findPinAt: this.findPinAt.bind(this),
-      findTextAt: this.findTextAt.bind(this),
       findConnectionNear: this.findConnectionNear.bind(this),
       setSelectedPin: this.setSelectedPin.bind(this),
       updateAreaContainment: this.updateAreaContainment.bind(this)
@@ -356,15 +352,6 @@ class Application {
       if (pin.y > maxY) maxY = pin.y;
     });
 
-    // Check text elements if they exist
-    if (this.appState.textElements) {
-      this.appState.textElements.forEach(textEl => {
-        if (textEl.x < minX) minX = textEl.x;
-        if (textEl.x > maxX) maxX = textEl.x;
-        if (textEl.y < minY) minY = textEl.y;
-        if (textEl.y > maxY) maxY = textEl.y;
-      });
-    }
 
     // Add some padding
     const padding = 200;
@@ -484,9 +471,6 @@ class Application {
 
     // Draw pins AFTER connections so they mask the connection line ends
     this.drawPins(this.ctx);
-
-    // Draw text elements
-    this.drawTextElements(this.ctx);
 
     this.ctx.restore();
   }
@@ -681,27 +665,15 @@ class Application {
       ctx.setLineDash([]); // Ensure solid line (not dashed)
       ctx.beginPath();
 
-      // Handle different connection types (pin-to-pin, text-to-pin)
-      let startAnchor, endAnchor;
+      // All connections are now pin-to-pin
+      const startPin = this.appState.pins[connection.startIndex];
+      const endPin = this.appState.pins[connection.endIndex];
 
-      if (connection.startType === 'text') {
-        // Text to pin connection
-        const startText = this.appState.textElements[connection.startIndex];
-        startAnchor = startText ? { x: startText.x, y: startText.y } : null;
+      if (!startPin || !endPin) return;
 
-        const endPin = this.appState.pins[connection.endIndex];
-        endAnchor = endPin ? this.getPinCenter(endPin) : null;
-      } else {
-        // Standard pin-to-pin connection
-        const startPin = this.appState.pins[connection.startIndex];
-        const endPin = this.appState.pins[connection.endIndex];
-
-        if (!startPin || !endPin) return;
-
-        // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
-        startAnchor = this.getPinCenter(startPin);
-        endAnchor = this.getPinCenter(endPin);
-      }
+      // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
+      const startAnchor = this.getPinCenter(startPin);
+      const endAnchor = this.getPinCenter(endPin);
 
       if (!startAnchor || !endAnchor) return;
 
@@ -833,17 +805,16 @@ class Application {
       }
 
       if (this.deps.drawPinShape) {
-        // Use the existing drawPinShape function from drawing.js
-        const pinBase = this.deps.PIN_BASES?.[pin.typeId] || { shape: "circle", baseRadius: 9 };
-
-        // Use the correct shape from PIN_BASES
-
-        // Pin shape determined from PIN_BASES lookup
-
-        // Fallback if PIN_BASES not available
-        if (!this.deps.PIN_BASES) {
-          pinBase.shape = 'circle';
+        // Use shape from pin object first (for text pins), then fall back to PIN_BASES
+        let pinShape = pin.shape;
+        if (!pinShape && this.deps.PIN_BASES) {
+          pinShape = this.deps.PIN_BASES[pin.typeId]?.shape;
         }
+        if (!pinShape) {
+          pinShape = 'circle'; // Final fallback
+        }
+
+        const pinBase = { shape: pinShape, baseRadius: 9 };
 
         const isSelected = index === this.appState.selectedPinIndex;
         // Show marquee whenever pin is selected (for visual feedback)
@@ -869,20 +840,6 @@ class Application {
   }
 
   // Draw text elements
-  drawTextElements(ctx) {
-    if (!this.appState.textElements || !this.deps.drawTextElements) return;
-
-    // Calculate viewport bounds (world coordinates)
-    const viewportLeft = -this.appState.offsetX / this.appState.scale;
-    const viewportTop = -this.appState.offsetY / this.appState.scale;
-    const viewportRight = viewportLeft + (this.canvas.width / this.appState.scale);
-    const viewportBottom = viewportTop + (this.canvas.height / this.appState.scale);
-
-    const margin = 100 / this.appState.scale; // Extra margin for text elements
-
-    // Use the drawing.js text rendering function
-    this.deps.drawTextElements(this.appState.textElements, viewportLeft, viewportRight, viewportTop, viewportBottom, margin);
-  }
 
   // Draw screen-space UI elements (marquees, selections, etc.)
   drawScreenUI(ctx) {
@@ -958,7 +915,6 @@ class Application {
   renderCanvas(ctx) {
     this.drawPins(ctx);
     this.drawConnections(ctx);
-    this.drawTextElements(ctx);
   }
 
   // Utility methods for event handlers
@@ -997,59 +953,6 @@ class Application {
     return null;
   }
 
-  findTextAt(wx, wy) {
-    // Find text element at the given world coordinates
-    for (let i = this.appState.textElements.length - 1; i >= 0; i--) {
-      const textEl = this.appState.textElements[i];
-      if (!textEl) continue;
-
-      // Calculate text bubble bounds (similar to drawing logic)
-      const fontSize = textEl.fontSize || 16;
-      const padding = 8;
-      const textWidth = textEl.text ? textEl.text.length * fontSize * 0.6 : 40; // Rough estimate
-      const textHeight = fontSize;
-      const bubbleWidth = textWidth + padding * 2;
-      const bubbleHeight = textHeight + padding * 2;
-
-      // Check if click is within bubble bounds
-      const left = textEl.x - bubbleWidth / 2;
-      const right = textEl.x + bubbleWidth / 2;
-      const top = textEl.y - bubbleHeight / 2;
-      const bottom = textEl.y + bubbleHeight / 2;
-
-      if (wx >= left && wx <= right && wy >= top && wy <= bottom) {
-        return i;
-      }
-    }
-    return null;
-  }
-
-  findTextAt(wx, wy) {
-    // Find text element at the given world coordinates
-    for (let i = this.appState.textElements.length - 1; i >= 0; i--) {
-      const textEl = this.appState.textElements[i];
-      if (!textEl) continue;
-
-      // Calculate text bubble bounds (similar to drawing logic)
-      const fontSize = textEl.fontSize || 16;
-      const padding = 8;
-      const textWidth = textEl.text ? textEl.text.length * fontSize * 0.6 : 40; // Rough estimate
-      const textHeight = fontSize;
-      const bubbleWidth = textWidth + padding * 2;
-      const bubbleHeight = textHeight + padding * 2;
-
-      // Check if click is within bubble bounds
-      const left = textEl.x - bubbleWidth / 2;
-      const right = textEl.x + bubbleWidth / 2;
-      const top = textEl.y - bubbleHeight / 2;
-      const bottom = textEl.y + bubbleHeight / 2;
-
-      if (wx >= left && wx <= right && wy >= top && wy <= bottom) {
-        return i;
-      }
-    }
-    return null;
-  }
 
   findConnectionNear(wx, wy) {
     // Find connection line near the given world coordinates
@@ -1144,7 +1047,6 @@ class Application {
     window.offsetY = this.appState.offsetY;
     window.pins = this.appState.pins;
     window.connections = this.appState.connections;
-    window.textElements = this.appState.textElements;
     window.selectedPinIndex = this.appState.selectedPinIndex;
     window.selectedPins = this.appState.selectedPins;
     window.selectedColor = this.appState.selectedColor;
@@ -1359,7 +1261,6 @@ class Application {
       // Reset state
       this.appState.pins = [];
       this.appState.connections = [];
-      this.appState.textElements = [];
       this.appState.selectedPinIndex = null;
       this.appState.selectedPins = [];
       this.appState.selectedTextIndex = null;

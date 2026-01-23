@@ -62,8 +62,7 @@ class ToolbarManager {
       importData: this.importData,
     });
 
-    // Render initial toolbar
-    this.render();
+    // Note: Initial render is handled by app.js to avoid duplicate renders
   }
 
   // Ensure appState has safe defaults to prevent undefined errors
@@ -113,11 +112,34 @@ class ToolbarManager {
     this.menu.appendChild(this.controlsContainer);
   }
 
-  // Main render function - now only called on initialization
+  // Main render function - clears and rebuilds toolbar to prevent duplicates
   render() {
     if (!this.menu || !this.toolset) {
       return;
     }
+
+    // If containers don't exist yet, create them
+    if (!this.typesContainer) {
+      this.createContainers();
+    }
+
+    // Clear the menu completely and rebuild it
+    this.menu.innerHTML = '';
+
+    // Rebuild the menu structure
+    // System menu (preserve original)
+    const systemMenu = document.getElementById('system-menu');
+    if (systemMenu) {
+      this.menu.appendChild(systemMenu);
+    }
+
+    // Toolset (preserve original)
+    this.menu.appendChild(this.toolset);
+
+    // Add the dynamic containers
+    this.menu.appendChild(this.typesContainer);
+    this.menu.appendChild(this.colorsContainer);
+    this.menu.appendChild(this.controlsContainer);
 
     // Render each section
     this.renderTools();

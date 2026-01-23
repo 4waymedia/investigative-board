@@ -114,8 +114,6 @@ class AppState {
   get cards() { return this.document.cards; }
   set cards(value) { this.document.cards = value; }
 
-  get textElements() { return this.document.textElements; }
-  set textElements(value) { this.document.textElements = value; }
 
   get areas() { return this.document.areas; }
   set areas(value) { this.document.areas = value; }
@@ -223,12 +221,62 @@ class AppState {
       y: y,
       typeId: properties.typeId || this.session.currentTypeId,
       color: properties.color || this.session.selectedColor,
+      label: properties.label || '',
       note: properties.note || '',
+      date: properties.date || '',
+      shape: properties.shape || 'circle', // New: circle, bubble, rectangle, etc.
+      textColor: properties.textColor, // New: auto-calculated for readability
+      borderColor: properties.borderColor, // New: optional border color
+      image: properties.image || null,
       ...properties
     };
 
     this.document.pins.push(pin);
     return this.document.pins.length - 1;
+  }
+
+  /**
+   * Add a text pin (comic-style bubble or rectangle)
+   * @param {number} x - World X coordinate
+   * @param {number} y - World Y coordinate
+   * @param {string} text - Main text content (title/data point)
+   * @param {Object} properties - Additional pin properties
+   * @returns {number} Index of the added pin
+   */
+  addTextPin(x, y, text = '', properties = {}) {
+    const bubbleColor = properties.color || this.session.selectedColor;
+    const textColor = properties.textColor || this.calculateTextColor(bubbleColor);
+
+    return this.addPin(x, y, {
+      label: text, // Main text content
+      shape: properties.shape || 'bubble', // Default to comic bubble
+      textColor: textColor,
+      borderColor: properties.borderColor,
+      fontSize: properties.fontSize || 16,
+      width: properties.width || 200,
+      height: properties.height || 50,
+      ...properties
+    });
+  }
+
+
+  /**
+   * Calculate optimal text color for readability against a background color
+   * @param {string} backgroundColor - Hex color of the background
+   * @returns {string} Hex color for text
+   */
+  calculateTextColor(backgroundColor) {
+    // Convert hex to RGB
+    const hex = backgroundColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+
+    // Calculate brightness (YIQ formula)
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+    // Return light text for dark backgrounds, dark text for light backgrounds
+    return brightness > 128 ? '#000000' : '#ffffff';
   }
 
   /**
@@ -256,34 +304,6 @@ class AppState {
     return true;
   }
 
-  /**
-   * Add a text element to the document
-   * @param {number} x - World X coordinate
-   * @param {number} y - World Y coordinate
-   * @param {string} text - Text content
-   * @param {Object} properties - Additional text properties
-   * @returns {number} Index of the added text element
-   */
-  addTextElement(x, y, text = '', properties = {}) {
-    const textElement = {
-      id: this._generateId('text'),
-      x: x,
-      y: y,
-      text: text,
-      type: properties.type || 'rectangle',
-      bubbleColor: properties.bubbleColor || '#ffffff',
-      textColor: properties.textColor || '#000000',
-      typeId: properties.typeId || 'plain',
-      color: properties.color || this.session.selectedColor,
-      fontSize: properties.fontSize || 16,
-      width: properties.width || 200,
-      height: properties.height || 50,
-      ...properties
-    };
-
-    this.document.textElements.push(textElement);
-    return this.document.textElements.length - 1;
-  }
 
   /**
    * Add a connection between two pins

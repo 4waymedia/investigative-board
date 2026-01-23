@@ -1676,6 +1676,105 @@ function drawTextElements(
   });
 }
 
+// Register text pin shapes (bubble and rectangle)
+registerShape("bubble", {
+  baseShape: "circle",
+  getMetrics: function(pin) {
+    const radius = 30; // Base radius for bubble
+    return {
+      shape: "bubble",
+      radius: radius,
+      width: radius * 2,
+      height: radius * 2,
+      labelOffsetY: 0
+    };
+  },
+  drawPhase: {
+    background: function(ctx, pin, metrics, scr, pinScale) {
+      const bubbleColor = pin.color || "#ffffff";
+      const borderColor = pin.borderColor || "#000000";
+
+      // Draw bubble shape with tail
+      ctx.fillStyle = bubbleColor;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2;
+
+      // Main bubble body
+      window.DrawingUtils.roundRectPath(ctx, scr.x - 25, scr.y - 15, 50, 30, 15);
+      ctx.fill();
+      ctx.stroke();
+
+      // Add tail/pointer
+      ctx.beginPath();
+      ctx.moveTo(scr.x, scr.y + 15);
+      ctx.lineTo(scr.x - 5, scr.y + 25);
+      ctx.lineTo(scr.x + 5, scr.y + 25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    },
+    label: function(ctx, pin, metrics, scr, pinScale) {
+      const textColor = pin.textColor || "#000000";
+      const fontSize = pin.fontSize || 14;
+
+      ctx.fillStyle = textColor;
+      ctx.font = `${fontSize}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(pin.label || '', scr.x, scr.y);
+    }
+  }
+});
+
+registerShape("rectangle", {
+  baseShape: "circle",
+  getMetrics: function(pin) {
+    const width = pin.width || 100;
+    const height = pin.height || 40;
+    return {
+      shape: "rectangle",
+      width: width,
+      height: height,
+      radius: Math.min(width, height) / 2,
+      labelOffsetY: 0
+    };
+  },
+  drawPhase: {
+    background: function(ctx, pin, metrics, scr, pinScale) {
+      const bubbleColor = pin.color || "#ffffff";
+      const borderColor = pin.borderColor || "#000000";
+      const width = pin.width || 100;
+      const height = pin.height || 40;
+
+      ctx.fillStyle = bubbleColor;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2;
+
+      // Draw rounded rectangle
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        scr.x - width/2,
+        scr.y - height/2,
+        width,
+        height,
+        8
+      );
+      ctx.fill();
+      ctx.stroke();
+    },
+    label: function(ctx, pin, metrics, scr, pinScale) {
+      const textColor = pin.textColor || "#000000";
+      const fontSize = pin.fontSize || 14;
+
+      ctx.fillStyle = textColor;
+      ctx.font = `${fontSize}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(pin.label || '', scr.x, scr.y);
+    }
+  }
+});
+
 // Make shapeRenderers, pin drawing, and text drawing globally available
 window.shapeRenderers = shapeRenderers;
 window.drawPinShape = drawPinShape;

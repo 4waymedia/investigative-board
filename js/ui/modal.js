@@ -147,7 +147,13 @@ class ModalManager {
 
     // Populate style tab fields
     pmColor.value = pin.color || "#58a6ff";
-    pmTextColor.value = pin.textColor || "#ffffff";
+    pmTextColor.value = pin.textColor || this.appState.calculateTextColor(pin.color || "#58a6ff");
+
+    // Handle text pins (bubble/rectangle shapes)
+    const isTextPin = pin.shape === "bubble" || pin.shape === "rectangle";
+    if (isTextPin && pmTitle) {
+      pmTitle.value = pin.label || ""; // Text pins use label for main text
+    }
 
     // Populate settings tab fields
     if (pin.typeId) {

@@ -173,25 +173,32 @@ class EventHandlers {
   constructor(appState, canvas, app) {
     console.log("EventHandlers constructor called with:", typeof appState, typeof canvas, typeof app);
     console.log("Canvas element:", canvas, "id:", canvas ? canvas.id : "no id");
-    if (!appState || !canvas) {
-      throw new Error("EventHandlers constructor missing required parameters");
-    }
-    this.appState = appState;
-    this.canvas = canvas;
-    this.app = app;
+    try {
+      if (!appState || !canvas) {
+        throw new Error("EventHandlers constructor missing required parameters");
+      }
+      this.appState = appState;
+      this.canvas = canvas;
+      this.app = app;
 
     // Cache DOM element references to avoid stale references
     this.canvasContainer = document.getElementById("canvas-container");
     this.boardElement = document.getElementById("board");
 
     // Initialize tool instances
-    this.tools = {
-      pan: new PanTool(this),
-      select: new SelectTool(this),
-      pin: new PinTool(this),
-      text: new TextTool(this),
-      area: new AreaTool(this)
-    };
+    try {
+      this.tools = {
+        pan: new PanTool(this),
+        select: new SelectTool(this),
+        pin: new PinTool(this),
+        text: new TextTool(this),
+        area: new AreaTool(this)
+      };
+      console.log("EventHandlers tools initialized successfully");
+    } catch (error) {
+      console.error("Failed to initialize EventHandlers tools:", error);
+      throw error;
+    }
 
     this.mouseScreenX = 0;
     this.mouseScreenY = 0;
@@ -199,16 +206,19 @@ class EventHandlers {
     this.prevScreenY = 0;
     this.didDrag = false;
     this.clipboardPins = []; // For copy/paste functionality
+    console.log("EventHandlers constructor completed successfully");
+  } catch (error) {
+    console.error("EventHandlers constructor failed:", error);
+    throw error;
+  }
 
-    // Track modifier key states globally
+  // Track modifier key states globally
     this.altKeyPressed = false;
     this.ctrlKeyPressed = false;
     this.shiftKeyPressed = false;
     this.isPanning = false;
     this.isDraggingPin = false;
     this.dragPinIndex = null;
-    this.isDraggingText = false;
-    this.dragTextIndex = null;
     this.isDraggingArea = false;
     this.areaDragStart = null;
     this.areaDragCurrent = null;
@@ -253,7 +263,6 @@ class EventHandlers {
     this.marqueeAnimationSpeed = 2; // pixels per frame
     this.marqueeAnimationId = null; // Animation frame ID
     this.selectedPins = [];
-    this.selectedTextIndex = null;
     this.totalMovement = 0;
 
     // Drag-to-line tracking
@@ -271,7 +280,6 @@ class EventHandlers {
     this.saveAppState = null;
     this.screenToWorld = null;
     this.findPinAt = null;
-    this.findTextAt = null;
     this.findConnectionNear = null;
     this.setSelectedPin = null;
     this.updateAreaContainment = null;
@@ -341,7 +349,6 @@ class EventHandlers {
     this.saveAppState = dependencies.saveAppState;
     this.screenToWorld = dependencies.screenToWorld;
     this.findPinAt = dependencies.findPinAt;
-    this.findTextAt = dependencies.findTextAt;
     this.findConnectionNear = dependencies.findConnectionNear;
     this.setSelectedPin = dependencies.setSelectedPin;
     this.updateAreaContainment = dependencies.updateAreaContainment;
@@ -414,14 +421,6 @@ class EventHandlers {
       this.appState.offsetX += dx;
       this.appState.offsetY += dy;
       this.appState.saveHistory(); // Pan operations should be undoable
-    } else if (this.isDraggingText && this.dragTextIndex !== null) {
-      this.isUserInteracting = true;
-      const worldDelta = { x: dx / this.appState.scale, y: dy / this.appState.scale };
-      const textEl = this.appState.textElements[this.dragTextIndex];
-      if (textEl) {
-        textEl.x += worldDelta.x;
-        textEl.y += worldDelta.y;
-      }
     } else if (this.isDraggingArea) {
       console.log(`🎯 AREA DRAGGING: Updating marquee preview - this.isDraggingArea = ${this.isDraggingArea}`);
       this.isUserInteracting = true;
@@ -472,7 +471,6 @@ class EventHandlers {
 
     const mousePos = this.getMousePos(e);
     const clickedPinIndex = this.findPinAt(mousePos.world.x, mousePos.world.y);
-    const clickedTextIndex = this.findTextAt(mousePos.world.x, mousePos.world.y);
     const clickedConnectionIndex = this.findConnectionNear(mousePos.world.x, mousePos.world.y);
 
 
@@ -496,8 +494,6 @@ class EventHandlers {
 
     // Handle text element interaction first (text elements take precedence over pins)
     if (e.button === 0 && !e.shiftKey && clickedTextIndex !== null) {
-      this.handleTextElementInteraction(mousePos, clickedTextIndex);
-      return; // Don't continue with other interactions
     }
 
     // Track if we're starting a drag from a pin (for drag-to-line functionality)
@@ -508,7 +504,7 @@ class EventHandlers {
 
     // Handle right-click separately
     if (e.button === 2) {
-      this.handleCanvasRightClick(e, mousePos.world, clickedPinIndex, clickedTextIndex);
+      this.handleCanvasRightClick(e, mousePos.world, clickedPinIndex);
       return;
     }
 
@@ -529,55 +525,57 @@ class EventHandlers {
   }
 
   // Canvas right-click handler (separated for clarity)
-  handleCanvasRightClick(e, mouseWorld, clickedPinIndex, clickedTextIndex) {
+  handleCanvasRightClick(e, mouseWorld, clickedPinIndex) {
     e.preventDefault(); // Prevent context menu from showing
     e.stopPropagation(); // Stop event bubbling
     e.stopImmediatePropagation(); // Stop other handlers
     e.returnValue = false; // For older browsers
 
-    if (clickedTextIndex !== null) {
-      // Right-click on text element - open radial menu and activate marquee for connections
-      console.log(`🎯 RIGHT-CLICK: Opening radial menu AND activating marquee for text ${clickedTextIndex}`);
+    if (clickedPinIndex !== null) {
+      // Check if it's a text pin (bubble or rectangle shape)
+      const pin = this.appState.pins[clickedPinIndex];
+      const isTextPin = pin && (pin.shape === 'bubble' || pin.shape === 'rectangle');
 
-      // Clear any existing connection timeout
-      if (this.connectionTimeout) {
-        clearTimeout(this.connectionTimeout);
-        this.connectionTimeout = null;
-      }
+      if (isTextPin) {
+        // Right-click on text pin - open radial menu and activate marquee for connections
+        console.log(`🎯 RIGHT-CLICK: Opening radial menu AND activating marquee for text pin ${clickedPinIndex}`);
 
-      // 1. Set text as parent for connections (activate marquee)
-      this.appState.selectedTextIndex = clickedTextIndex;
-      this.appState.selectedPinIndex = null;
-      this.appState.connectStartIndex = -(clickedTextIndex + 1); // Use negative index for text
-      this.appState.connectionMode = 'parent'; // Locked parent effect
-
-      // Clear connectStartIndex after 10 seconds for parent mode (longer since it's multi-connection)
-      this.connectionTimeout = setTimeout(() => {
-        if (this.appState.connectStartIndex === -(clickedTextIndex + 1) && this.appState.connectionMode === 'parent') {
-          this.appState.connectStartIndex = null;
-          this.appState.connectMousePos = null;
-          this.stopMarqueeAnimation();
-          console.log('⏰ Cleared text parent connection state after 10 seconds');
+        // Clear any existing connection timeout
+        if (this.connectionTimeout) {
+          clearTimeout(this.connectionTimeout);
           this.connectionTimeout = null;
         }
-      }, 10000);
 
-      // Start marquee animation to show connection mode is active
-      this.startMarqueeAnimation();
-      console.log(`🎯 Marquee activated for text parent ${clickedTextIndex} - ready for radial connections`);
+        // Set pin as connection source
+        this.appState.selectedPinIndex = clickedPinIndex;
+        this.appState.connectStartIndex = clickedPinIndex;
+        this.appState.connectionMode = 'parent';
 
-      // 2. Open radial menu for text element
-      if (window.openRadialMenu) {
-        // For text elements, we might want a different radial menu or the same one
-        // For now, let's use a simple approach - could be extended later
-        console.log(`🎯 Text element radial menu not yet implemented, using basic selection`);
+        // Clear connectStartIndex after 10 seconds
+        this.connectionTimeout = setTimeout(() => {
+          if (this.appState.connectStartIndex === clickedPinIndex && this.appState.connectionMode === 'parent') {
+            this.appState.connectStartIndex = null;
+            this.appState.connectMousePos = null;
+            this.stopMarqueeAnimation();
+            console.log('⏰ Cleared pin parent connection state after 10 seconds');
+            this.connectionTimeout = null;
+          }
+        }, 10000);
+
+        // Start marquee animation to show connection mode is active
+        this.startMarqueeAnimation();
+        console.log(`🎯 Marquee activated for text pin ${clickedPinIndex} - ready for radial connections`);
+
+        // Open radial menu for text pin
+        if (window.openRadialMenu) {
+          window.openRadialMenu(clickedPinIndex, e.clientX, e.clientY);
+        }
+
+        console.log(`🔗 Text pin ${clickedPinIndex} set as parent - marquee activated`);
+        return;
       }
 
-      console.log(`🔗 Text ${clickedTextIndex} set as parent - marquee activated`);
-      return;
-    }
-
-    if (clickedPinIndex !== null) {
+      // Right-click on regular pin - BOTH open radial menu AND activate marquee for connections
       // Right-click on pin - BOTH open radial menu AND activate marquee for connections
       console.log(`🎯 RIGHT-CLICK: Opening radial menu AND activating marquee for pin ${clickedPinIndex}`);
 
@@ -700,52 +698,6 @@ class EventHandlers {
     return { x: closestX, y: closestY };
   }
 
-    // Handle text element interaction (selection, dragging, connections)
-    handleTextElementInteraction(mousePos, textIndex) {
-      console.log(`👆 Left-click: Text element ${textIndex} clicked`);
-
-      // Select the text element
-      this.appState.selectedTextIndex = textIndex;
-      this.appState.selectedPinIndex = null; // Clear pin selection
-
-      // Start drag using drag manager
-      if (window.dragManager) {
-        window.dragManager.startTextDrag(textIndex, mousePos.world, [textIndex]);
-        this.isDragManagerDragging = true;
-      } else {
-        // Fallback if drag manager not available
-        this.isDraggingText = true;
-        this.dragTextIndex = textIndex;
-      }
-
-      // Set as connection source for next pin placement (sequential mode)
-      // Use negative index to indicate text element (-1 = text index 0, -2 = text index 1, etc.)
-      this.appState.connectStartIndex = -(textIndex + 1);
-      this.appState.connectionMode = 'sequential';
-
-      // Clear any existing connection timeout
-      if (this.connectionTimeout) {
-        clearTimeout(this.connectionTimeout);
-        this.connectionTimeout = null;
-      }
-
-      // Clear connectStartIndex after 5 seconds of inactivity
-      this.connectionTimeout = setTimeout(() => {
-        if (this.appState.connectStartIndex === -(textIndex + 1) && !this.isDraggingText) {
-          this.appState.connectStartIndex = null;
-          this.appState.connectMousePos = null;
-          this.stopMarqueeAnimation();
-          console.log('⏰ Cleared text connection state after 5 seconds');
-          this.connectionTimeout = null;
-        }
-      }, 5000);
-
-      // Start marquee animation to show connection mode is active
-      this.startMarqueeAnimation();
-      console.log(`🎯 Marquee activated for text ${textIndex} - ready for connections`);
-
-      console.log(`👆 Left-click: Text ${textIndex} selected for dragging`);
-    }
 
     // Handle Shift+click on connection lines
     handleShiftClickOnConnection(worldPos, connectionIndex) {
@@ -875,22 +827,7 @@ class EventHandlers {
       window.dragManager.updateDrag(this.screenToWorld(canvasX, canvasY));
     }
 
-    // Handle text dragging (legacy fallback)
-    if (this.isDraggingText && this.dragTextIndex !== null) {
-      this.isUserInteracting = true;
-      // Calculate mouse movement delta
-      const dx = e.clientX - this.prevScreenX;
-      const dy = e.clientY - this.prevScreenY;
-      const worldDelta = { x: dx / this.appState.scale, y: dy / this.appState.scale };
-      const textEl = this.appState.textElements[this.dragTextIndex];
-      if (textEl) {
-        textEl.x += worldDelta.x;
-        textEl.y += worldDelta.y;
-      }
-      // Update previous mouse position
-      this.prevScreenX = e.clientX;
-      this.prevScreenY = e.clientY;
-    } else if (this.isDraggingArea) {
+    if (this.isDraggingArea) {
       console.log(`🎯 AREA DRAGGING: About to execute area dragging code - this.isDraggingArea = ${this.isDraggingArea}`);
       this.isUserInteracting = true;
       console.log(`🎯 screenToWorld(${canvasX}, ${canvasY}) returned: (${mousePos.world.x}, ${mousePos.world.y})`);
@@ -1036,54 +973,40 @@ class EventHandlers {
     // Handle connection creation if connectStartIndex is set
     if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
-      const clickedTextIndex = this.findTextAt(mouseWorld.x, mouseWorld.y);
 
-      if (clickedPinIndex !== null) {
-        // Check what type of element is initiating the connection
-        const isTextConnection = this.appState.connectStartIndex < 0;
-        const startIndex = isTextConnection ?
-          -(this.appState.connectStartIndex + 1) : // Convert negative index back to positive text index
-          this.appState.connectStartIndex;
-
-        if (!isTextConnection || startIndex !== clickedPinIndex) {
-          // For text connections, we don't check for existing connections the same way
-          // since text-to-pin connections are directional
-
-          // Create connection
-          const connection = {
-            startIndex: startIndex,
-            endIndex: clickedPinIndex,
-            startType: isTextConnection ? 'text' : 'pin',
-            endType: 'pin',
-            color: this.appState.selectedColor,
-            type: this.appState.connectionType
-          };
-          this.appState.connections.push(connection);
-          this.appState.saveHistory();
-          if (this.saveAppState) {
-            this.saveAppState(this.appState);
-          }
-          // Update pin scales based on new connections
-          window.updatePinScales(this.appState.pins, this.appState.connections);
-
-          console.log(`🔗 Connected ${isTextConnection ? 'text' : 'pin'} ${startIndex} to pin ${clickedPinIndex}`);
-
-          // Handle connection state based on mode
-          if (this.appState.connectionMode === 'sequential') {
-            // In sequential mode: set the connected pin as the new connection source
-            this.appState.connectStartIndex = clickedPinIndex;
-            this.appState.connectMousePos = null; // Clear mouse pos but keep connection active
-            console.log(`🔄 Sequential: Connected to pin ${clickedPinIndex}, now set as new connection source`);
-          } else {
-            // In other modes: reset connection state
-            this.appState.connectStartIndex = null;
-            this.appState.connectMousePos = null;
-            this.stopMarqueeAnimation(); // Stop marquee animation
-          }
-
-          this.draw();
-          return; // Don't create a new pin
+      if (clickedPinIndex !== null && clickedPinIndex !== this.appState.connectStartIndex) {
+        // Create connection between two different pins
+        const connection = {
+          startIndex: this.appState.connectStartIndex,
+          endIndex: clickedPinIndex,
+          color: this.appState.selectedColor,
+          type: this.appState.connectionType
+        };
+        this.appState.connections.push(connection);
+        this.appState.saveHistory();
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
         }
+        // Update pin scales based on new connections
+        window.updatePinScales(this.appState.pins, this.appState.connections);
+
+        console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to pin ${clickedPinIndex}`);
+
+        // Handle connection state based on mode
+        if (this.appState.connectionMode === 'sequential') {
+          // In sequential mode: set the connected pin as the new connection source
+          this.appState.connectStartIndex = clickedPinIndex;
+          this.appState.connectMousePos = null; // Clear mouse pos but keep connection active
+          console.log(`🔄 Sequential: Connected to pin ${clickedPinIndex}, now set as new connection source`);
+        } else {
+          // In other modes: reset connection state
+          this.appState.connectStartIndex = null;
+          this.appState.connectMousePos = null;
+          this.stopMarqueeAnimation(); // Stop marquee animation
+        }
+
+        this.draw();
+        return; // Don't create a new pin
       }
       // If clicked on empty space or same element, continue to pin creation logic below
       // which will handle creating a new pin and connecting it
@@ -1161,17 +1084,16 @@ class EventHandlers {
     // Handle text creation when text tool is active
     if (!this.isMarqueeSelecting && this.appState.currentTool === "text") {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
-      const clickedTextIndex = this.findTextAt(mouseWorld.x, mouseWorld.y);
-      if (clickedPinIndex === null && clickedTextIndex === null) {
-        // Create new text element at click location
+      if (clickedPinIndex === null) {
+        // Create new text pin at click location
         // Position the text so the mouse is at the center of the text bubble
-        const newTextIndex = this.appState.addTextElement(mouseWorld.x, mouseWorld.y, "Text", {
+        const newPinIndex = this.appState.addTextPin(mouseWorld.x, mouseWorld.y, "Text", {
           color: this.appState.selectedColor,
-          typeId: this.appState.currentTextType || "plain",
+          shape: this.appState.currentTextShape || "bubble",
           fontSize: 16
         });
 
-        console.log(`📝 Created text element at (${mouseWorld.x}, ${mouseWorld.y})`);
+        console.log(`📝 Created text pin at (${mouseWorld.x}, ${mouseWorld.y})`);
         this.appState.saveHistory();
         if (this.saveAppState) {
           this.saveAppState(this.appState);
@@ -1399,12 +1321,10 @@ class EventHandlers {
     // Reset interaction flags (legacy support)
     this.isPanning = false;
     this.isDraggingPin = false;
-    this.isDraggingText = false;
     this.isDraggingArea = false;
     this.isCreatingText = false;
     this.isMarqueeSelecting = false;
     this.dragPinIndex = null;
-    this.dragTextIndex = null;
     this.isDragManagerDragging = false; // Track drag manager state
 
     // Reset area drag state
@@ -1510,41 +1430,45 @@ class EventHandlers {
     e.preventDefault();
     const mousePos = this.getMousePos(e);
     const mouseWorld = mousePos.world;
-    const clickedTextIndex = this.findTextAt(mouseWorld.x, mouseWorld.y);
     const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
 
-    console.log(`📍 Double-click world coords: (${mouseWorld.x}, ${mouseWorld.y}), found text: ${clickedTextIndex}, pin: ${clickedPinIndex}`);
+    console.log(`📍 Double-click world coords: (${mouseWorld.x}, ${mouseWorld.y}), found pin: ${clickedPinIndex}`);
 
-    if (clickedTextIndex !== null) {
-      // Open text modal for text editing
-      if (window.openTextModal) {
-        console.log(`📝 Opening text modal for text element ${clickedTextIndex}`);
-        const textElement = this.appState.textElements[clickedTextIndex];
-        window.openTextModal({
-          id: textElement.id,
-          x: e.clientX,
-          y: e.clientY,
-          initialText: textElement.text || '',
-          width: textElement.width || 200,
-          height: textElement.height || 50
-        });
+    if (clickedPinIndex !== null) {
+      // Check if it's a text pin (bubble or rectangle shape)
+      const pin = this.appState.pins[clickedPinIndex];
+      const isTextPin = pin && (pin.shape === 'bubble' || pin.shape === 'rectangle');
+
+      if (isTextPin) {
+        // Open text modal for text pin editing
+        if (window.openTextModal) {
+          console.log(`📝 Opening text modal for text pin ${clickedPinIndex}`);
+          window.openTextModal({
+            id: pin.id,
+            x: e.clientX,
+            y: e.clientY,
+            initialText: pin.label || '',
+            width: pin.width || 200,
+            height: pin.height || 50
+          });
+        } else {
+          console.error(`❌ Text modal not available`);
+        }
       } else {
-        console.error(`❌ Text modal not available`);
-      }
-    } else if (clickedPinIndex !== null) {
-      // Open modal for pin editing
-      if (window.app && window.app.modalManager && window.app.modalManager.openPinModal) {
-        console.log(`📝 Opening modal for pin ${clickedPinIndex}`);
-        window.app.modalManager.openPinModal(clickedPinIndex);
-      } else {
-        console.error(`❌ Modal manager not available:`, {
-          app: !!window.app,
-          modalManager: !!(window.app && window.app.modalManager),
-          openPinModal: !!(window.app && window.app.modalManager && window.app.modalManager.openPinModal)
-        });
+        // Open modal for pin editing
+        if (window.app && window.app.modalManager && window.app.modalManager.openPinModal) {
+          console.log(`📝 Opening modal for pin ${clickedPinIndex}`);
+          window.app.modalManager.openPinModal(clickedPinIndex);
+        } else {
+          console.error(`❌ Modal manager not available:`, {
+            app: !!window.app,
+            modalManager: !!(window.app && window.app.modalManager),
+            openPinModal: !!(window.app && window.app.modalManager && window.app.modalManager.openPinModal)
+          });
+        }
       }
     } else {
-      console.log(`❌ No text element or pin found at double-click location`);
+      console.log(`❌ No pin found at double-click location`);
     }
   }
 
@@ -1703,45 +1627,8 @@ class EventHandlers {
         }
       }
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      // Delete selected pins or text elements
-      if (this.appState.selectedTextIndex !== null) {
-        // Delete selected text element and clean up connections
-        const deletedIndex = this.appState.selectedTextIndex;
-        this.appState.textElements.splice(deletedIndex, 1);
-
-        // Remove connections that reference this text element and adjust indices
-        this.appState.connections = this.appState.connections.filter(conn => {
-          // If connection doesn't involve text elements, keep it
-          if (conn.startType !== 'text' && conn.endType !== 'text') {
-            return true;
-          }
-
-          // If connection involves text elements, check if it references the deleted one
-          if (conn.startType === 'text' && conn.startIndex === deletedIndex) {
-            return false; // Remove connection
-          }
-          if (conn.endType === 'text' && conn.endIndex === deletedIndex) {
-            return false; // Remove connection
-          }
-
-          // Adjust indices for remaining text elements
-          if (conn.startType === 'text' && conn.startIndex > deletedIndex) {
-            conn.startIndex--;
-          }
-          if (conn.endType === 'text' && conn.endIndex > deletedIndex) {
-            conn.endIndex--;
-          }
-
-          return true;
-        });
-
-        this.appState.selectedTextIndex = null;
-        this.appState.saveHistory();
-        if (this.saveAppState) {
-          this.saveAppState(this.appState);
-        }
-        this.draw();
-      } else if (this.appState.selectedPinIndex !== null) {
+      // Delete selected pin
+      if (this.appState.selectedPinIndex !== null) {
         // Delete selected pin
         this.appState.pins.splice(this.appState.selectedPinIndex, 1);
         this.setSelectedPin(null);
@@ -1828,10 +1715,8 @@ class EventHandlers {
       // Clear all drag states
       this.isDragManagerDragging = false;
       this.isDraggingPin = false;
-      this.isDraggingText = false;
       this.isDraggingArea = false;
       this.dragPinIndex = null;
-      this.dragTextIndex = null;
 
       // End any active drag operations
       if (window.dragManager) {
@@ -2340,5 +2225,9 @@ class EventHandlers {
 
 // Export for global access
 console.log("EventHandlers class defined, exporting to window...");
-window.EventHandlers = EventHandlers;
-console.log("EventHandlers exported successfully:", typeof window.EventHandlers);
+try {
+  window.EventHandlers = EventHandlers;
+  console.log("EventHandlers exported successfully:", typeof window.EventHandlers);
+} catch (error) {
+  console.error("Failed to export EventHandlers:", error);
+}
