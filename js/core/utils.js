@@ -226,6 +226,18 @@ function updatePinScales(pins, connections) {
 }
 
 function getPinMetrics(pin, config = {}) {
+  // SPECIAL CASE: Text pins (bubble/rectangle) use pin.shape directly
+  if (pin.shape === 'bubble' || pin.shape === 'rectangle') {
+    return {
+      shape: pin.shape,
+      baseRadius: 9,
+      variant: pin.shape,
+      radius: Math.min(pin.width || 120, pin.height || 60) / 2,
+      width: pin.width || (pin.shape === 'bubble' ? 120 : 100),
+      height: pin.height || (pin.shape === 'bubble' ? 60 : 40),
+    };
+  }
+
   const typeId = pin.typeId || "pin:circle";
   const pinBases = config.pinBases || window.PIN_BASES;
   const base = pinBases?.[typeId];

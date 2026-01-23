@@ -377,6 +377,8 @@ function handleTextSave() {
   const borderWidth = borderWidthSlider ? parseFloat(borderWidthSlider.value) : 2;
   const dropShadow = dropShadowCheckbox ? dropShadowCheckbox.checked : false;
 
+  console.log(`💾 Saving text bubble: title="${textValue}", description="${description}", shape="${shape}"`);
+
   if (isEditing) {
     console.log(`Updating existing text pin ${currentEditingId}`);
 
@@ -384,6 +386,7 @@ function handleTextSave() {
     if (window.app && window.app.appState) {
       const pin = window.app.appState.pins.find(p => p.id === currentEditingId);
       if (pin) {
+        console.log(`🔄 Updating existing pin ${currentEditingId}: label="${textValue}", description="${description}"`);
         pin.label = textValue; // Title (shown below bubble)
         pin.description = description; // Description (shown inside bubble)
         pin.date = date;
@@ -418,7 +421,7 @@ function handleTextSave() {
       }
     }
   } else {
-    console.log(`Creating new text with: "${textValue}"`);
+    console.log(`⚠️ Text modal save called for new text creation, but this should be handled by text tool. title="${textValue}", description="${description}"`);
     // For new text creation, we would create it at the mouse position
     // This should be handled by the text tool click, not the modal
   }

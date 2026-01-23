@@ -1878,6 +1878,7 @@ registerShape("bubble", {
       ctx.restore();
     },
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
+      console.log(`🎈 Bubble label phase called for pin id: ${pin.id}, shape: ${pin.shape}, description: "${pin.description}", label: "${pin.label}"`);
       const textColor = pin.textColor || "#000000";
       const fontSize = pin.fontSize || 14;
       const width = pin.width || 120;
@@ -1888,8 +1889,9 @@ registerShape("bubble", {
       ctx.save();
       ctx.globalAlpha = opacity;
 
-      // Draw description inside bubble (centered at scr.y)
+      // Draw description inside bubble (centered)
       if (pin.description) {
+        console.log(`🎯 Drawing bubble description: "${pin.description}" at (${scr.x}, ${scr.y}) with color ${textColor}`);
         ctx.fillStyle = textColor;
         ctx.font = `${fontSize}px system-ui`;
         ctx.textAlign = "center";
@@ -1900,10 +1902,15 @@ registerShape("bubble", {
         const lineHeight = fontSize * 1.2;
         const startY = scr.y - (lines.length - 1) * lineHeight / 2;
 
+        console.log(`📝 Rendering ${lines.length} lines with font: ${ctx.font}, fillStyle: ${ctx.fillStyle}`);
+
         lines.forEach((line, index) => {
           const y = startY + index * lineHeight;
+          console.log(`📝 Drawing line ${index}: "${line}" at y=${y}`);
           ctx.fillText(line, scr.x, y);
         });
+      } else {
+        console.log(`⚠️ Bubble has no description, pin.description:`, pin.description);
       }
 
       // Draw title below bubble (10% larger, centered)

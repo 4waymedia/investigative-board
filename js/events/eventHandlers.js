@@ -546,7 +546,6 @@ class EventHandlers {
       // Prioritize pin clicks over connection clicks
       if (clickedPinIndex !== null) {
         // Shift+click on pin for connections
-        console.log(`🔗 Shift+click on pin ${clickedPinIndex}, connectStart: ${this.appState.connectStartIndex}`);
 
         if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== clickedPinIndex) {
           // Create connection
@@ -1158,7 +1157,9 @@ class EventHandlers {
 
     // Handle connection creation if connectStartIndex is set (when marquee is active)
     if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null) {
+      console.log(`🎯 Marquee active, connectStartIndex: ${this.appState.connectStartIndex}`);
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
+      console.log(`🎯 Clicked pin index: ${clickedPinIndex}`);
 
       if (clickedPinIndex !== null && clickedPinIndex !== this.appState.connectStartIndex) {
         // Clicked on existing pin - create connection to it
@@ -1190,7 +1191,7 @@ class EventHandlers {
         return; // Don't create a new pin
       } else if (clickedPinIndex === null) {
         // Clicked in empty space - create new pin and connect it
-        console.log(`📍 Creating new pin connected to active pin ${this.appState.connectStartIndex}`);
+        console.log(`📍 Creating new pin connected to active pin ${this.appState.connectStartIndex} at (${mouseWorld.x}, ${mouseWorld.y})`);
 
         // Create the new pin first
         const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
@@ -1306,13 +1307,13 @@ class EventHandlers {
     }
 
     // Handle text creation when text tool is active (single clicks only)
-    // Drag creation is handled in the text bubble drag section above
+    // This is now a fallback for cases where drag creation doesn't trigger
     // Don't create new pins if we just interacted with an existing pin
-    if (!this.isMarqueeSelecting && !this.didDrag && this.appState.currentTool === "text" && this.dragStartPinIndex === null) {
+    if (!this.isMarqueeSelecting && this.appState.currentTool === "text" && this.dragStartPinIndex === null && !this.isDraggingTextBubble) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       if (clickedPinIndex === null) {
         // Create new text pin at click location (default size)
-        const newPinIndex = this.appState.addTextPin(mouseWorld.x, mouseWorld.y, "Text", {
+        const newPinIndex = this.appState.addTextPin(mouseWorld.x, mouseWorld.y, "", {
           color: this.appState.selectedColor,
           shape: "bubble",
           fontSize: 16,
@@ -1320,7 +1321,7 @@ class EventHandlers {
           height: 60   // Default height
         });
 
-        console.log(`📝 Created text bubble at (${mouseWorld.x}, ${mouseWorld.y})`);
+        console.log(`📝 Created text bubble at (${mouseWorld.x}, ${mouseWorld.y}) via click`);
         this.appState.saveHistory();
         if (this.saveAppState) {
           this.saveAppState(this.appState);
@@ -1334,42 +1335,83 @@ class EventHandlers {
     if (this.isDraggingTextBubble && this.textBubbleDragStart && this.textBubbleDragCurrent) {
       const dx = Math.abs(this.textBubbleDragCurrent.x - this.textBubbleDragStart.x);
       const dy = Math.abs(this.textBubbleDragCurrent.y - this.textBubbleDragStart.y);
+      const dragDistance = Math.sqrt(dx * dx + dy * dy);
 
-      // Check for collision with existing pins at the center location
-      const centerX = this.textBubbleDragStart.x;
-      const centerY = this.textBubbleDragStart.y;
-      const existingPinIndex = this.findPinAt(centerX, centerY);
+      // For text bubbles, we want to create them even with small drags
+      // Only skip creation if it's an actual click on an existing pin
+      if (dragDistance < 2) {
+        // Very small movement - might be accidental, check if there's a pin here
+        const existingPinIndex = this.findPinAt(centerX, centerY);
+        if (existingPinIndex !== null) {
+          console.log(`⚠️ Text bubble click too close to existing pin ${existingPinIndex}, skipping creation`);
+        } else {
+          // No pin here, create a default-sized bubble
+          const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
+            color: this.appState.selectedColor,
+            shape: "bubble",
+            width: 120,  // Default width
+            height: 60,  // Default height
+            tailPosition: { angle: 270, distance: 0.8 } // Default tail at bottom
+          });
 
-      if (existingPinIndex !== null) {
-        console.log(`⚠️ Cannot create text bubble: pin already exists at center location (${centerX}, ${centerY})`);
-      } else {
-        // Create text bubble with drag dimensions
-        const width = Math.max(dx * 2, 120); // Minimum width
-        const height = Math.max(dy * 2, 60);  // Minimum height
+          // Set as connection source for next pin placement
+          this.appState.connectStartIndex = newPinIndex;
+          this.appState.connectionMode = 'parent';
 
-        const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
-          color: this.appState.selectedColor,
-          shape: "bubble",
-          width: width,
-          height: height,
-          tailPosition: { angle: 270, distance: 0.8 } // Default tail at bottom
-        });
+          // Start marquee animation to show connection mode is active
+          this.startMarqueeAnimation();
 
-        // Set as connection source for next pin placement
-        this.appState.connectStartIndex = newPinIndex;
-        this.appState.connectionMode = 'parent';
-
-        // Start marquee animation to show connection mode is active
-        this.startMarqueeAnimation();
-
-        console.log(`💭 Created text bubble at (${centerX}, ${centerY}) with size ${width}x${height}`);
-        this.appState.saveHistory();
-        if (this.saveAppState) {
-          this.saveAppState(this.appState);
+          console.log(`💭 Created default text bubble at (${centerX}, ${centerY})`);
+          this.appState.saveHistory();
+          if (this.saveAppState) {
+            this.saveAppState(this.appState);
+          }
+          this.draw();
+          return; // Don't continue
         }
-        this.draw();
-        return; // Don't create a new pin
+      } else {
+        // Check for collision with existing pins at the center location
+        const centerX = this.textBubbleDragStart.x;
+        const centerY = this.textBubbleDragStart.y;
+        const existingPinIndex = this.findPinAt(centerX, centerY);
+
+        if (existingPinIndex !== null) {
+          console.log(`⚠️ Cannot create text bubble: pin already exists at center location (${centerX}, ${centerY})`);
+        } else {
+          // Create text bubble with drag dimensions
+          const width = Math.max(dx * 2, 120); // Minimum width
+          const height = Math.max(dy * 2, 60);  // Minimum height
+
+          const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
+            color: this.appState.selectedColor,
+            shape: "bubble",
+            width: width,
+            height: height,
+            tailPosition: { angle: 270, distance: 0.8 } // Default tail at bottom
+          });
+
+          // Set as connection source for next pin placement
+          this.appState.connectStartIndex = newPinIndex;
+          this.appState.connectionMode = 'parent';
+
+          // Start marquee animation to show connection mode is active
+          this.startMarqueeAnimation();
+
+          console.log(`💭 Created text bubble at (${centerX}, ${centerY}) with size ${width}x${height}`);
+          this.appState.saveHistory();
+          if (this.saveAppState) {
+            this.saveAppState(this.appState);
+          }
+          this.draw();
+          return; // Don't create a new pin
+        }
       }
+
+      // Reset text bubble drag state
+      this.isDraggingTextBubble = false;
+      this.textBubbleDragStart = null;
+      this.textBubbleDragCurrent = null;
+      this.stopMarqueeAnimation();
     }
 
     // Create pin if clicking on empty space with a pin/card type selected
@@ -1830,7 +1872,7 @@ class EventHandlers {
     if (e.key === 'Control') this.ctrlKeyPressed = true;
     if (e.key === 'Shift') this.shiftKeyPressed = true;
 
-    // Don't process shortcuts when typing in input fields, but allow ESC
+    // Don't process shortcuts when typing in input fields or when modals are open, but allow ESC
     const activeElement = document.activeElement;
     const isInputField = activeElement && (
       activeElement.tagName === 'INPUT' ||
@@ -1838,9 +1880,19 @@ class EventHandlers {
       activeElement.contentEditable === 'true'
     );
 
-    // Allow ESC key even in input fields (it's a cancel action, not a shortcut)
-    if (isInputField && e.key !== 'Escape') {
-      // Allow normal typing behavior in input fields for non-ESC keys
+    // Check if any modals are currently open
+    const isModalOpen = (
+      (document.getElementById("pin-modal")?.style.display !== "none") ||
+      (document.getElementById("card-modal")?.style.display !== "none") ||
+      (document.getElementById("add-color-modal")?.style.display !== "none") ||
+      (document.getElementById("load-modal")?.style.display !== "none") ||
+      (document.getElementById("text-modal")?.style.display !== "none") ||
+      (document.getElementById("text-modal-backdrop")?.style.display !== "none")
+    );
+
+    // Allow ESC key even in input fields or modals (it's a cancel action)
+    if ((isInputField || isModalOpen) && e.key !== 'Escape') {
+      // Allow normal typing behavior in input fields and modals for non-ESC keys
       return;
     }
 
