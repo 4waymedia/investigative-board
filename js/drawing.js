@@ -1582,6 +1582,7 @@ window.drawPinImage = drawPinImage;
 
 // ── Draw Text Elements ───────────────────────────────────────────────────
 function drawTextElements(
+  textElements,
   viewportLeft,
   viewportRight,
   viewportTop,
@@ -1605,7 +1606,10 @@ function drawTextElements(
     const s = 1; // Consistent with pin rendering
 
     // Draw text bubble background
-    ctx.fillStyle = textEl.color || "#ffffff";
+    const textType = textEl.type || 'rectangle';
+    const bubbleColor = textEl.bubbleColor || "#ffffff";
+    const textColor = textEl.textColor || "#000000";
+
     ctx.strokeStyle = "#000000";
     ctx.lineWidth = 2 * s;
 
@@ -1613,7 +1617,7 @@ function drawTextElements(
     const fontSize = (textEl.fontSize || 16) * s;
     ctx.font = `${fontSize}px system-ui`;
 
-    const metrics = ctx.measureText(textEl.content);
+    const metrics = ctx.measureText(textEl.text || '');
     const textWidth = metrics.width;
     const textHeight = fontSize;
 
@@ -1622,23 +1626,53 @@ function drawTextElements(
     const bubbleX = scr.x - bubbleWidth / 2;
     const bubbleY = scr.y - bubbleHeight / 2;
 
-    // Draw rounded rectangle background
-    window.DrawingUtils.roundRectPath(
-      ctx,
-      bubbleX,
-      bubbleY,
-      bubbleWidth,
-      bubbleHeight,
-      8 * s
-    );
-    ctx.fill();
-    ctx.stroke();
+    if (textType === 'bubble') {
+      // Draw bubble shape (rounded rectangle with a pointer/tail)
+      ctx.fillStyle = bubbleColor;
+
+      // Draw the main bubble body
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        bubbleX,
+        bubbleY,
+        bubbleWidth,
+        bubbleHeight,
+        12 * s
+      );
+
+      // Add a small tail/pointer at the bottom
+      const tailX = scr.x;
+      const tailY = bubbleY + bubbleHeight;
+      const tailWidth = 8 * s;
+      const tailHeight = 6 * s;
+
+      ctx.beginPath();
+      ctx.moveTo(tailX - tailWidth/2, tailY);
+      ctx.lineTo(tailX, tailY + tailHeight);
+      ctx.lineTo(tailX + tailWidth/2, tailY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // Draw rectangle background
+      ctx.fillStyle = bubbleColor;
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        bubbleX,
+        bubbleY,
+        bubbleWidth,
+        bubbleHeight,
+        4 * s
+      );
+      ctx.fill();
+      ctx.stroke();
+    }
 
     // Draw text
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = textColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(textEl.content, scr.x, scr.y);
+    ctx.fillText(textEl.text || '', scr.x, scr.y);
   });
 }
 

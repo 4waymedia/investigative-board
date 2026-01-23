@@ -237,7 +237,9 @@ class Application {
       draw: () => this.render(),
       saveAppState: this.deps.saveAppState,
       openAddColorModal: () => {
-        // Placeholder for opening add color modal
+        if (window.openAddColorModal) {
+          window.openAddColorModal();
+        }
       }
     });
 
@@ -270,6 +272,7 @@ class Application {
       saveAppState: this.deps.saveAppState,
       screenToWorld: this.screenToWorld.bind(this),
       findPinAt: this.findPinAt.bind(this),
+      findTextAt: this.findTextAt.bind(this),
       findConnectionNear: this.findConnectionNear.bind(this),
       setSelectedPin: this.setSelectedPin.bind(this),
       updateAreaContainment: this.updateAreaContainment.bind(this)
@@ -678,15 +681,29 @@ class Application {
       ctx.setLineDash([]); // Ensure solid line (not dashed)
       ctx.beginPath();
 
-      const startPin = this.appState.pins[connection.startIndex];
-      const endPin = this.appState.pins[connection.endIndex];
+      // Handle different connection types (pin-to-pin, text-to-pin)
+      let startAnchor, endAnchor;
 
-      if (!startPin || !endPin) return;
+      if (connection.startType === 'text') {
+        // Text to pin connection
+        const startText = this.appState.textElements[connection.startIndex];
+        startAnchor = startText ? { x: startText.x, y: startText.y } : null;
 
-      // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
-      // getPinCenter() returns uniform center coordinates for all pin types
-      const startAnchor = this.getPinCenter(startPin);
-      const endAnchor = this.getPinCenter(endPin);
+        const endPin = this.appState.pins[connection.endIndex];
+        endAnchor = endPin ? this.getPinCenter(endPin) : null;
+      } else {
+        // Standard pin-to-pin connection
+        const startPin = this.appState.pins[connection.startIndex];
+        const endPin = this.appState.pins[connection.endIndex];
+
+        if (!startPin || !endPin) return;
+
+        // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
+        startAnchor = this.getPinCenter(startPin);
+        endAnchor = this.getPinCenter(endPin);
+      }
+
+      if (!startAnchor || !endAnchor) return;
 
       // SUB-PIXEL FIX: Round coordinates to prevent anti-aliasing blur/shift
       const startX = Math.round(startAnchor.x);
@@ -864,7 +881,7 @@ class Application {
     const margin = 100 / this.appState.scale; // Extra margin for text elements
 
     // Use the drawing.js text rendering function
-    this.deps.drawTextElements(viewportLeft, viewportRight, viewportTop, viewportBottom, margin);
+    this.deps.drawTextElements(this.appState.textElements, viewportLeft, viewportRight, viewportTop, viewportBottom, margin);
   }
 
   // Draw screen-space UI elements (marquees, selections, etc.)
@@ -974,6 +991,60 @@ class Application {
       const hitRadius = baseRadius * scale * 2;
 
       if (distance <= hitRadius) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  findTextAt(wx, wy) {
+    // Find text element at the given world coordinates
+    for (let i = this.appState.textElements.length - 1; i >= 0; i--) {
+      const textEl = this.appState.textElements[i];
+      if (!textEl) continue;
+
+      // Calculate text bubble bounds (similar to drawing logic)
+      const fontSize = textEl.fontSize || 16;
+      const padding = 8;
+      const textWidth = textEl.text ? textEl.text.length * fontSize * 0.6 : 40; // Rough estimate
+      const textHeight = fontSize;
+      const bubbleWidth = textWidth + padding * 2;
+      const bubbleHeight = textHeight + padding * 2;
+
+      // Check if click is within bubble bounds
+      const left = textEl.x - bubbleWidth / 2;
+      const right = textEl.x + bubbleWidth / 2;
+      const top = textEl.y - bubbleHeight / 2;
+      const bottom = textEl.y + bubbleHeight / 2;
+
+      if (wx >= left && wx <= right && wy >= top && wy <= bottom) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  findTextAt(wx, wy) {
+    // Find text element at the given world coordinates
+    for (let i = this.appState.textElements.length - 1; i >= 0; i--) {
+      const textEl = this.appState.textElements[i];
+      if (!textEl) continue;
+
+      // Calculate text bubble bounds (similar to drawing logic)
+      const fontSize = textEl.fontSize || 16;
+      const padding = 8;
+      const textWidth = textEl.text ? textEl.text.length * fontSize * 0.6 : 40; // Rough estimate
+      const textHeight = fontSize;
+      const bubbleWidth = textWidth + padding * 2;
+      const bubbleHeight = textHeight + padding * 2;
+
+      // Check if click is within bubble bounds
+      const left = textEl.x - bubbleWidth / 2;
+      const right = textEl.x + bubbleWidth / 2;
+      const top = textEl.y - bubbleHeight / 2;
+      const bottom = textEl.y + bubbleHeight / 2;
+
+      if (wx >= left && wx <= right && wy >= top && wy <= bottom) {
         return i;
       }
     }
@@ -1288,8 +1359,13 @@ class Application {
       // Reset state
       this.appState.pins = [];
       this.appState.connections = [];
+      this.appState.textElements = [];
       this.appState.selectedPinIndex = null;
       this.appState.selectedPins = [];
+      this.appState.selectedTextIndex = null;
+      this.appState.connectStartIndex = null;
+      this.appState.connectMousePos = null;
+      this.appState.connectionMode = null;
       this.appState.scale = 1;
       this.appState.offsetX = 0;
       this.appState.offsetY = 0;
@@ -1306,6 +1382,11 @@ class Application {
         this.appState.cards.forEach(card => {
           card.used = false;
         });
+      }
+
+      // Clear image cache
+      if (window.imageCache) {
+        window.imageCache.clear();
       }
 
       // Save the reset state

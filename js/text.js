@@ -24,21 +24,38 @@ function openTextModal({ id = null, x = 0, y = 0, initialText = '', width = 200,
   const isEditing = id !== null;
 
   // Update UI labels based on mode
-  const title = modal.querySelector('.modal-title');
-  if (title) title.innerText = isEditing ? "Edit Text" : "Add New Text";
+  const title = document.getElementById('text-modal-title');
+  if (title) title.innerText = isEditing ? "Edit Text" : "Add Text";
 
-  // Position modal near x, y coordinates (if provided)
-  if (typeof x === 'number' && typeof y === 'number') {
-    modal.style.left = `${x + 10}px`;
-    modal.style.top = `${y + 10}px`;
+  // Set initial values
+  const input = document.getElementById('text-modal-input');
+  const typeSelect = document.getElementById('text-modal-type');
+  const bubbleColorInput = document.getElementById('text-modal-color');
+  const textColorInput = document.getElementById('text-modal-text-color');
+
+  if (input) input.value = initialText || '';
+
+  // If editing, populate with current values
+  if (isEditing && window.app && window.app.appState) {
+    const textElement = window.app.appState.textElements.find(el => el.id === currentEditingId);
+    if (textElement) {
+      if (input) input.value = textElement.text || '';
+      if (typeSelect) typeSelect.value = textElement.type || 'rectangle';
+      if (bubbleColorInput) bubbleColorInput.value = textElement.bubbleColor || '#ffffff';
+      if (textColorInput) textColorInput.value = textElement.textColor || '#000000';
+    }
+  } else {
+    // Default values for new text
+    if (typeSelect) typeSelect.value = 'rectangle';
+    if (bubbleColorInput) bubbleColorInput.value = '#ffffff';
+    if (textColorInput) textColorInput.value = '#000000';
   }
 
-  // Show the modal using CSS class instead of inline styles
-  modal.classList.add('is-active');
+  // Show the modal
+  const backdrop = document.getElementById('text-modal-backdrop');
+  if (backdrop) backdrop.style.display = 'flex';
 
-  // Initialize modal content
-  renderTextTypeSelectorInModal();
-  renderTextColorPickers();
+  // Set up event handlers
   setupTextModalHandlers();
 
   console.log(`${isEditing ? 'Edit' : 'New'} text modal opened for text ID: ${id}`);
@@ -48,10 +65,8 @@ function openTextModal({ id = null, x = 0, y = 0, initialText = '', width = 200,
  * Close text modal and clean up state
  */
 function closeTextModal() {
-  const modal = document.getElementById('text-modal');
-  if (modal) {
-    modal.classList.remove('is-active');
-  }
+  const backdrop = document.getElementById('text-modal-backdrop');
+  if (backdrop) backdrop.style.display = 'none';
 
   currentEditingId = null;
 
@@ -64,103 +79,9 @@ function closeTextModal() {
   console.log('Text modal closed');
 }
 
-/**
- * Render text type selector in modal based on global TEXT_TYPES
- */
-function renderTextTypeSelectorInModal() {
-  const container = document.getElementById('text-type-selector-container');
-  if (!container || !window.TEXT_TYPES) {
-    console.warn('Text type selector container or TEXT_TYPES not found');
-    return;
-  }
-
-  // Create the select element
-  const select = document.createElement('select');
-  select.id = 'text-type-select';
-  select.className = 'modal-select';
-
-  // Map through the global TEXT_TYPES array
-  window.TEXT_TYPES.forEach((type) => {
-    const option = document.createElement('option');
-    option.value = type.id; // The internal ID (e.g., 'plain')
-    option.textContent = `${type.icon} ${type.label}`; // Icon + Human-readable label
-    select.appendChild(option);
-  });
-
-  // Listener to toggle shadow options if the type changes
-  select.addEventListener('change', () => {
-    updateShadowColorFieldVisibility();
-  });
-
-  container.innerHTML = ''; // Clear stubs to prevent ghosting
-  container.appendChild(select);
-}
-
-/**
- * Update shadow color field visibility based on selection
- */
-function updateShadowColorFieldVisibility() {
-  const selector = document.getElementById('text-type-select');
-  const shadowField = document.getElementById('shadow-color-field');
-
-  if (!selector || !shadowField) return;
-
-  // Logic: Only show shadow field if the type supports shadows
-  // Currently, show for all types, but this can be extended to check type properties
-  const needsShadow = !selector.value.includes('plain'); // Example: hide for plain text only
-  shadowField.style.display = needsShadow ? 'block' : 'none';
-}
-
-/**
- * Render a reusable color picker - pure utility function
- * @param {string} containerId - DOM element ID for the container
- * @param {string} selectedColor - Initial color value (hex)
- * @param {Function} onSelect - Callback function called with new color value
- */
-function renderColorPicker(containerId, selectedColor = '#000000', onSelect = null) {
-  const container = document.getElementById(containerId);
-  if (!container) {
-    console.warn(`Color picker container '${containerId}' not found`);
-    return;
-  }
-
-  // Clear previous content to avoid duplicates
-  container.innerHTML = '';
-
-  const input = document.createElement('input');
-  input.type = 'color';
-  input.value = selectedColor || '#000000';
-  input.className = 'color-input-ui';
-
-  // Use 'input' event for real-time updates, 'change' for final selection
-  if (onSelect && typeof onSelect === 'function') {
-    input.addEventListener('input', (e) => {
-      onSelect(e.target.value);
-    });
-  }
-
-  container.appendChild(input);
-}
-
-/**
- * Specifically renders pickers for the text modal
- */
-function renderTextColorPickers() {
-  // Primary Text Color
-  renderColorPicker('text-color-container', '#000000', (color) => {
-    console.log("New Text Color:", color);
-    handleTextColorChange(color);
-  });
-
-  // Shadow Color
-  renderColorPicker('shadow-color-container', '#808080', (color) => {
-    console.log("New Shadow Color:", color);
-    handleShadowColorChange(color);
-  });
-
-  // Update shadow field visibility
-  updateShadowColorFieldVisibility();
-}
+// Removed renderTextTypeSelectorInModal, updateShadowColorFieldVisibility,
+// renderColorPicker, and renderTextColorPickers functions as they expect
+// HTML elements that don't exist. Using the existing modal structure instead.
 
 /**
  * Create text with size using configuration object
@@ -200,79 +121,69 @@ function setupTextModalHandlers() {
     textModalHandlers.cleanup();
   }
 
-  const modal = document.getElementById('text-modal');
-  if (!modal) return;
+  const backdrop = document.getElementById('text-modal-backdrop');
+  const closeBtn = document.getElementById('text-modal-close');
+  const saveBtn = document.getElementById('text-modal-save');
+  const deleteBtn = document.getElementById('text-modal-delete');
 
-  // Event delegation handler
-  const handleModalClick = (e) => {
-    const target = e.target;
+  if (!backdrop) return;
 
-    // Handle Close Button or modal background
-    if (target.matches('.close-modal, .modal-background')) {
+  // Event handlers
+  const handleBackdropClick = (e) => {
+    if (e.target === backdrop) {
       closeTextModal();
-      return;
-    }
-
-    // Handle Save/Submit button
-    if (target.matches('#save-text-btn, #text-confirm-btn')) {
-      const textValue = document.getElementById('text-input')?.value || '';
-      handleTextSave(textValue);
-      return;
-    }
-
-    // Handle Cancel button
-    if (target.matches('#text-cancel-btn')) {
-      closeTextModal();
-      return;
     }
   };
 
-  modal.addEventListener('click', handleModalClick);
+  const handleCloseClick = () => {
+    closeTextModal();
+  };
 
-  // Note: The text-type-select change listener is set up in renderTextTypeSelectorInModal
+  const handleSaveClick = () => {
+    const input = document.getElementById('text-modal-input');
+    const textValue = input ? input.value : '';
+    handleTextSave(textValue);
+  };
+
+  const handleDeleteClick = () => {
+    if (confirm('Are you sure you want to delete this text element?')) {
+      // Delete the text element
+      if (window.app && window.app.appState && currentEditingId !== null) {
+        const textElements = window.app.appState.textElements;
+        const index = textElements.findIndex(el => el.id === currentEditingId);
+        if (index !== -1) {
+          textElements.splice(index, 1);
+          window.app.appState.saveHistory();
+          if (window.app.saveState) {
+            window.app.saveState();
+          }
+          if (window.app.render) {
+            window.app.render();
+          }
+        }
+      }
+      closeTextModal();
+    }
+  };
+
+  // Add event listeners
+  backdrop.addEventListener('click', handleBackdropClick);
+  if (closeBtn) closeBtn.addEventListener('click', handleCloseClick);
+  if (saveBtn) saveBtn.addEventListener('click', handleSaveClick);
+  if (deleteBtn) deleteBtn.addEventListener('click', handleDeleteClick);
 
   textModalHandlers = {
     cleanup: () => {
-      modal.removeEventListener('click', handleModalClick);
-      if (typeDropdown) {
-        typeDropdown.removeEventListener('change', handleTypeChange);
-      }
+      backdrop.removeEventListener('click', handleBackdropClick);
+      if (closeBtn) closeBtn.removeEventListener('click', handleCloseClick);
+      if (saveBtn) saveBtn.removeEventListener('click', handleSaveClick);
+      if (deleteBtn) deleteBtn.removeEventListener('click', handleDeleteClick);
     }
   };
 }
 
-/**
- * Handle text type change
- */
-function handleTextTypeChange(type) {
-  console.log(`Text type changed to: ${type}`);
-  // Implementation for type-specific logic would go here
-}
-
-/**
- * Handle text color change
- */
-function handleTextColorChange(color) {
-  console.log(`Text color changed to: ${color}`);
-  // Implementation would go here
-}
-
-/**
- * Handle shadow color change
- */
-function handleShadowColorChange(color) {
-  console.log(`Shadow color changed to: ${color}`);
-  // Implementation would go here
-}
-
-/**
- * Handle text confirmation
- */
-function handleTextConfirm() {
-  console.log('Text confirmed');
-  // Implementation for saving text would go here
-  closeTextModal();
-}
+// Removed handleTextTypeChange, handleTextColorChange, handleShadowColorChange,
+// and handleTextConfirm functions as they're not needed for the current modal implementation.
 
 /**
  * Handle text save with value
@@ -280,31 +191,46 @@ function handleTextConfirm() {
 function handleTextSave(textValue) {
   const isEditing = currentEditingId !== null;
 
+  // Get values from modal inputs
+  const typeSelect = document.getElementById('text-modal-type');
+  const bubbleColorInput = document.getElementById('text-modal-color');
+  const textColorInput = document.getElementById('text-modal-text-color');
+
+  const type = typeSelect ? typeSelect.value : 'rectangle';
+  const bubbleColor = bubbleColorInput ? bubbleColorInput.value : '#ffffff';
+  const textColor = textColorInput ? textColorInput.value : '#000000';
+
   if (isEditing) {
     console.log(`Updating existing text ${currentEditingId} with: "${textValue}"`);
-    // Implementation for updating existing text would go here
+
+    // Find and update the text element in app state
+    if (window.app && window.app.appState) {
+      const textElement = window.app.appState.textElements.find(el => el.id === currentEditingId);
+      if (textElement) {
+        textElement.text = textValue;
+        textElement.type = type;
+        textElement.bubbleColor = bubbleColor;
+        textElement.textColor = textColor;
+        window.app.appState.saveHistory();
+        if (window.app.saveState) {
+          window.app.saveState();
+        }
+        if (window.app.render) {
+          window.app.render();
+        }
+        console.log(`✅ Updated text element ${currentEditingId}`);
+      }
+    }
   } else {
     console.log(`Creating new text with: "${textValue}"`);
-    // Implementation for creating new text would go here
+    // For new text creation, we would create it at the mouse position
+    // This should be handled by the text tool click, not the modal
   }
 
   closeTextModal();
 }
 
-/**
- * Handle color change from color picker (called from DOM)
- */
-function handleColorChange(containerId, event) {
-  const color = event.target.value;
-  console.log(`Color changed in ${containerId}: ${color}`);
-
-  // Route to appropriate handler based on container
-  if (containerId === 'text-color-picker') {
-    handleTextColorChange(color);
-  } else if (containerId === 'shadow-color-picker') {
-    handleShadowColorChange(color);
-  }
-}
+// Removed handleColorChange function as it's not needed for the current modal implementation.
 
 // ============================================================================
 // INITIALIZATION

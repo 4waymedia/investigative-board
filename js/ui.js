@@ -610,13 +610,20 @@ function togglePinConnectionType(pinIndex) {
  */
 function renderAddColorPicker() {
   const container = document.getElementById("add-color-picker");
+  if (!container) return;
+
   container.innerHTML = "";
 
-  // Get current theme colors
-  const theme = THEMES.find((t) => t.id === currentThemeId);
-  if (!theme || !theme.colors) return;
+  // Get current theme colors from app state
+  const appState = window.app?.appState;
+  if (!appState) return;
 
-  theme.colors.forEach((colorObj) => {
+  const currentTheme = window.themeManager?.getCurrentTheme();
+  const themeColors = currentTheme?.colors || [];
+
+  if (themeColors.length === 0) return;
+
+  themeColors.forEach((colorObj) => {
     const colorBox = document.createElement("div");
     colorBox.className = "card-color-box";
     colorBox.style.width = "50px";
@@ -625,17 +632,24 @@ function renderAddColorPicker() {
     colorBox.style.backgroundColor = colorObj.value;
     colorBox.style.cursor = "pointer";
     colorBox.style.border = "2px solid #444";
+    colorBox.style.margin = "5px";
+    colorBox.style.display = "inline-block";
     colorBox.title = colorObj.name || colorObj.value;
 
     colorBox.onclick = () => {
       // Add this color to the palette
-      if (!palette.find((c) => c.value === colorObj.value)) {
-        palette.push({
-          name: colorObj.name || `Color ${palette.length + 1}`,
+      if (!appState.palette.find((c) => c.value === colorObj.value)) {
+        appState.palette.push({
+          name: colorObj.name || `Color ${appState.palette.length + 1}`,
           value: colorObj.value,
         });
-        window.app.saveState();
-        window.app.toolbarManager.render();
+        appState.saveHistory();
+        if (window.app && window.app.saveState) {
+          window.app.saveState();
+        }
+        if (window.app && window.app.toolbarManager) {
+          window.app.toolbarManager.render();
+        }
         closeAddColorModal();
       }
     };
@@ -980,3 +994,5 @@ window.closeRadialMenu = closeRadialMenu;
 // Use ModalManager's openPinModal instead of the old ui.js version
 window.openPinModal = (index) => window.app?.modalManager?.openPinModal(index);
 window.closePinModal = closePinModal;
+window.openAddColorModal = openAddColorModal;
+window.closeAddColorModal = closeAddColorModal;

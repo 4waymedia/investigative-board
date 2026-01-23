@@ -657,7 +657,8 @@ canvas, #canvas-container {
 }
 /* Modal form styling */
 #pin-modal label,
-#card-modal label {
+#card-modal label,
+#text-modal label {
   font-size: 12px;
   opacity: 0.8;
   margin-bottom: 4px;
@@ -671,7 +672,10 @@ canvas, #canvas-container {
 #pin-modal select,
 #card-modal input,
 #card-modal textarea,
-#card-modal select {
+#card-modal select,
+#text-modal input,
+#text-modal textarea,
+#text-modal select {
   width: 100%;
   border-radius: 8px;
   border: 1px solid #30363d;
@@ -688,19 +692,24 @@ canvas, #canvas-container {
 #pin-modal select:focus,
 #card-modal input:focus,
 #card-modal textarea:focus,
-#card-modal select:focus {
+#card-modal select:focus,
+#text-modal input:focus,
+#text-modal textarea:focus,
+#text-modal select:focus {
   border-color: #58a6ff;
   box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.4);
 }
 
 #pin-modal textarea,
-#card-modal textarea {
+#card-modal textarea,
+#text-modal textarea {
   min-height: 70px;
   resize: vertical;
 }
 
 #pin-modal input[type="range"],
-#card-modal input[type="range"] {
+#card-modal input[type="range"],
+#text-modal input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   background: #30363d;
@@ -731,7 +740,8 @@ canvas, #canvas-container {
 }
 
 #pin-modal button,
-#card-modal button {
+#card-modal button,
+#text-modal button {
   padding: 8px 16px;
   border-radius: 6px;
   border: 1px solid #30363d;
@@ -744,25 +754,29 @@ canvas, #canvas-container {
 }
 
 #pin-modal button:hover,
-#card-modal button:hover {
+#card-modal button:hover,
+#text-modal button:hover {
   background: #30363d;
   border-color: #58a6ff;
 }
 
 #pin-modal button.delete,
-#card-modal button.delete {
+#card-modal button.delete,
+#text-modal button.delete {
   background: #dc3545;
   border-color: #dc3545;
 }
 
 #pin-modal button.delete:hover,
-#card-modal button.delete:hover {
+#card-modal button.delete:hover,
+#text-modal button.delete:hover {
   background: #c82333;
   border-color: #bd2130;
 }
 
 #pin-modal-footer,
-#card-modal-footer {
+#card-modal-footer,
+#text-modal-actions {
   margin-top: 6px;
   display: flex;
   justify-content: flex-end;
