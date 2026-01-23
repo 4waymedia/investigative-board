@@ -123,18 +123,28 @@ class ToolbarManager {
       this.createContainers();
     }
 
-    // Clear the menu completely and rebuild it
-    this.menu.innerHTML = '';
-
-    // Rebuild the menu structure
-    // System menu (preserve original)
+    // Clear only the dynamic sections, preserve system menu
     const systemMenu = document.getElementById('system-menu');
-    if (systemMenu) {
-      this.menu.appendChild(systemMenu);
+    const toolset = document.getElementById('toolset');
+
+    // Remove existing dynamic containers if they exist
+    if (this.typesContainer && this.typesContainer.parentNode) {
+      this.typesContainer.parentNode.removeChild(this.typesContainer);
+    }
+    if (this.colorsContainer && this.colorsContainer.parentNode) {
+      this.colorsContainer.parentNode.removeChild(this.colorsContainer);
+    }
+    if (this.controlsContainer && this.controlsContainer.parentNode) {
+      this.controlsContainer.parentNode.removeChild(this.controlsContainer);
     }
 
-    // Toolset (preserve original)
-    this.menu.appendChild(this.toolset);
+    // Ensure system menu and toolset exist in the menu
+    if (systemMenu && !systemMenu.parentNode) {
+      this.menu.appendChild(systemMenu);
+    }
+    if (toolset && !toolset.parentNode) {
+      this.menu.appendChild(toolset);
+    }
 
     // Add the dynamic containers
     this.menu.appendChild(this.typesContainer);

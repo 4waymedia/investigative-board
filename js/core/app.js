@@ -544,15 +544,15 @@ class Application {
 
     // Find all connections to/from this pin
     const connectionsToPin = this.appState.connections.filter(conn =>
-      conn.startIndex === pinIndex || conn.endIndex === pinIndex
+      conn.from === pinIndex || conn.to === pinIndex
     );
 
     console.log(`📊 Found ${connectionsToPin.length} connections to pin ${pinIndex}`);
 
     let allConsistent = true;
     connectionsToPin.forEach((conn, idx) => {
-      const isStart = conn.startIndex === pinIndex;
-      const otherPinIndex = isStart ? conn.endIndex : conn.startIndex;
+      const isStart = conn.from === pinIndex;
+      const otherPinIndex = isStart ? conn.to : conn.from;
       const otherPin = this.appState.pins[otherPinIndex];
 
       if (!otherPin) {
@@ -653,10 +653,10 @@ class Application {
     // Group connections by endpoint for fan-out calculations
     const connectionsByEndpoint = {};
     this.appState.connections.forEach((conn, idx) => {
-      if (!connectionsByEndpoint[conn.startIndex]) connectionsByEndpoint[conn.startIndex] = [];
-      if (!connectionsByEndpoint[conn.endIndex]) connectionsByEndpoint[conn.endIndex] = [];
-      connectionsByEndpoint[conn.startIndex].push(idx);
-      connectionsByEndpoint[conn.endIndex].push(idx);
+      if (!connectionsByEndpoint[conn.from]) connectionsByEndpoint[conn.from] = [];
+      if (!connectionsByEndpoint[conn.to]) connectionsByEndpoint[conn.to] = [];
+      connectionsByEndpoint[conn.from].push(idx);
+      connectionsByEndpoint[conn.to].push(idx);
     });
 
     this.appState.connections.forEach((connection, idx) => {
@@ -666,8 +666,8 @@ class Application {
       ctx.beginPath();
 
       // All connections are now pin-to-pin
-      const startPin = this.appState.pins[connection.startIndex];
-      const endPin = this.appState.pins[connection.endIndex];
+      const startPin = this.appState.pins[connection.from];
+      const endPin = this.appState.pins[connection.to];
 
       if (!startPin || !endPin) return;
 
@@ -685,7 +685,7 @@ class Application {
 
       // VERIFICATION: All connections to a pin use identical coordinates
       if (window.DEBUG_PIN_CENTERS) {
-        console.log(`🔗 Connection ${idx}: pin ${connection.startIndex}→${connection.endIndex}`);
+        console.log(`🔗 Connection ${idx}: pin ${connection.from}→${connection.to}`);
         console.log(`   Start: (${startX}, ${startY}) [from pin center: (${startAnchor.x.toFixed(1)}, ${startAnchor.y.toFixed(1)})]`);
         console.log(`   End: (${endX}, ${endY}) [from pin center: (${endAnchor.x.toFixed(1)}, ${endAnchor.y.toFixed(1)})]`);
       }
@@ -936,18 +936,36 @@ class Application {
       const pin = this.appState.pins[i];
       if (!pin) continue;
 
-      const dx = wx - pin.x;
-      const dy = wy - pin.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      // Special handling for text bubbles (which have titles below)
+      if (pin.shape === 'bubble' || pin.shape === 'rectangle') {
+        const width = pin.width || (pin.shape === 'bubble' ? 120 : 100);
+        const height = pin.height || (pin.shape === 'bubble' ? 60 : 40);
+        const titleHeight = pin.label ? (pin.fontSize || 14) * 1.1 + 16 : 0;
 
-      // Use pin scale for hit detection
-      const scale = pin.pinScale || 1;
-      const baseRadius = this.deps.PIN_BASES?.[pin.typeId]?.baseRadius || 10;
-      // Make hit detection more generous (2x radius for easier clicking)
-      const hitRadius = baseRadius * scale * 2;
+        // Check if click is within the extended bounding box (bubble + title area)
+        const left = pin.x - width/2;
+        const right = pin.x + width/2;
+        const top = pin.y - height/2;
+        const bottom = pin.y + height/2 + titleHeight; // Include title area below
 
-      if (distance <= hitRadius) {
-        return i;
+        if (wx >= left && wx <= right && wy >= top && wy <= bottom) {
+          return i;
+        }
+      } else {
+        // Standard circular hit detection for regular pins
+        const dx = wx - pin.x;
+        const dy = wy - pin.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Use pin scale for hit detection
+        const scale = pin.pinScale || 1;
+        const baseRadius = this.deps.PIN_BASES?.[pin.typeId]?.baseRadius || 10;
+        // Make hit detection more generous (2x radius for easier clicking)
+        const hitRadius = baseRadius * scale * 2;
+
+        if (distance <= hitRadius) {
+          return i;
+        }
       }
     }
     return null;
@@ -964,8 +982,8 @@ class Application {
       const conn = this.appState.connections[i];
       if (!conn) continue;
 
-      const startPin = this.appState.pins[conn.startIndex];
-      const endPin = this.appState.pins[conn.endIndex];
+      const startPin = this.appState.pins[conn.from];
+      const endPin = this.appState.pins[conn.to];
 
       if (!startPin || !endPin) continue;
 

@@ -802,6 +802,20 @@ registerShape("rect", {
   baseShape: "rect",
 });
 
+// ── Square shape ───────────────────────────────────────────────────────────
+
+registerShape("square", {
+  baseShape: "rect",
+  getMetrics(pin, scale) {
+    return {
+      shape: "square",
+      width: pin.width || 18,
+      height: pin.height || 18,
+      baseRadius: 3,
+    };
+  },
+});
+
 // ── Pill shape ─────────────────────────────────────────────────────────────
 
 registerShape("pill", {

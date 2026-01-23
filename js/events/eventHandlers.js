@@ -536,13 +536,65 @@ class EventHandlers {
     const clickedConnectionIndex = this.findConnectionNear(mousePos.world.x, mousePos.world.y);
 
 
+
     // Initialize mouse position tracking for movement detection
     this.prevScreenX = e.clientX;
     this.prevScreenY = e.clientY;
 
-    // Handle Shift+click on connection lines
-    if (e.button === 0 && e.shiftKey && clickedConnectionIndex !== null && clickedPinIndex === null) {
-      this.handleShiftClickOnConnection(mousePos.world, clickedConnectionIndex);
+    // Handle ALL shift+click interactions first (takes precedence over everything)
+    if (e.button === 0 && e.shiftKey) {
+      // Prioritize pin clicks over connection clicks
+      if (clickedPinIndex !== null) {
+        // Shift+click on pin for connections
+        console.log(`🔗 Shift+click on pin ${clickedPinIndex}, connectStart: ${this.appState.connectStartIndex}`);
+
+        if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== clickedPinIndex) {
+          // Create connection
+          const existingConnection = this.appState.connections.find(conn =>
+            (conn.from === this.appState.connectStartIndex && conn.to === clickedPinIndex) ||
+            (conn.from === clickedPinIndex && conn.to === this.appState.connectStartIndex)
+          );
+
+          if (existingConnection) {
+            console.log(`⚠️ Connection already exists between pin ${this.appState.connectStartIndex} and pin ${clickedPinIndex}`);
+            this.appState.connectStartIndex = null;
+            this.appState.connectMousePos = null;
+            this.stopMarqueeAnimation();
+          } else {
+            console.log(`🔗 Creating connection: ${this.appState.connectStartIndex} → ${clickedPinIndex}`);
+            this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
+              color: this.appState.selectedColor,
+              type: this.appState.connectionType
+            });
+            console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to pin ${clickedPinIndex} via shift+click`);
+
+            if (this.appState.connectionMode === 'sequential') {
+              this.appState.connectStartIndex = clickedPinIndex;
+              this.appState.connectMousePos = null;
+            } else {
+              // In hub mode: keep the original pin as connection source
+              console.log(`🔄 Hub: Connected to pin ${clickedPinIndex}, keeping original pin as connection source`);
+              // Don't change connectStartIndex - keep the hub pin active
+            }
+
+            this.appState.saveHistory();
+            if (this.saveAppState) this.saveAppState(this.appState);
+            this.draw();
+          }
+        } else {
+          // Set as connection source
+          this.appState.connectStartIndex = clickedPinIndex;
+          this.appState.connectionMode = 'hub'; // Keep first pin as hub, don't switch to sequential
+          this.startMarqueeAnimation();
+          console.log(`🎯 Shift+click: Set pin ${clickedPinIndex} as connection source`);
+        }
+        return;
+      } else if (clickedConnectionIndex !== null) {
+        // Shift+click on connection line (only when not clicking on pins)
+        this.handleShiftClickOnConnection(mousePos.world, clickedConnectionIndex);
+        return;
+      }
+      // Shift+click on empty space - ignore
       return;
     }
 
@@ -566,60 +618,6 @@ class EventHandlers {
       return;
     }
 
-    // Handle shift+click for direct pin-to-pin connections
-    if (e.button === 0 && e.shiftKey && clickedPinIndex !== null) {
-      // If we have an active connection source, create connection to clicked pin
-      if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== clickedPinIndex) {
-        // Check if connection already exists (bidirectional)
-        const existingConnection = this.appState.connections.find(conn =>
-          (conn.startIndex === this.appState.connectStartIndex && conn.endIndex === clickedPinIndex) ||
-          (conn.startIndex === clickedPinIndex && conn.endIndex === this.appState.connectStartIndex)
-        );
-
-        if (existingConnection) {
-          console.log(`⚠️ Connection already exists between pin ${this.appState.connectStartIndex} and pin ${clickedPinIndex}`);
-          // Reset connection state
-          this.appState.connectStartIndex = null;
-          this.appState.connectMousePos = null;
-          this.stopMarqueeAnimation();
-        } else {
-          // Create connection between the two pins
-          this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
-            color: this.appState.selectedColor,
-            type: this.appState.connectionType
-          });
-
-          console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to pin ${clickedPinIndex} via shift+click`);
-
-          // Handle connection state based on mode
-          if (this.appState.connectionMode === 'sequential') {
-            // In sequential mode: set the connected pin as the new connection source
-            this.appState.connectStartIndex = clickedPinIndex;
-            this.appState.connectMousePos = null;
-            console.log(`🔄 Sequential: Connected to pin ${clickedPinIndex}, now set as new connection source`);
-          } else {
-            // In other modes: reset connection state
-            this.appState.connectStartIndex = null;
-            this.appState.connectMousePos = null;
-            this.stopMarqueeAnimation();
-          }
-
-          this.appState.saveHistory();
-          if (this.saveAppState) {
-            this.saveAppState(this.appState);
-          }
-          this.draw();
-        }
-        return; // Connection handled
-      } else {
-        // No active connection source, so set this pin as the connection source
-        this.appState.connectStartIndex = clickedPinIndex;
-        this.appState.connectionMode = 'sequential';
-        this.startMarqueeAnimation();
-        console.log(`🎯 Shift+click: Set pin ${clickedPinIndex} as connection source`);
-        return;
-      }
-    }
 
     // Handle left-click pin interaction first (works with any tool)
     // This should prevent tool-specific actions when interacting with existing pins
@@ -1158,25 +1156,17 @@ class EventHandlers {
       this.isMarqueeSelecting = false;
     }
 
-    // Handle connection creation if connectStartIndex is set
+    // Handle connection creation if connectStartIndex is set (when marquee is active)
     if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
 
       if (clickedPinIndex !== null && clickedPinIndex !== this.appState.connectStartIndex) {
-        // Create connection between two different pins
-        const connection = {
-          startIndex: this.appState.connectStartIndex,
-          endIndex: clickedPinIndex,
+        // Clicked on existing pin - create connection to it
+        console.log(`🔗 Creating connection to existing pin: ${this.appState.connectStartIndex} → ${clickedPinIndex}`);
+        this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
           color: this.appState.selectedColor,
           type: this.appState.connectionType
-        };
-        this.appState.connections.push(connection);
-        this.appState.saveHistory();
-        if (this.saveAppState) {
-          this.saveAppState(this.appState);
-        }
-        // Update pin scales based on new connections
-        window.updatePinScales(this.appState.pins, this.appState.connections);
+        });
 
         console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to pin ${clickedPinIndex}`);
 
@@ -1187,17 +1177,63 @@ class EventHandlers {
           this.appState.connectMousePos = null; // Clear mouse pos but keep connection active
           console.log(`🔄 Sequential: Connected to pin ${clickedPinIndex}, now set as new connection source`);
         } else {
-          // In other modes: reset connection state
-          this.appState.connectStartIndex = null;
-          this.appState.connectMousePos = null;
-          this.stopMarqueeAnimation(); // Stop marquee animation
+          // In hub mode: keep the original pin as connection source
+          console.log(`🔄 Hub: Connected to pin ${clickedPinIndex}, keeping original pin as connection source`);
+          // Don't change connectStartIndex - keep the hub pin active
         }
 
+        this.appState.saveHistory();
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
+        }
         this.draw();
         return; // Don't create a new pin
+      } else if (clickedPinIndex === null) {
+        // Clicked in empty space - create new pin and connect it
+        console.log(`📍 Creating new pin connected to active pin ${this.appState.connectStartIndex}`);
+
+        // Create the new pin first
+        const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
+        const pinShape = nodeType?.family === 'card' ? 'card' : (nodeType?.variant || 'circle');
+
+        const newPin = this.appState.addPin(mouseWorld.x, mouseWorld.y, {
+          color: this.appState.selectedColor,
+          label: "",
+          note: "",
+          date: "",
+          typeId: this.appState.currentTypeId,
+          shape: pinShape
+        });
+
+        const newPinIndex = this.appState.pins.length - 1;
+
+        // Now connect the active pin to the new pin
+        console.log(`🔗 Connecting active pin ${this.appState.connectStartIndex} to new pin ${newPinIndex}`);
+        this.appState.addConnection(this.appState.connectStartIndex, newPinIndex, {
+          color: this.appState.selectedColor,
+          type: this.appState.connectionType
+        });
+
+        console.log(`🔗 Connected active pin ${this.appState.connectStartIndex} to new pin ${newPinIndex}`);
+
+        // Handle connection state based on mode
+        if (this.appState.connectionMode === 'sequential') {
+          // In sequential mode: set the new pin as the connection source
+          this.appState.connectStartIndex = newPinIndex;
+          console.log(`🔄 Sequential: New pin ${newPinIndex} is now the connection source`);
+        } else {
+          // In hub mode: keep the original pin as connection source
+          console.log(`🔄 Hub: Keeping original pin ${this.appState.connectStartIndex} as connection source`);
+        }
+
+        this.appState.saveHistory();
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
+        }
+        this.draw();
+        return; // Pin created and connected, don't continue to normal pin creation
       }
-      // If clicked on empty space or same element, continue to pin creation logic below
-      // which will handle creating a new pin and connecting it
+      // If clicked on the same pin, just continue normally (no special action)
     }
 
     // Handle area creation from marquee drag
@@ -1343,19 +1379,20 @@ class EventHandlers {
       const isCreationTool = ["pin", "card"].includes(this.appState.currentTool); // Removed "area"
 
       if (!areaCreated && clickedPinIndex === null && this.appState.currentTypeId && isCreationTool) {
-        // Create new pin at click location
-        // Look up the node type to get variant and other properties
-        const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
+      // Create new pin at click location
+      // Look up the node type to get variant and other properties
+      const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
 
-        const pinProperties = {
-          color: this.appState.selectedColor,
-          label: "",
-          note: "",
-          date: "",
-          typeId: this.appState.currentTypeId,
-          variant: nodeType?.variant || "default", // Set variant from NODE_TYPES
-          pinScale: 1
-        };
+      const pinProperties = {
+        color: this.appState.selectedColor,
+        label: "",
+        note: "",
+        date: "",
+        typeId: this.appState.currentTypeId,
+        variant: nodeType?.variant || "default", // Set variant from NODE_TYPES
+        pinScale: 1,
+        shape: nodeType?.family === 'card' ? 'card' : (nodeType?.variant || 'circle') // Set shape based on family
+      };
 
         // Add pin-specific properties based on type
         if (this.appState.currentTypeId.startsWith("area:")) {
@@ -2128,6 +2165,7 @@ class EventHandlers {
   cycleTypeInFamily(family) {
     const types = window.NODE_TYPES ? window.NODE_TYPES.filter(t => t.family === family) : [];
     if (types.length === 0) {
+      console.log(`❌ No types found for family: ${family}`);
       return;
     }
 
