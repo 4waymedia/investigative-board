@@ -239,22 +239,25 @@ class AppState {
    * Add a text pin (comic-style bubble or rectangle)
    * @param {number} x - World X coordinate
    * @param {number} y - World Y coordinate
-   * @param {string} text - Main text content (title/data point)
-   * @param {Object} properties - Additional pin properties
+   * @param {string} description - Description text (shown inside bubble)
+   * @param {Object} properties - Additional pin properties (including label for title)
    * @returns {number} Index of the added pin
    */
-  addTextPin(x, y, text = '', properties = {}) {
+  addTextPin(x, y, description = '', properties = {}) {
     const bubbleColor = properties.color || this.session.selectedColor;
     const textColor = properties.textColor || this.calculateTextColor(bubbleColor);
 
     return this.addPin(x, y, {
-      label: text, // Main text content
+      description: description, // Description text (inside bubble)
+      label: properties.label || '', // Title text (below bubble)
       shape: properties.shape || 'bubble', // Default to comic bubble
+      tailType: properties.tailType || 'triangle', // Default tail type
       textColor: textColor,
       borderColor: properties.borderColor,
       fontSize: properties.fontSize || 16,
       width: properties.width || 200,
       height: properties.height || 50,
+      tailPosition: properties.tailPosition || { angle: 270, distance: 0.8 }, // Default tail at bottom
       ...properties
     });
   }

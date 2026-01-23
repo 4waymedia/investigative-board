@@ -330,33 +330,154 @@
     <div id="text-modal-backdrop">
       <div id="text-modal">
         <div id="text-modal-header">
-          <div id="text-modal-title">Edit Text</div>
+          <div id="text-modal-title">Edit Text Bubble</div>
           <div id="text-modal-close">✕</div>
         </div>
+
+        <!-- Tab Navigation -->
+        <div id="text-modal-tabs">
+          <div class="tab-button active" data-tab="info">Info</div>
+          <div class="tab-button" data-tab="style">Style</div>
+          <div class="tab-button" data-tab="settings">Settings</div>
+          <div class="tab-button" data-tab="background">Background</div>
+        </div>
+
+        <!-- Tab Content -->
         <div id="text-modal-content">
-          <div class="form-group">
-            <label for="text-modal-input">Text</label>
-            <textarea
-              id="text-modal-input"
-              placeholder="Enter text..."
-            ></textarea>
+          <!-- Info Tab -->
+          <div class="tab-content active" id="text-info-tab">
+            <div class="form-group">
+              <label for="text-modal-input">Title (shown below bubble)</label>
+              <input type="text"
+                id="text-modal-input"
+                placeholder="Bubble title..."
+                maxlength="50"
+              />
+            </div>
+            <div class="form-group">
+              <label for="text-modal-description">Description (inside bubble)</label>
+              <textarea
+                id="text-modal-description"
+                placeholder="Main bubble content..."
+                rows="3"
+              ></textarea>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-date">Date</label>
+              <input type="date" id="text-modal-date" />
+            </div>
           </div>
-          <div class="form-group">
-            <label for="text-modal-type">Type</label>
-            <select id="text-modal-type">
-              <option value="rectangle">Rectangle</option>
-              <option value="bubble">Bubble</option>
-            </select>
+
+          <!-- Style Tab -->
+          <div class="tab-content" id="text-style-tab">
+            <div class="form-group">
+              <label for="text-modal-type">Shape</label>
+              <select id="text-modal-type">
+                <option value="rectangle">Rectangle</option>
+                <option value="bubble">Bubble</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-tail-type">Tail Type</label>
+              <select id="text-modal-tail-type">
+                <option value="triangle">Triangle</option>
+                <option value="curved">Curved</option>
+                <option value="arrow">Arrow</option>
+                <option value="curved-arrow">Curved Arrow</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-color">Bubble Color</label>
+              <input type="color" id="text-modal-color" />
+            </div>
+            <div class="form-group">
+              <label for="text-modal-text-color">Text Color</label>
+              <input type="color" id="text-modal-text-color" />
+            </div>
+            <div class="form-group">
+              <label for="text-modal-border-color">Border Color</label>
+              <input type="color" id="text-modal-border-color" />
+            </div>
+            <div class="form-group">
+              <label for="text-modal-opacity">Opacity</label>
+              <input type="range" id="text-modal-opacity" min="0.1" max="1" step="0.1" value="1" />
+              <span id="text-modal-opacity-value">100%</span>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="text-modal-color">Bubble Color</label>
-            <input type="color" id="text-modal-color" />
+
+          <!-- Settings Tab -->
+          <div class="tab-content" id="text-settings-tab">
+            <div class="form-group">
+              <label for="text-modal-width">Width</label>
+              <input type="range" id="text-modal-width" min="60" max="400" step="10" value="120" />
+              <span id="text-modal-width-value">120px</span>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-height">Height</label>
+              <input type="range" id="text-modal-height" min="30" max="200" step="5" value="60" />
+              <span id="text-modal-height-value">60px</span>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-font-size">Font Size</label>
+              <input type="range" id="text-modal-font-size" min="8" max="32" step="1" value="14" />
+              <span id="text-modal-font-size-value">14px</span>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-border-width">Border Width</label>
+              <input type="range" id="text-modal-border-width" min="0" max="5" step="0.5" value="2" />
+              <span id="text-modal-border-width-value">2px</span>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-drop-shadow">Drop Shadow</label>
+              <input type="checkbox" id="text-modal-drop-shadow" />
+            </div>
           </div>
-          <div class="form-group">
-            <label for="text-modal-text-color">Text Color</label>
-            <input type="color" id="text-modal-text-color" />
+
+          <!-- Background Tab -->
+          <div class="tab-content" id="text-background-tab">
+            <div class="form-group">
+              <label>Background Image</label>
+              <div id="text-modal-image-preview" class="image-preview">
+                <div class="image-preview-placeholder">No image selected</div>
+              </div>
+              <input type="file" id="text-modal-image-upload" accept="image/*" style="display: none;" />
+              <div class="button-group">
+                <button id="text-modal-image-select">Choose Image</button>
+                <button id="text-modal-image-remove" style="display: none;">Remove</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-image-style">Image Style</label>
+              <select id="text-modal-image-style">
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+                <option value="circular">Circular</option>
+                <option value="oval">Oval</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-image-position">Image Position</label>
+              <select id="text-modal-image-position">
+                <option value="center">Center</option>
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="top-left">Top-Left</option>
+                <option value="top-right">Top-Right</option>
+                <option value="bottom-left">Bottom-Left</option>
+                <option value="bottom-right">Bottom-Right</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-image-size">Image Size</label>
+              <input type="range" id="text-modal-image-size" min="10" max="200" step="5" value="100" />
+              <span id="text-modal-image-size-value">100%</span>
+            </div>
           </div>
         </div>
+
         <div id="text-modal-actions">
           <button id="text-modal-delete">Delete</button>
           <button id="text-modal-save">Save</button>

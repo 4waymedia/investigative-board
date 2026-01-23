@@ -6,6 +6,7 @@ class ModalManager {
     this.appState = appState;
     this.currentModalListeners = [];
     this.modalPinIndex = null;
+    this.marqueeWasActive = false; // Track if marquee was running when modal opened
 
     // Get references to modal elements
     this.pinModal = document.getElementById("pin-modal");
@@ -43,6 +44,9 @@ class ModalManager {
   // Open pin modal for editing
   openPinModal(pinIndex) {
     console.log(`🎯 ModalManager.openPinModal called with pinIndex: ${pinIndex}`);
+
+    // Track if marquee was active before opening modal
+    this.marqueeWasActive = this.appState.eventHandlers && this.appState.eventHandlers.marqueeAnimationId !== null;
 
     // Clean up previous modal listeners
     this.cleanupModalListeners();
@@ -122,6 +126,13 @@ class ModalManager {
     }
 
     this.modalPinIndex = null;
+
+    // Restart marquee if it was active before modal opened
+    if (this.marqueeWasActive && this.appState.eventHandlers) {
+      this.appState.eventHandlers.startMarqueeAnimation();
+      console.log('🎯 Restarted marquee animation after pin modal closed');
+    }
+    this.marqueeWasActive = false;
   }
 
   // Set up pin modal content and event handlers

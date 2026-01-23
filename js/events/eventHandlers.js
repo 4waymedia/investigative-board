@@ -144,8 +144,22 @@ class PinTool extends BaseTool {
 
 class TextTool extends BaseTool {
   onMouseDown(e, mousePos, clickedPinIndex) {
-    // Text tool logic is handled in mouseUp
-    console.log(`👆 Left-click: Text tool on empty space`);
+    // Don't create text bubbles when clicking on existing pins
+    // This should be prevented by the main pin interaction logic, but double-check here
+    if (clickedPinIndex !== null) {
+      console.log(`⚠️ Text tool: Pin interaction already handled for pin ${clickedPinIndex}`);
+      return;
+    }
+
+    // Text tool - register center and start marquee preview for sizing
+    this.eventHandlers.isDraggingTextBubble = true;
+    this.eventHandlers.textBubbleDragStart = { x: mousePos.world.x, y: mousePos.world.y };
+    this.eventHandlers.textBubbleDragCurrent = { x: mousePos.world.x, y: mousePos.world.y };
+
+    // Start marquee animation for visual feedback during drag preview
+    this.eventHandlers.startMarqueeAnimation();
+
+    console.log(`👆 Left-click: Text bubble center registered at (${mousePos.world.x}, ${mousePos.world.y}), starting marquee preview`);
   }
 }
 
@@ -206,6 +220,15 @@ class EventHandlers {
     this.prevScreenY = 0;
     this.didDrag = false;
     this.clipboardPins = []; // For copy/paste functionality
+
+    // Text bubble drag properties
+    this.isDraggingTextBubble = false;
+    this.textBubbleDragStart = null;
+    this.textBubbleDragCurrent = null;
+
+    // Tail dragging properties
+    this.isDraggingTail = false;
+    this.draggingTailPinIndex = null;
     console.log("EventHandlers constructor completed successfully");
   } catch (error) {
     console.error("EventHandlers constructor failed:", error);
@@ -222,6 +245,11 @@ class EventHandlers {
     this.isDraggingArea = false;
     this.areaDragStart = null;
     this.areaDragCurrent = null;
+    this.isDraggingTextBubble = false;
+    this.textBubbleDragStart = null;
+    this.textBubbleDragCurrent = null;
+    this.isDraggingTail = false;
+    this.draggingTailPinIndex = null;
 
     // Handle area resizing completion
     if (this.isResizingArea && this.resizingAreaIndex !== null) {
@@ -429,6 +457,40 @@ class EventHandlers {
       // Update marquee animation and draw animated marquee
       this.updateMarqueeAnimation();
       this.drawAnimatedMarquee();
+    } else if (this.isDraggingTextBubble) {
+      console.log(`💭 TEXT BUBBLE DRAGGING: Updating marquee preview`);
+      this.isUserInteracting = true;
+      this.textBubbleDragCurrent = { x: mousePos.world.x, y: mousePos.world.y }; // Update current drag position for marquee
+
+      // Update marquee animation and draw animated marquee
+      this.updateMarqueeAnimation();
+      this.drawAnimatedMarquee();
+    } else if (this.isDraggingTail && this.draggingTailPinIndex !== null) {
+      console.log(`🎯 TAIL DRAGGING: Updating tail position`);
+      this.isUserInteracting = true;
+
+      const pin = this.appState.pins[this.draggingTailPinIndex];
+      if (pin && pin.shape === 'bubble') {
+        // Calculate angle from bubble center to mouse position
+        const dx = mousePos.world.x - pin.x;
+        const dy = mousePos.world.y - pin.y;
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI; // Convert to degrees
+
+        // Calculate distance from center (normalized to bubble size)
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const maxRadius = Math.max(pin.width || 120, pin.height || 60) / 2;
+        const normalizedDistance = Math.min(distance / maxRadius, 1);
+
+        // Update tail position
+        pin.tailPosition = {
+          angle: angle,
+          distance: normalizedDistance
+        };
+
+        console.log(`🎯 Tail moved to angle: ${angle.toFixed(1)}°, distance: ${normalizedDistance.toFixed(2)}`);
+      }
+
+      this.draw(); // Redraw to show tail movement
     } else if (this.isCreatingText) {
       this.isUserInteracting = true;
       // Convert mouse coordinates to canvas-relative
@@ -492,10 +554,6 @@ class EventHandlers {
     this.dragStartPinIndex = null;
     this.isDraggingFromPin = false;
 
-    // Handle text element interaction first (text elements take precedence over pins)
-    if (e.button === 0 && !e.shiftKey && clickedTextIndex !== null) {
-    }
-
     // Track if we're starting a drag from a pin (for drag-to-line functionality)
     if (e.button === 0 && !e.shiftKey && clickedPinIndex !== null) {
       this.dragStartPinIndex = clickedPinIndex;
@@ -506,6 +564,100 @@ class EventHandlers {
     if (e.button === 2) {
       this.handleCanvasRightClick(e, mousePos.world, clickedPinIndex);
       return;
+    }
+
+    // Handle shift+click for direct pin-to-pin connections
+    if (e.button === 0 && e.shiftKey && clickedPinIndex !== null) {
+      // If we have an active connection source, create connection to clicked pin
+      if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== clickedPinIndex) {
+        // Check if connection already exists (bidirectional)
+        const existingConnection = this.appState.connections.find(conn =>
+          (conn.startIndex === this.appState.connectStartIndex && conn.endIndex === clickedPinIndex) ||
+          (conn.startIndex === clickedPinIndex && conn.endIndex === this.appState.connectStartIndex)
+        );
+
+        if (existingConnection) {
+          console.log(`⚠️ Connection already exists between pin ${this.appState.connectStartIndex} and pin ${clickedPinIndex}`);
+          // Reset connection state
+          this.appState.connectStartIndex = null;
+          this.appState.connectMousePos = null;
+          this.stopMarqueeAnimation();
+        } else {
+          // Create connection between the two pins
+          this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
+            color: this.appState.selectedColor,
+            type: this.appState.connectionType
+          });
+
+          console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to pin ${clickedPinIndex} via shift+click`);
+
+          // Handle connection state based on mode
+          if (this.appState.connectionMode === 'sequential') {
+            // In sequential mode: set the connected pin as the new connection source
+            this.appState.connectStartIndex = clickedPinIndex;
+            this.appState.connectMousePos = null;
+            console.log(`🔄 Sequential: Connected to pin ${clickedPinIndex}, now set as new connection source`);
+          } else {
+            // In other modes: reset connection state
+            this.appState.connectStartIndex = null;
+            this.appState.connectMousePos = null;
+            this.stopMarqueeAnimation();
+          }
+
+          this.appState.saveHistory();
+          if (this.saveAppState) {
+            this.saveAppState(this.appState);
+          }
+          this.draw();
+        }
+        return; // Connection handled
+      } else {
+        // No active connection source, so set this pin as the connection source
+        this.appState.connectStartIndex = clickedPinIndex;
+        this.appState.connectionMode = 'sequential';
+        this.startMarqueeAnimation();
+        console.log(`🎯 Shift+click: Set pin ${clickedPinIndex} as connection source`);
+        return;
+      }
+    }
+
+    // Handle left-click pin interaction first (works with any tool)
+    // This should prevent tool-specific actions when interacting with existing pins
+    if (e.button === 0 && !e.shiftKey && clickedPinIndex !== null) {
+      const pin = this.appState.pins[clickedPinIndex];
+
+      // Check if clicked on bubble tail first
+      if (pin && pin.shape === 'bubble' && this.isPointOnBubbleTail(pin, mousePos.world.x, mousePos.world.y)) {
+        // Start tail dragging - this takes priority over normal pin dragging
+        this.isDraggingTail = true;
+        this.draggingTailPinIndex = clickedPinIndex;
+        console.log(`🎯 Started dragging tail of bubble pin ${clickedPinIndex}`);
+        return; // Don't continue with any other logic
+      } else {
+        // Normal pin interaction - select and prepare for drag
+        this.setSelectedPin(clickedPinIndex);
+        this.selectedPins = [clickedPinIndex];
+
+        // Start drag using drag manager
+        if (window.dragManager) {
+          window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, this.selectedPins);
+          this.isDragManagerDragging = true; // Track that drag manager is active
+        } else {
+          // Fallback if drag manager not available
+          this.isDraggingPin = true;
+          this.dragPinIndex = clickedPinIndex;
+        }
+
+        // Set as connection source for next pin placement (sequential mode)
+        this.appState.connectStartIndex = clickedPinIndex;
+        this.appState.connectionMode = 'sequential';
+
+        // Start marquee animation to show connection mode is active
+        this.startMarqueeAnimation();
+
+        console.log(`🎯 Left-click: Selected pin ${clickedPinIndex} and started drag`);
+        return; // Don't continue to tool-specific logic
+      }
     }
 
     // Handle left-click using tool pattern
@@ -676,6 +828,42 @@ class EventHandlers {
 
     console.log(`   Pin created at: (${newPin.x}, ${newPin.y}) and set as HUB`);
     this.draw();
+  }
+
+  // Check if a point is on the tail of a bubble pin
+  isPointOnBubbleTail(pin, worldX, worldY) {
+    if (pin.shape !== 'bubble') return false;
+
+    const tailPos = pin.tailPosition || { angle: 270, distance: 0.8 };
+    const tailAngle = (tailPos.angle * Math.PI) / 180;
+    const tailDistance = tailPos.distance;
+
+    const scr = { x: pin.x, y: pin.y };
+    const width = pin.width || 120;
+    const height = pin.height || 60;
+
+    // Calculate tail attachment point
+    const tailAttachX = scr.x + Math.cos(tailAngle) * (width/2 * tailDistance);
+    const tailAttachY = scr.y + Math.sin(tailAngle) * (height/2 * tailDistance);
+
+    // Calculate tail tip point
+    const tailLength = Math.min(width, height) * 0.3;
+    const tailTipX = tailAttachX + Math.cos(tailAngle) * tailLength;
+    const tailTipY = tailAttachY + Math.sin(tailAngle) * tailLength;
+
+    // Check if point is within the tail triangle
+    const tailWidth = tailLength * 0.4;
+
+    // Use point-in-triangle test
+    const area = Math.abs((tailAttachX*(tailTipY - tailAttachY + Math.cos(tailAngle)*tailWidth/2) +
+                          tailTipX*(tailAttachY - tailTipY + Math.cos(tailAngle)*tailWidth/2) +
+                          (tailTipX - Math.sin(tailAngle)*tailWidth/2)*(tailAttachY - tailAttachY)) / 2);
+
+    const area1 = Math.abs((worldX*(tailTipY - tailAttachY) + tailAttachX*(tailAttachY - tailTipY) + tailTipX*(tailAttachY - worldY)) / 2);
+    const area2 = Math.abs((worldX*(tailAttachY - tailTipY + Math.cos(tailAngle)*tailWidth/2) + tailTipX*(tailTipY + Math.cos(tailAngle)*tailWidth/2 - worldY) + (tailTipX - Math.sin(tailAngle)*tailWidth/2)*(worldY - tailAttachY)) / 2);
+    const area3 = Math.abs((worldX*(tailTipY - tailAttachY - Math.cos(tailAngle)*tailWidth/2) + (tailTipX + Math.sin(tailAngle)*tailWidth/2)*(tailAttachY - tailTipY) + tailAttachX*(tailTipY - worldY)) / 2);
+
+    return Math.abs(area - (area1 + area2 + area3)) < 1; // Small tolerance
   }
 
   // Find the closest point on a line segment to a given point
@@ -1081,25 +1269,70 @@ class EventHandlers {
       console.log(`✅ Area pin created at center (${centerX}, ${centerY}) with size ${newPin.areaSize}`);
     }
 
-    // Handle text creation when text tool is active
-    if (!this.isMarqueeSelecting && this.appState.currentTool === "text") {
+    // Handle text creation when text tool is active (single clicks only)
+    // Drag creation is handled in the text bubble drag section above
+    // Don't create new pins if we just interacted with an existing pin
+    if (!this.isMarqueeSelecting && !this.didDrag && this.appState.currentTool === "text" && this.dragStartPinIndex === null) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       if (clickedPinIndex === null) {
-        // Create new text pin at click location
-        // Position the text so the mouse is at the center of the text bubble
+        // Create new text pin at click location (default size)
         const newPinIndex = this.appState.addTextPin(mouseWorld.x, mouseWorld.y, "Text", {
           color: this.appState.selectedColor,
-          shape: this.appState.currentTextShape || "bubble",
-          fontSize: 16
+          shape: "bubble",
+          fontSize: 16,
+          width: 120,  // Default width
+          height: 60   // Default height
         });
 
-        console.log(`📝 Created text pin at (${mouseWorld.x}, ${mouseWorld.y})`);
+        console.log(`📝 Created text bubble at (${mouseWorld.x}, ${mouseWorld.y})`);
         this.appState.saveHistory();
         if (this.saveAppState) {
           this.saveAppState(this.appState);
         }
         this.draw();
         return; // Don't continue with other creation logic
+      }
+    }
+
+    // Handle text bubble creation from marquee drag
+    if (this.isDraggingTextBubble && this.textBubbleDragStart && this.textBubbleDragCurrent) {
+      const dx = Math.abs(this.textBubbleDragCurrent.x - this.textBubbleDragStart.x);
+      const dy = Math.abs(this.textBubbleDragCurrent.y - this.textBubbleDragStart.y);
+
+      // Check for collision with existing pins at the center location
+      const centerX = this.textBubbleDragStart.x;
+      const centerY = this.textBubbleDragStart.y;
+      const existingPinIndex = this.findPinAt(centerX, centerY);
+
+      if (existingPinIndex !== null) {
+        console.log(`⚠️ Cannot create text bubble: pin already exists at center location (${centerX}, ${centerY})`);
+      } else {
+        // Create text bubble with drag dimensions
+        const width = Math.max(dx * 2, 120); // Minimum width
+        const height = Math.max(dy * 2, 60);  // Minimum height
+
+        const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
+          color: this.appState.selectedColor,
+          shape: "bubble",
+          width: width,
+          height: height,
+          tailPosition: { angle: 270, distance: 0.8 } // Default tail at bottom
+        });
+
+        // Set as connection source for next pin placement
+        this.appState.connectStartIndex = newPinIndex;
+        this.appState.connectionMode = 'parent';
+
+        // Start marquee animation to show connection mode is active
+        this.startMarqueeAnimation();
+
+        console.log(`💭 Created text bubble at (${centerX}, ${centerY}) with size ${width}x${height}`);
+        this.appState.saveHistory();
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
+        }
+        this.draw();
+        return; // Don't create a new pin
       }
     }
 
@@ -1440,6 +1673,9 @@ class EventHandlers {
       const isTextPin = pin && (pin.shape === 'bubble' || pin.shape === 'rectangle');
 
       if (isTextPin) {
+        // Stop marquee animation when opening modal
+        this.stopMarqueeAnimation();
+
         // Open text modal for text pin editing
         if (window.openTextModal) {
           console.log(`📝 Opening text modal for text pin ${clickedPinIndex}`);
@@ -1455,6 +1691,9 @@ class EventHandlers {
           console.error(`❌ Text modal not available`);
         }
       } else {
+        // Stop marquee animation when opening modal
+        this.stopMarqueeAnimation();
+
         // Open modal for pin editing
         if (window.app && window.app.modalManager && window.app.modalManager.openPinModal) {
           console.log(`📝 Opening modal for pin ${clickedPinIndex}`);

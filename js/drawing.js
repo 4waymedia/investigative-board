@@ -1631,12 +1631,12 @@ function drawTextElements(
       ctx.fillStyle = bubbleColor;
 
       // Draw the main bubble body
-      window.DrawingUtils.roundRectPath(
-        ctx,
-        bubbleX,
-        bubbleY,
-        bubbleWidth,
-        bubbleHeight,
+    window.DrawingUtils.roundRectPath(
+      ctx,
+      bubbleX,
+      bubbleY,
+      bubbleWidth,
+      bubbleHeight,
         12 * s
       );
 
@@ -1651,8 +1651,8 @@ function drawTextElements(
       ctx.lineTo(tailX, tailY + tailHeight);
       ctx.lineTo(tailX + tailWidth/2, tailY);
       ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+    ctx.fill();
+    ctx.stroke();
     } else {
       // Draw rectangle background
       ctx.fillStyle = bubbleColor;
@@ -1676,16 +1676,139 @@ function drawTextElements(
   });
 }
 
+// Bubble tail drawing function
+function drawBubbleTail(ctx, pin, scr, width, height, tailType) {
+  const tailPos = pin.tailPosition || { angle: 270, distance: 0.8 }; // Default: bottom
+  const tailAngle = (tailPos.angle * Math.PI) / 180; // Convert degrees to radians
+  const tailDistance = tailPos.distance;
+
+  // Calculate tail attachment point on bubble perimeter
+  const tailAttachX = scr.x + Math.cos(tailAngle) * (width/2 * tailDistance);
+  const tailAttachY = scr.y + Math.sin(tailAngle) * (height/2 * tailDistance);
+
+  // Calculate tail tip point (extends outward from bubble)
+  const tailLength = Math.min(width, height) * 0.3;
+
+  switch (tailType) {
+    case 'triangle':
+      drawTriangleTail(ctx, tailAttachX, tailAttachY, tailAngle, tailLength);
+      break;
+    case 'curved':
+      drawCurvedTail(ctx, tailAttachX, tailAttachY, tailAngle, tailLength);
+      break;
+    case 'arrow':
+      drawArrowTail(ctx, tailAttachX, tailAttachY, tailAngle, tailLength);
+      break;
+    case 'curved-arrow':
+      drawCurvedArrowTail(ctx, tailAttachX, tailAttachY, tailAngle, tailLength);
+      break;
+    default:
+      drawTriangleTail(ctx, tailAttachX, tailAttachY, tailAngle, tailLength);
+  }
+}
+
+function drawTriangleTail(ctx, attachX, attachY, angle, length) {
+  const tipX = attachX + Math.cos(angle) * length;
+  const tipY = attachY + Math.sin(angle) * length;
+  const tailWidth = length * 0.4;
+
+  ctx.beginPath();
+  ctx.moveTo(attachX, attachY);
+  ctx.lineTo(tipX - Math.sin(angle) * tailWidth/2, tipY + Math.cos(angle) * tailWidth/2);
+  ctx.lineTo(tipX + Math.sin(angle) * tailWidth/2, tipY - Math.cos(angle) * tailWidth/2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawCurvedTail(ctx, attachX, attachY, angle, length) {
+  const tipX = attachX + Math.cos(angle) * length;
+  const tipY = attachY + Math.sin(angle) * length;
+  const tailWidth = length * 0.35;
+
+  // Create curved tail using quadratic curves
+  const midX = attachX + Math.cos(angle) * length * 0.5;
+  const midY = attachY + Math.sin(angle) * length * 0.5;
+
+  // Control point for curve
+  const cpX = midX - Math.sin(angle) * tailWidth * 0.7;
+  const cpY = midY + Math.cos(angle) * tailWidth * 0.7;
+
+  ctx.beginPath();
+  ctx.moveTo(attachX, attachY);
+  ctx.quadraticCurveTo(cpX, cpY, tipX, tipY);
+  ctx.lineTo(tipX + Math.sin(angle) * tailWidth/2, tipY - Math.cos(angle) * tailWidth/2);
+  ctx.quadraticCurveTo(cpX + Math.sin(angle) * tailWidth * 0.3, cpY - Math.cos(angle) * tailWidth * 0.3, attachX, attachY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawArrowTail(ctx, attachX, attachY, angle, length) {
+  const tipX = attachX + Math.cos(angle) * length;
+  const tipY = attachY + Math.sin(angle) * length;
+  const tailWidth = length * 0.3;
+  const arrowWidth = length * 0.5;
+
+  ctx.beginPath();
+  // Arrow shaft
+  ctx.moveTo(attachX, attachY);
+  ctx.lineTo(tipX - Math.cos(angle) * length * 0.3, tipY - Math.sin(angle) * length * 0.3);
+  // Arrow head
+  ctx.lineTo(tipX - Math.cos(angle) * length * 0.3 - Math.sin(angle) * arrowWidth/2,
+             tipY - Math.sin(angle) * length * 0.3 + Math.cos(angle) * arrowWidth/2);
+  ctx.lineTo(tipX, tipY);
+  ctx.lineTo(tipX - Math.cos(angle) * length * 0.3 + Math.sin(angle) * arrowWidth/2,
+             tipY - Math.sin(angle) * length * 0.3 - Math.cos(angle) * arrowWidth/2);
+  ctx.lineTo(tipX - Math.cos(angle) * length * 0.3, tipY - Math.sin(angle) * length * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawCurvedArrowTail(ctx, attachX, attachY, angle, length) {
+  const tipX = attachX + Math.cos(angle) * length;
+  const tipY = attachY + Math.sin(angle) * length;
+  const tailWidth = length * 0.35;
+  const arrowWidth = length * 0.4;
+
+  // Create curved arrow tail
+  const midX = attachX + Math.cos(angle) * length * 0.4;
+  const midY = attachY + Math.sin(angle) * length * 0.4;
+  const shaftX = attachX + Math.cos(angle) * length * 0.7;
+  const shaftY = attachY + Math.sin(angle) * length * 0.7;
+
+  // Control point for curve
+  const cpX = midX - Math.sin(angle) * tailWidth * 0.8;
+  const cpY = midY + Math.cos(angle) * tailWidth * 0.8;
+
+  ctx.beginPath();
+  ctx.moveTo(attachX, attachY);
+  ctx.quadraticCurveTo(cpX, cpY, shaftX, shaftY);
+  // Arrow head
+  ctx.lineTo(tipX - Math.cos(angle) * length * 0.1 - Math.sin(angle) * arrowWidth/2,
+             tipY - Math.sin(angle) * length * 0.1 + Math.cos(angle) * arrowWidth/2);
+  ctx.lineTo(tipX, tipY);
+  ctx.lineTo(tipX - Math.cos(angle) * length * 0.1 + Math.sin(angle) * arrowWidth/2,
+             tipY - Math.sin(angle) * length * 0.1 - Math.cos(angle) * arrowWidth/2);
+  ctx.lineTo(shaftX, shaftY);
+  ctx.quadraticCurveTo(cpX + Math.sin(angle) * tailWidth * 0.4, cpY - Math.cos(angle) * tailWidth * 0.4, attachX, attachY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
 // Register text pin shapes (bubble and rectangle)
 registerShape("bubble", {
-  baseShape: "circle",
   getMetrics: function(pin) {
-    const radius = 30; // Base radius for bubble
+    const width = pin.width || 120;
+    const height = pin.height || 60;
+
     return {
-      shape: "bubble",
-      radius: radius,
-      width: radius * 2,
-      height: radius * 2,
+      shape: pin.shape || "bubble",
+      width: width,
+      height: height, // Just the bubble height
+      radius: Math.min(width, height) / 2,
       labelOffsetY: 0
     };
   },
@@ -1693,46 +1816,107 @@ registerShape("bubble", {
     background: function(ctx, pin, metrics, scr, pinScale) {
       const bubbleColor = pin.color || "#ffffff";
       const borderColor = pin.borderColor || "#000000";
+      const width = pin.width || 120;
+      const bubbleHeight = metrics.bubbleHeight || pin.height || 60; // Use bubble-specific height
+      const borderWidth = pin.borderWidth || 2;
+      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
+      const dropShadow = pin.dropShadow || false;
 
-      // Draw bubble shape with tail
+      // Save context for opacity
+      ctx.save();
+
+      // Apply opacity
+      ctx.globalAlpha = opacity;
+
+      // Apply drop shadow if enabled
+      if (dropShadow) {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+      }
+
       ctx.fillStyle = bubbleColor;
       ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = borderWidth;
 
-      // Main bubble body
-      window.DrawingUtils.roundRectPath(ctx, scr.x - 25, scr.y - 15, 50, 30, 15);
+      // Main bubble body (rounded rectangle) - centered at scr.y
+      const cornerRadius = Math.min(width, height) * 0.2; // Adaptive corner radius
+
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        scr.x - width/2,
+        scr.y - height/2,
+        width,
+        height,
+        cornerRadius
+      );
       ctx.fill();
       ctx.stroke();
 
-      // Add tail/pointer
-      ctx.beginPath();
-      ctx.moveTo(scr.x, scr.y + 15);
-      ctx.lineTo(scr.x - 5, scr.y + 25);
-      ctx.lineTo(scr.x + 5, scr.y + 25);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      // Add tail/pointer based on tailPosition and tailType (before restoring context)
+      const tailType = pin.tailType || 'triangle';
+      if (tailType !== 'none') {
+        drawBubbleTail(ctx, pin, scr, width, height, tailType);
+      }
+
+      // Restore context
+      ctx.restore();
     },
-    label: function(ctx, pin, metrics, scr, pinScale) {
+    label: function(ctx, pin, metrics, scr, pinScale, appScale) {
       const textColor = pin.textColor || "#000000";
       const fontSize = pin.fontSize || 14;
+      const width = pin.width || 120;
+      const height = pin.height || 60;
+      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
 
-      ctx.fillStyle = textColor;
-      ctx.font = `${fontSize}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(pin.label || '', scr.x, scr.y);
+      // Save context for opacity
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
+      // Draw description inside bubble (centered at scr.y)
+      if (pin.description) {
+        ctx.fillStyle = textColor;
+        ctx.font = `${fontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        // Split description into lines if it contains newlines
+        const lines = pin.description.split('\n');
+        const lineHeight = fontSize * 1.2;
+        const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+
+        lines.forEach((line, index) => {
+          const y = startY + index * lineHeight;
+          ctx.fillText(line, scr.x, y);
+        });
+      }
+
+      // Draw title below bubble (10% larger, centered)
+      if (pin.label) {
+        const titleFontSize = Math.round(fontSize * 1.1); // 10% larger
+        ctx.fillStyle = textColor;
+        ctx.font = `${titleFontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top"; // Start from top of text
+
+        // Position title below the bubble with a small gap
+        const titleY = scr.y + height/2 + 8; // 8px gap below bubble
+        ctx.fillText(pin.label, scr.x, titleY);
+      }
+
+      // Restore context
+      ctx.restore();
     }
   }
 });
 
 registerShape("rectangle", {
-  baseShape: "circle",
   getMetrics: function(pin) {
     const width = pin.width || 100;
     const height = pin.height || 40;
     return {
-      shape: "rectangle",
+      shape: pin.shape || "rectangle",
       width: width,
       height: height,
       radius: Math.min(width, height) / 2,
@@ -1745,32 +1929,89 @@ registerShape("rectangle", {
       const borderColor = pin.borderColor || "#000000";
       const width = pin.width || 100;
       const height = pin.height || 40;
+      const borderWidth = pin.borderWidth || 2;
+      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
+      const dropShadow = pin.dropShadow || false;
+
+      // Save context for opacity
+      ctx.save();
+
+      // Apply opacity
+      ctx.globalAlpha = opacity;
+
+      // Apply drop shadow if enabled
+      if (dropShadow) {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+      }
 
       ctx.fillStyle = bubbleColor;
       ctx.strokeStyle = borderColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = borderWidth;
 
       // Draw rounded rectangle
+      const cornerRadius = Math.min(width, height) * 0.2; // Adaptive corner radius
       window.DrawingUtils.roundRectPath(
         ctx,
         scr.x - width/2,
         scr.y - height/2,
         width,
         height,
-        8
+        cornerRadius
       );
       ctx.fill();
       ctx.stroke();
+
+      // Restore context
+      ctx.restore();
     },
-    label: function(ctx, pin, metrics, scr, pinScale) {
+    label: function(ctx, pin, metrics, scr, pinScale, appScale) {
       const textColor = pin.textColor || "#000000";
       const fontSize = pin.fontSize || 14;
+      const width = pin.width || 100;
+      const height = pin.height || 40;
+      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
 
-      ctx.fillStyle = textColor;
-      ctx.font = `${fontSize}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(pin.label || '', scr.x, scr.y);
+      // Save context for opacity
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
+      // For rectangles, we don't draw tails, but we do use the same text layout as bubbles
+      // Draw description inside rectangle (centered)
+      if (pin.description) {
+        ctx.fillStyle = textColor;
+        ctx.font = `${fontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        // Split description into lines if it contains newlines
+        const lines = pin.description.split('\n');
+        const lineHeight = fontSize * 1.2;
+        const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+
+        lines.forEach((line, index) => {
+          const y = startY + index * lineHeight;
+          ctx.fillText(line, scr.x, y);
+        });
+      }
+
+      // Draw title below rectangle (10% larger, centered)
+      if (pin.label) {
+        const titleFontSize = Math.round(fontSize * 1.1); // 10% larger
+        ctx.fillStyle = textColor;
+        ctx.font = `${titleFontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top"; // Start from top of text
+
+        // Position title below the rectangle with a small gap
+        const titleY = scr.y + height/2 + 8; // 8px gap below rectangle
+        ctx.fillText(pin.label, scr.x, titleY);
+      }
+
+      // Restore context
+      ctx.restore();
     }
   }
 });
