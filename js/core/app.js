@@ -223,11 +223,11 @@ class Application {
         { id: "pin", name: "Pin", defaultIcon: "●" },
         { id: "card", name: "Card", defaultIcon: "▤" },
         { id: "area", name: "Area", defaultIcon: "⭕" },
+        { id: "text", name: "Text", defaultIcon: "📝" },
       ],
       mainTools: [
         { id: "pan", label: "Move", icon: "🖐", key: "M" },
         { id: "select", label: "Select", icon: "🔳", key: "S" },
-        { id: "text", label: "Text", icon: "📝", key: "T" },
       ]
     });
     this.toolbarManager.initialize({
@@ -395,9 +395,10 @@ class Application {
 
   // Check if animations are currently active
   hasActiveAnimations() {
+    const eh = this.eventHandlers;
     return (
-      (this.marqueeStart && this.marqueeEnd) || // Marquee selection
-      (window.app && window.app.eventHandlers && window.app.eventHandlers.isDraggingArea) || // Area creation marquee
+      (eh && eh.isMarqueeSelecting && eh.marqueeStart && eh.marqueeEnd) || // Marquee selection
+      (eh && eh.isDraggingArea) || // Area creation marquee
       (this.appState.connectStartIndex !== null && this.appState.connectMousePos) // Connection preview
     );
   }
@@ -648,6 +649,8 @@ class Application {
   drawConnections(ctx) {
     if (!this.appState.connections || !this.appState.pins) return;
 
+    console.log(`🔗 Drawing ${this.appState.connections.length} connections between ${this.appState.pins.length} pins`);
+
     // Note: Connection preview is drawn in main draw() method with animation
 
     // Group connections by endpoint for fan-out calculations
@@ -660,16 +663,23 @@ class Application {
     });
 
     this.appState.connections.forEach((connection, idx) => {
+      // Handle both property name formats: from/to and startIndex/endIndex
+      const startIndex = connection.from !== undefined ? connection.from : connection.startIndex;
+      const endIndex = connection.to !== undefined ? connection.to : connection.endIndex;
+      console.log(`🔗 Drawing connection ${idx}: ${startIndex} → ${endIndex} (${connection.color || "#666"})`);
       ctx.strokeStyle = connection.color || "#666";
       ctx.lineWidth = 2; // World-space line width (context is already scaled)
       ctx.setLineDash([]); // Ensure solid line (not dashed)
       ctx.beginPath();
 
       // All connections are now pin-to-pin
-      const startPin = this.appState.pins[connection.from];
-      const endPin = this.appState.pins[connection.to];
+      const startPin = this.appState.pins[startIndex];
+      const endPin = this.appState.pins[endIndex];
 
-      if (!startPin || !endPin) return;
+      if (!startPin || !endPin) {
+        console.log(`❌ Missing pins for connection ${idx}: startIndex=${startIndex}, endIndex=${endIndex}, start=${!!startPin}, end=${!!endPin}`);
+        return;
+      }
 
       // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
       const startAnchor = this.getPinCenter(startPin);
@@ -754,31 +764,54 @@ class Application {
     ctx.strokeStyle = "#58a6ff";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    const start = this.worldToScreen(this.appState.timelineLeft, this.appState.timelineY);
-    const end = this.worldToScreen(this.appState.timelineRight, this.appState.timelineY);
+    const start = { x: this.appState.timelineLeft, y: this.appState.timelineY };
+    const end = { x: this.appState.timelineRight, y: this.appState.timelineY };
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
 
-    // Pin Connectors
+    // Pin Connectors - look up current pin position by ID to handle stale references
     ctx.strokeStyle = "#58a6ff";
     ctx.lineWidth = 1.5;
     this.appState.timelinePins.forEach((tp) => {
-      const pinScreen = this.worldToScreen(tp.pin.x, tp.pin.y);
-      const timelineScreen = this.worldToScreen(tp.pin.x, this.appState.timelineY);
+      // Find the current pin by ID or index (in case reference is stale)
+      let currentPin = null;
+      if (tp.pinId) {
+        currentPin = this.appState.pins.find(p => p.id === tp.pinId);
+      } else if (tp.pinIndex !== undefined && this.appState.pins[tp.pinIndex]) {
+        currentPin = this.appState.pins[tp.pinIndex];
+      } else {
+        currentPin = tp.pin; // Fallback to stored reference
+      }
+      
+      if (!currentPin) return; // Pin was deleted
+      
+      const pinX = currentPin.x;
+      const pinY = currentPin.y;
+      
+      // Draw connector from pin center to timeline
       ctx.beginPath();
-      ctx.moveTo(pinScreen.x, pinScreen.y);
-      ctx.lineTo(timelineScreen.x, timelineScreen.y);
+      ctx.moveTo(pinX, pinY);
+      ctx.lineTo(pinX, this.appState.timelineY);
       ctx.stroke();
 
-      // Date Labels (only draw if scale is high enough)
-      if (this.appState.scale > 0.5) {
-        ctx.fillStyle = "#e6edf3";
-        ctx.font = `${(14 * this.appState.scale) / Math.sqrt(this.appState.scale)}px system-ui`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText(tp.dateStr, timelineScreen.x, timelineScreen.y + 10);
-      }
+      // Draw a small circle at the timeline connection point
+      ctx.fillStyle = "#58a6ff";
+      ctx.beginPath();
+      ctx.arc(pinX, this.appState.timelineY, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw a small circle at the pin connection point (for debugging alignment)
+      ctx.beginPath();
+      ctx.arc(pinX, pinY, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Date Labels
+      ctx.fillStyle = "#e6edf3";
+      ctx.font = "12px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(tp.dateStr, pinX, this.appState.timelineY + 10);
     });
   }
 
@@ -816,9 +849,10 @@ class Application {
 
         const pinBase = { shape: pinShape, baseRadius: 9 };
 
-        const isSelected = index === this.appState.selectedPinIndex;
-        // Show marquee whenever pin is selected (for visual feedback)
-        const isMarquee = isSelected;
+        // Check if pin is in the multi-selection array
+        const isSelected = this.appState.selectedPins.includes(index);
+        // Show marquee highlight when multiple pins are selected
+        const isMarquee = isSelected && this.appState.selectedPins.length > 1;
         const metrics = {
           x: pin.x,
           y: pin.y,
@@ -843,19 +877,24 @@ class Application {
 
   // Draw screen-space UI elements (marquees, selections, etc.)
   drawScreenUI(ctx) {
-    // Draw marquee selection rectangle if active
-    if (this.marqueeStart && this.marqueeEnd) {
-      const startScreen = this.worldToScreen(this.marqueeStart.x, this.marqueeStart.y);
-      const endScreen = this.worldToScreen(this.marqueeEnd.x, this.marqueeEnd.y);
+    // Draw marquee selection rectangle if active (select tool)
+    const eh = this.eventHandlers;
+    if (eh && eh.isMarqueeSelecting && eh.marqueeStart && eh.marqueeEnd) {
+      const startScreen = this.worldToScreen(eh.marqueeStart.x, eh.marqueeStart.y);
+      const endScreen = this.worldToScreen(eh.marqueeEnd.x, eh.marqueeEnd.y);
 
       const x = Math.min(startScreen.x, endScreen.x);
       const y = Math.min(startScreen.y, endScreen.y);
       const w = Math.abs(endScreen.x - startScreen.x);
       const h = Math.abs(endScreen.y - startScreen.y);
 
-      ctx.fillStyle = "rgba(255, 153, 0, 0.1)";
+      // Animated marching ants effect
+      const time = Date.now();
+      ctx.lineDashOffset = -((time * 0.3) % 10);
+
+      ctx.fillStyle = "rgba(88, 166, 255, 0.1)";
       ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = "#f90";
+      ctx.strokeStyle = "#58a6ff";
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
       ctx.strokeRect(x, y, w, h);
@@ -936,13 +975,25 @@ class Application {
       const pin = this.appState.pins[i];
       if (!pin) continue;
 
-      // Special handling for text bubbles (which have titles below)
-      if (pin.shape === 'bubble' || pin.shape === 'rectangle') {
-        const width = pin.width || (pin.shape === 'bubble' ? 120 : 100);
-        const height = pin.height || (pin.shape === 'bubble' ? 60 : 40);
+      // Text shapes that use rectangular hit detection
+      const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
+      
+      // Special handling for text pins (which have rectangular bounds)
+      if (textShapes.includes(pin.shape)) {
+        // Get default dimensions based on shape
+        const defaultDimensions = {
+          'bubble': { width: 140, height: 70 },
+          'rectangle': { width: 120, height: 60 },
+          'text-plain': { width: 150, height: 30 },
+          'text-title': { width: 200, height: 40 }
+        };
+        const defaults = defaultDimensions[pin.shape] || { width: 120, height: 60 };
+        
+        const width = pin.width || defaults.width;
+        const height = pin.height || defaults.height;
         const titleHeight = pin.label ? (pin.fontSize || 14) * 1.1 + 16 : 0;
 
-        // Check if click is within the extended bounding box (bubble + title area)
+        // Check if click is within the extended bounding box (text area + title)
         const left = pin.x - width/2;
         const right = pin.x + width/2;
         const top = pin.y - height/2;
@@ -1203,7 +1254,7 @@ class Application {
 
     // Find pins with dates
     const timedPins = this.appState.pins
-      .map((pin) => {
+      .map((pin, index) => {
         // Check if pin has a date, or if it has an attached card with a date
         let dateStr = pin.date || "";
         if (pin.cardId != null && this.appState.cards) {
@@ -1212,7 +1263,8 @@ class Application {
             dateStr = card.date;
           }
         }
-        return { pin, dateStr };
+        // Store both pin reference, pin ID, and index for robust lookup
+        return { pin, pinId: pin.id, pinIndex: index, dateStr };
       })
       .filter((tp) => tp.dateStr);
 
@@ -1232,29 +1284,32 @@ class Application {
     const minTime = timedPins[0].timestamp;
     const maxTime = timedPins[timedPins.length - 1].timestamp;
 
-    // Position timeline below existing pins
+    // Calculate timeline span based on number of pins (ensure good spacing)
+    const pinSpacing = 150; // World units between pins
+    const timelineWidth = Math.max(pinSpacing * (timedPins.length - 1), 500);
+    const horizontalPadding = 100; // Padding on each end
+    
+    // Center the timeline around the current view center
+    const viewCenterX = (this.canvas.width / 2 - this.appState.offsetX) / this.appState.scale;
+    this.appState.timelineLeft = viewCenterX - timelineWidth / 2 - horizontalPadding;
+    this.appState.timelineRight = viewCenterX + timelineWidth / 2 + horizontalPadding;
+    
+    // Position timeline below existing pins (using fixed world coordinates)
     const lowestY = this.appState.pins.length ? Math.max(...this.appState.pins.map((p) => p.y)) : 0;
-    const footerMarginWorld = 200 / this.appState.scale;
+    const footerMarginWorld = 200; // Fixed world units below the lowest pin
     this.appState.timelineY = lowestY + footerMarginWorld;
 
-    // Calculate timeline bounds
-    const allXs = this.appState.pins.map((p) => p.x);
-    const minX = allXs.length ? Math.min(...allXs) : 0;
-    const maxX = allXs.length ? Math.max(...allXs) : 1000;
-    const horizontalPaddingWorld = 150 / this.appState.scale;
-    this.appState.timelineLeft = minX - horizontalPaddingWorld;
-    this.appState.timelineRight = maxX + horizontalPaddingWorld;
-    const worldSpan = this.appState.timelineRight - this.appState.timelineLeft || 1;
-
-    const offsetWorld = 120 / this.appState.scale;
+    // Distance from timeline to pins (alternating above/below)
+    const offsetWorld = 100; // Fixed world units
 
     // Activate timeline
     this.appState.timelineActive = true;
 
-    // Position pins along timeline
+    // Position pins along timeline chronologically
+    const worldSpan = this.appState.timelineRight - this.appState.timelineLeft - (2 * horizontalPadding);
     timedPins.forEach((tp, i) => {
       const t = (tp.timestamp - minTime) / (maxTime - minTime || 1);
-      tp.pin.x = this.appState.timelineLeft + t * worldSpan;
+      tp.pin.x = this.appState.timelineLeft + horizontalPadding + (t * worldSpan);
       tp.pin.y = this.appState.timelineY + (i % 2 === 0 ? -offsetWorld : offsetWorld);
     });
 

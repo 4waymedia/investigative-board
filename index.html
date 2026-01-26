@@ -40,8 +40,14 @@
     <div id="menu">
       <!-- System Menu (App Logo + File Menu) -->
       <div id="system-menu" class="toolbar-section system-section">
-        <div id="app-logo" class="system-menu-item app-logo" title="App Info">🎙️</div>
-        <div id="file-menu" class="system-menu-item file-menu" title="File Menu">
+        <div id="app-logo" class="system-menu-item app-logo" title="App Info">
+          🎙️
+        </div>
+        <div
+          id="file-menu"
+          class="system-menu-item file-menu"
+          title="File Menu"
+        >
           File
           <span class="menu-arrow">▼</span>
         </div>
@@ -211,11 +217,22 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="pm-image-size">Size: <span id="pm-image-size-value">100</span>px</label>
-              <input type="range" id="pm-image-size" min="20" max="200" step="5" value="100">
+              <label for="pm-image-size"
+                >Size: <span id="pm-image-size-value">100</span>px</label
+              >
+              <input
+                type="range"
+                id="pm-image-size"
+                min="20"
+                max="200"
+                step="5"
+                value="100"
+              />
             </div>
             <div class="form-group">
-              <button id="pm-remove-image" class="secondary-button">Remove Image</button>
+              <button id="pm-remove-image" class="secondary-button">
+                Remove Image
+              </button>
             </div>
           </div>
         </div>
@@ -296,7 +313,9 @@
     <div id="app-info-modal-backdrop">
       <div id="app-info-modal">
         <div id="app-info-modal-header">
-          <div id="app-info-modal-title">MyShortCasts - Investigative Board</div>
+          <div id="app-info-modal-title">
+            MyShortCasts - Investigative Board
+          </div>
           <div id="app-info-modal-close">✕</div>
         </div>
         <div id="app-info-modal-content">
@@ -309,7 +328,10 @@
           </div>
           <div class="app-info-section">
             <h3>Description</h3>
-            <p>A powerful visual investigation and mapping tool for creating interactive boards with pins, connections, and multimedia content.</p>
+            <p>
+              A powerful visual investigation and mapping tool for creating
+              interactive boards with pins, connections, and multimedia content.
+            </p>
           </div>
           <div class="app-info-section">
             <h3>Features</h3>
@@ -348,14 +370,17 @@
           <div class="tab-content active" id="text-info-tab">
             <div class="form-group">
               <label for="text-modal-input">Title (shown below bubble)</label>
-              <input type="text"
+              <input
+                type="text"
                 id="text-modal-input"
                 placeholder="Bubble title..."
                 maxlength="50"
               />
             </div>
             <div class="form-group">
-              <label for="text-modal-description">Description (inside bubble)</label>
+              <label for="text-modal-description"
+                >Description (inside bubble)</label
+              >
               <textarea
                 id="text-modal-description"
                 placeholder="Main bubble content..."
@@ -366,6 +391,39 @@
               <label for="text-modal-date">Date</label>
               <input type="date" id="text-modal-date" />
             </div>
+            <hr style="border-color: #30363d; margin: 12px 0;" />
+            <div class="form-group">
+              <label for="text-modal-title-color">Title Color</label>
+              <div class="color-with-alpha">
+                <input type="color" id="text-modal-title-color" value="#000000" style="width: 30%" />
+                <input
+                  type="range"
+                  id="text-modal-title-color-alpha"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value="1"
+                  class="alpha-slider"
+                />
+                <span id="text-modal-title-color-alpha-value" class="alpha-value">100%</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="text-modal-description-color">Description Color</label>
+              <div class="color-with-alpha">
+                <input type="color" id="text-modal-description-color" value="#000000" style="width: 30%" />
+                <input
+                  type="range"
+                  id="text-modal-description-color-alpha"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value="1"
+                  class="alpha-slider"
+                />
+                <span id="text-modal-description-color-alpha-value" class="alpha-value">100%</span>
+              </div>
+            </div>
           </div>
 
           <!-- Style Tab -->
@@ -373,36 +431,93 @@
             <div class="form-group">
               <label for="text-modal-type">Shape</label>
               <select id="text-modal-type">
+                <option value="text-plain">Plain Text (no background)</option>
                 <option value="rectangle">Rectangle</option>
-                <option value="bubble">Bubble</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="text-modal-tail-type">Tail Type</label>
-              <select id="text-modal-tail-type">
-                <option value="triangle">Triangle</option>
-                <option value="curved">Curved</option>
-                <option value="arrow">Arrow</option>
-                <option value="curved-arrow">Curved Arrow</option>
-                <option value="none">None</option>
+                <option value="bubble" selected>Comic Bubble</option>
+                <option value="text-title">Title</option>
               </select>
             </div>
             <div class="form-group">
               <label for="text-modal-color">Bubble Color</label>
-              <input type="color" id="text-modal-color" />
-            </div>
-            <div class="form-group">
-              <label for="text-modal-text-color">Text Color</label>
-              <input type="color" id="text-modal-text-color" />
+              <div class="color-with-alpha">
+                <input type="color" id="text-modal-color" style="width: 30%" />
+                <input
+                  type="range"
+                  id="text-modal-color-alpha"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value="1"
+                  class="alpha-slider"
+                />
+                <span id="text-modal-color-alpha-value" class="alpha-value">100%</span>
+              </div>
             </div>
             <div class="form-group">
               <label for="text-modal-border-color">Border Color</label>
-              <input type="color" id="text-modal-border-color" />
+              <div class="color-with-alpha">
+                <input type="color" id="text-modal-border-color" style="width: 30%" />
+                <input
+                  type="range"
+                  id="text-modal-border-color-alpha"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value="1"
+                  class="alpha-slider"
+                />
+                <span id="text-modal-border-color-alpha-value" class="alpha-value">100%</span>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="text-modal-opacity">Opacity</label>
-              <input type="range" id="text-modal-opacity" min="0.1" max="1" step="0.1" value="1" />
-              <span id="text-modal-opacity-value">100%</span>
+            <hr style="border-color: #30363d; margin: 12px 0;" />
+            <div class="form-group" id="tail-controls-group">
+              <label>Tail Settings</label>
+              <div class="form-group" style="margin-top: 8px;">
+                <label for="text-modal-tail-type" style="font-size: 11px;">Tail Type</label>
+                <select id="text-modal-tail-type">
+                  <option value="curved" selected>Curved (Classic)</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="thought">Thought Bubble</option>
+                  <option value="wavy">Wavy (Excited)</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-top: 8px;">
+                <label for="text-modal-tail-angle" style="font-size: 11px;">Tail Direction</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input
+                    type="range"
+                    id="text-modal-tail-angle"
+                    min="0"
+                    max="360"
+                    step="5"
+                    value="225"
+                    style="flex: 1;"
+                  />
+                  <span id="text-modal-tail-angle-value" style="min-width: 40px; font-size: 11px;">225°</span>
+                </div>
+              </div>
+              <div class="form-group" style="margin-top: 8px;">
+                <label for="text-modal-tail-length" style="font-size: 11px;">Tail Length</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input
+                    type="range"
+                    id="text-modal-tail-length"
+                    min="0.3"
+                    max="1.5"
+                    step="0.05"
+                    value="0.9"
+                    style="flex: 1;"
+                  />
+                  <span id="text-modal-tail-length-value" style="min-width: 40px; font-size: 11px;">0.9x</span>
+                </div>
+              </div>
+              <div class="form-group" style="margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 11px;">
+                  <input type="checkbox" id="text-modal-tail-auto-point" />
+                  Auto-point to first connection
+                </label>
+              </div>
             </div>
           </div>
 
@@ -410,22 +525,50 @@
           <div class="tab-content" id="text-settings-tab">
             <div class="form-group">
               <label for="text-modal-width">Width</label>
-              <input type="range" id="text-modal-width" min="60" max="400" step="10" value="120" />
+              <input
+                type="range"
+                id="text-modal-width"
+                min="60"
+                max="400"
+                step="10"
+                value="120"
+              />
               <span id="text-modal-width-value">120px</span>
             </div>
             <div class="form-group">
               <label for="text-modal-height">Height</label>
-              <input type="range" id="text-modal-height" min="30" max="200" step="5" value="60" />
+              <input
+                type="range"
+                id="text-modal-height"
+                min="30"
+                max="200"
+                step="5"
+                value="60"
+              />
               <span id="text-modal-height-value">60px</span>
             </div>
             <div class="form-group">
               <label for="text-modal-font-size">Font Size</label>
-              <input type="range" id="text-modal-font-size" min="8" max="32" step="1" value="14" />
+              <input
+                type="range"
+                id="text-modal-font-size"
+                min="8"
+                max="32"
+                step="1"
+                value="14"
+              />
               <span id="text-modal-font-size-value">14px</span>
             </div>
             <div class="form-group">
               <label for="text-modal-border-width">Border Width</label>
-              <input type="range" id="text-modal-border-width" min="0" max="5" step="0.5" value="2" />
+              <input
+                type="range"
+                id="text-modal-border-width"
+                min="0"
+                max="5"
+                step="0.5"
+                value="2"
+              />
               <span id="text-modal-border-width-value">2px</span>
             </div>
             <div class="form-group">
@@ -441,10 +584,17 @@
               <div id="text-modal-image-preview" class="image-preview">
                 <div class="image-preview-placeholder">No image selected</div>
               </div>
-              <input type="file" id="text-modal-image-upload" accept="image/*" style="display: none;" />
+              <input
+                type="file"
+                id="text-modal-image-upload"
+                accept="image/*"
+                style="display: none"
+              />
               <div class="button-group">
                 <button id="text-modal-image-select">Choose Image</button>
-                <button id="text-modal-image-remove" style="display: none;">Remove</button>
+                <button id="text-modal-image-remove" style="display: none">
+                  Remove
+                </button>
               </div>
             </div>
             <div class="form-group">
@@ -472,7 +622,14 @@
             </div>
             <div class="form-group">
               <label for="text-modal-image-size">Image Size</label>
-              <input type="range" id="text-modal-image-size" min="10" max="200" step="5" value="100" />
+              <input
+                type="range"
+                id="text-modal-image-size"
+                min="10"
+                max="200"
+                step="5"
+                value="100"
+              />
               <span id="text-modal-image-size-value">100%</span>
             </div>
           </div>

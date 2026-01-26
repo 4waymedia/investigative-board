@@ -160,8 +160,9 @@ class ModalManager {
     pmColor.value = pin.color || "#58a6ff";
     pmTextColor.value = pin.textColor || this.appState.calculateTextColor(pin.color || "#58a6ff");
 
-    // Handle text pins (bubble/rectangle shapes)
-    const isTextPin = pin.shape === "bubble" || pin.shape === "rectangle";
+    // Handle text pins (all text shapes)
+    const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
+    const isTextPin = textShapes.includes(pin.shape);
     if (isTextPin && pmTitle) {
       pmTitle.value = pin.label || ""; // Text pins use label for main text
     }

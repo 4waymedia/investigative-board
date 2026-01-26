@@ -21,7 +21,6 @@ class ToolbarManager {
     this.mainTools = config.mainTools || [
       { id: "pan", label: "Move", icon: "🖐", key: "M" },
       { id: "select", label: "Select", icon: "🔳", key: "S" },
-      { id: "text", label: "Text", icon: "📝", key: "T" },
     ];
 
     // Family tool IDs for configuration-driven logic
@@ -168,6 +167,11 @@ class ToolbarManager {
 
   // Render the tool buttons
   renderTools() {
+    if (!this.toolset) {
+      console.warn('⚠️ renderTools: toolset element not found');
+      return;
+    }
+    
     this.toolset.innerHTML = "";
 
     this.mainTools.forEach((tool) => {
@@ -193,8 +197,13 @@ class ToolbarManager {
     // Example of adding specialized action buttons (like Load)
     this.createActionButton("📁", "Load");
 
-    // Attach a single listener to the parent
-    this.toolset.onclick = (e) => this.handleToolbarClick(e);
+    // Attach a single listener to the parent (using addEventListener for reliability)
+    // Remove existing listener first to prevent duplicates
+    this.toolset.removeEventListener('click', this._toolsetClickHandler);
+    this._toolsetClickHandler = (e) => this.handleToolbarClick(e);
+    this.toolset.addEventListener('click', this._toolsetClickHandler);
+    
+    console.log(`🔧 renderTools: ${this.mainTools.length} tools rendered, click handler attached`);
   }
 
   // Helper method to keep renderTools clean
@@ -213,6 +222,7 @@ class ToolbarManager {
     if (!btn) return;
 
     const toolId = btn.dataset.toolAction;
+    console.log(`🖱️ Toolbar click: toolId=${toolId}, btn=`, btn);
 
     if (toolId) {
       this.setTool(toolId);
@@ -225,8 +235,9 @@ class ToolbarManager {
   // Update active tool UI without full re-render
   updateActiveToolUI(toolId) {
     this.toolset.querySelectorAll('.tool-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.toolId === toolId);
+      btn.classList.toggle('active', btn.dataset.toolAction === toolId);
     });
+    console.log(`🔧 Tool activated: ${toolId}`);
   }
 
   // Handle load action
@@ -240,6 +251,7 @@ class ToolbarManager {
 
   // Set the current tool
   setTool(toolId) {
+    console.log(`🔧 setTool called with: ${toolId}, previous: ${this.appState.currentTool}`);
     this.appState.currentTool = toolId;
 
     // Check if the selected tool corresponds to a known node family

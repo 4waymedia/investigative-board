@@ -226,15 +226,25 @@ function updatePinScales(pins, connections) {
 }
 
 function getPinMetrics(pin, config = {}) {
-  // SPECIAL CASE: Text pins (bubble/rectangle) use pin.shape directly
-  if (pin.shape === 'bubble' || pin.shape === 'rectangle') {
+  // SPECIAL CASE: Text pins use pin.shape directly
+  const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
+  if (textShapes.includes(pin.shape)) {
+    // Default dimensions based on shape
+    const defaultDimensions = {
+      'bubble': { width: 140, height: 70 },
+      'rectangle': { width: 120, height: 60 },
+      'text-plain': { width: 150, height: 30 },
+      'text-title': { width: 200, height: 40 }
+    };
+    const defaults = defaultDimensions[pin.shape] || { width: 120, height: 60 };
+    
     return {
       shape: pin.shape,
       baseRadius: 9,
       variant: pin.shape,
-      radius: Math.min(pin.width || 120, pin.height || 60) / 2,
-      width: pin.width || (pin.shape === 'bubble' ? 120 : 100),
-      height: pin.height || (pin.shape === 'bubble' ? 60 : 40),
+      radius: Math.min(pin.width || defaults.width, pin.height || defaults.height) / 2,
+      width: pin.width || defaults.width,
+      height: pin.height || defaults.height,
     };
   }
 

@@ -10,7 +10,6 @@ const MENU_HEIGHT = 75; // Top menu bar height (55px content + 10px top + 10px b
 const TRAY_HEIGHT = 180; // Bottom card tray height (matches CSS)
 const MIN_SCALE = 0.1; // Minimum zoom level
 const MAX_SCALE = 10; // Maximum zoom level
-const PAN_SPEED = 2; // Base pan speed multiplier (adjusted by zoom level)
 
 // ============================================================================
 // STORAGE & PERSISTENCE
@@ -118,6 +117,40 @@ const NODE_TYPES = [
     family: "area",
     variant: "square",
   },
+
+  // Text types
+  {
+    id: "text:plain",
+    label: "Plain Text",
+    icon: "📝",
+    family: "text",
+    variant: "plain",
+    shape: "text-plain", // No background, just text
+  },
+  {
+    id: "text:rectangle",
+    label: "Rectangle",
+    icon: "▭",
+    family: "text",
+    variant: "rectangle",
+    shape: "rectangle", // Rounded rectangle without tail
+  },
+  {
+    id: "text:comic",
+    label: "Comic Bubble",
+    icon: "💬",
+    family: "text",
+    variant: "comic",
+    shape: "bubble", // Speech bubble with tail
+  },
+  {
+    id: "text:title",
+    label: "Title",
+    icon: "📰",
+    family: "text",
+    variant: "title",
+    shape: "text-title", // Large title text, no container
+  },
 ];
 
 // ============================================================================
@@ -163,6 +196,12 @@ const PIN_BASES = {
   // Area types
   "area:circle": { shape: "area-circle", baseRadius: 12 },
   "area:square": { shape: "area-rect", baseRadius: 12 },
+
+  // Text types - shape property matches NODE_TYPES shape
+  "text:plain": { shape: "text-plain", baseRadius: 12, defaultWidth: 150, defaultHeight: 30 },
+  "text:rectangle": { shape: "rectangle", baseRadius: 12, defaultWidth: 120, defaultHeight: 60 },
+  "text:comic": { shape: "bubble", baseRadius: 12, defaultWidth: 140, defaultHeight: 70 },
+  "text:title": { shape: "text-title", baseRadius: 16, defaultWidth: 200, defaultHeight: 40 },
 };
 
 // ============================================================================
@@ -230,7 +269,6 @@ window.MENU_HEIGHT = MENU_HEIGHT;
 window.TRAY_HEIGHT = TRAY_HEIGHT;
 window.MIN_SCALE = MIN_SCALE;
 window.MAX_SCALE = MAX_SCALE;
-window.PAN_SPEED = PAN_SPEED;
 window.STORAGE_KEY = STORAGE_KEY;
 window.MAX_HISTORY = MAX_HISTORY;
 window.DEFAULT_COLORS = DEFAULT_COLORS;

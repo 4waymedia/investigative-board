@@ -40,9 +40,16 @@ function openTextModal({ id = null, x = 0, y = 0, initialText = '', width = 200,
   const typeSelect = document.getElementById('text-modal-type');
   const tailTypeSelect = document.getElementById('text-modal-tail-type');
   const bubbleColorInput = document.getElementById('text-modal-color');
-  const textColorInput = document.getElementById('text-modal-text-color');
+  const bubbleColorAlpha = document.getElementById('text-modal-color-alpha');
+  const titleColorInput = document.getElementById('text-modal-title-color');
+  const titleColorAlpha = document.getElementById('text-modal-title-color-alpha');
+  const descriptionColorInput = document.getElementById('text-modal-description-color');
+  const descriptionColorAlpha = document.getElementById('text-modal-description-color-alpha');
   const borderColorInput = document.getElementById('text-modal-border-color');
-  const opacitySlider = document.getElementById('text-modal-opacity');
+  const borderColorAlpha = document.getElementById('text-modal-border-color-alpha');
+  const tailAngleSlider = document.getElementById('text-modal-tail-angle');
+  const tailLengthSlider = document.getElementById('text-modal-tail-length');
+  const tailAutoPointCheckbox = document.getElementById('text-modal-tail-auto-point');
   const widthSlider = document.getElementById('text-modal-width');
   const heightSlider = document.getElementById('text-modal-height');
   const fontSizeSlider = document.getElementById('text-modal-font-size');
@@ -54,16 +61,52 @@ function openTextModal({ id = null, x = 0, y = 0, initialText = '', width = 200,
   // If editing, populate with current values
   if (isEditing && window.app && window.app.appState) {
     const pin = window.app.appState.pins.find(p => p.id === currentEditingId);
+    console.log(`📝 Opening modal for edit, looking for pin with id: ${currentEditingId}`);
+    console.log(`📝 Found pin:`, pin ? JSON.stringify(pin, null, 2) : 'NOT FOUND');
     if (pin) {
+      console.log(`📝 Populating modal with pin values:`, {
+        label: pin.label,
+        description: pin.description,
+        shape: pin.shape,
+        tailType: pin.tailType,
+        color: pin.color,
+        textColor: pin.textColor
+      });
       if (input) input.value = pin.label || ''; // Title field
       if (descriptionInput) descriptionInput.value = pin.description || ''; // Description field
       if (dateInput) dateInput.value = pin.date || '';
-      if (typeSelect) typeSelect.value = pin.shape || 'bubble';
-      if (tailTypeSelect) tailTypeSelect.value = pin.tailType || 'triangle';
+      // Map shape to modal value
+      const shapeToModalValue = {
+        'bubble': 'bubble',
+        'rectangle': 'rectangle', 
+        'text-plain': 'text-plain',
+        'text-title': 'text-title'
+      };
+      if (typeSelect) typeSelect.value = shapeToModalValue[pin.shape] || 'bubble';
+      if (tailTypeSelect) tailTypeSelect.value = pin.tailType || 'curved';
       if (bubbleColorInput) bubbleColorInput.value = pin.color || '#ffffff';
-      if (textColorInput) textColorInput.value = pin.textColor || '#000000';
+      if (bubbleColorAlpha) bubbleColorAlpha.value = pin.colorAlpha !== undefined ? pin.colorAlpha : 1;
+      // Title and description colors (default to same value for backwards compatibility)
+      const defaultTextColor = pin.textColor || '#000000';
+      if (titleColorInput) titleColorInput.value = pin.titleColor || defaultTextColor;
+      if (titleColorAlpha) titleColorAlpha.value = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : (pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1);
+      if (descriptionColorInput) descriptionColorInput.value = pin.descriptionColor || defaultTextColor;
+      if (descriptionColorAlpha) descriptionColorAlpha.value = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : (pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1);
       if (borderColorInput) borderColorInput.value = pin.borderColor || '#000000';
-      if (opacitySlider) opacitySlider.value = pin.opacity || 1;
+      if (borderColorAlpha) borderColorAlpha.value = pin.borderColorAlpha !== undefined ? pin.borderColorAlpha : 1;
+      // Tail settings
+      const tailPos = pin.tailPosition || { angle: 225, distance: 0.9 };
+      if (tailAngleSlider) {
+        tailAngleSlider.value = tailPos.angle || 225;
+        const angleDisplay = document.getElementById('text-modal-tail-angle-value');
+        if (angleDisplay) angleDisplay.textContent = (tailPos.angle || 225) + '°';
+      }
+      if (tailLengthSlider) {
+        tailLengthSlider.value = tailPos.distance || 0.9;
+        const lengthDisplay = document.getElementById('text-modal-tail-length-value');
+        if (lengthDisplay) lengthDisplay.textContent = (tailPos.distance || 0.9) + 'x';
+      }
+      if (tailAutoPointCheckbox) tailAutoPointCheckbox.checked = pin.tailAutoPoint || false;
       if (widthSlider) widthSlider.value = pin.width || 120;
       if (heightSlider) heightSlider.value = pin.height || 60;
       if (fontSizeSlider) fontSizeSlider.value = pin.fontSize || 14;
@@ -93,11 +136,13 @@ function openTextModal({ id = null, x = 0, y = 0, initialText = '', width = 200,
     if (descriptionInput) descriptionInput.value = initialText || ''; // Description gets the initial text
     if (dateInput) dateInput.value = '';
     if (typeSelect) typeSelect.value = 'bubble';
-    if (tailTypeSelect) tailTypeSelect.value = 'triangle';
+    if (tailTypeSelect) tailTypeSelect.value = 'curved';
     if (bubbleColorInput) bubbleColorInput.value = '#ffffff';
+    if (bubbleColorAlpha) bubbleColorAlpha.value = 1;
     if (textColorInput) textColorInput.value = '#000000';
+    if (textColorAlpha) textColorAlpha.value = 1;
     if (borderColorInput) borderColorInput.value = '#000000';
-    if (opacitySlider) opacitySlider.value = 1;
+    if (borderColorAlpha) borderColorAlpha.value = 1;
     if (widthSlider) widthSlider.value = 120;
     if (heightSlider) heightSlider.value = 60;
     if (fontSizeSlider) fontSizeSlider.value = 14;
@@ -115,6 +160,12 @@ function openTextModal({ id = null, x = 0, y = 0, initialText = '', width = 200,
 
   // Set up event handlers
   setupTextModalHandlers();
+
+  // Set up real-time updates for editing mode
+  if (isEditing && window.setupTextModalRealTimeUpdates) {
+    console.log('📝 Setting up real-time updates for text modal');
+    window.setupTextModalRealTimeUpdates();
+  }
 
   console.log(`${isEditing ? 'Edit' : 'New'} text modal opened for text ID: ${id}`);
 }
@@ -212,6 +263,22 @@ function setupTextModalHandlers() {
       }
     });
   });
+  
+  // Show/hide tail controls based on shape selection
+  const typeSelect = document.getElementById('text-modal-type');
+  const tailControlsGroup = document.getElementById('tail-controls-group');
+  
+  const updateTailTypeVisibility = () => {
+    if (tailControlsGroup && typeSelect) {
+      // Only show tail options for bubble shape
+      tailControlsGroup.style.display = typeSelect.value === 'bubble' ? 'block' : 'none';
+    }
+  };
+  
+  if (typeSelect) {
+    typeSelect.addEventListener('change', updateTailTypeVisibility);
+    updateTailTypeVisibility(); // Initial state
+  }
 
   // Slider value displays
   const setupSliderDisplay = (sliderId, displayId, suffix = '') => {
@@ -232,12 +299,321 @@ function setupTextModalHandlers() {
     }
   };
 
-  setupSliderDisplay('text-modal-opacity', 'text-modal-opacity-value', '%');
   setupSliderDisplay('text-modal-width', 'text-modal-width-value', 'px');
   setupSliderDisplay('text-modal-height', 'text-modal-height-value', 'px');
   setupSliderDisplay('text-modal-font-size', 'text-modal-font-size-value', 'px');
   setupSliderDisplay('text-modal-border-width', 'text-modal-border-width-value', 'px');
   setupSliderDisplay('text-modal-image-size', 'text-modal-image-size-value', '%');
+
+  // Alpha slider displays
+  const setupAlphaDisplay = (sliderId, displayId) => {
+    const slider = document.getElementById(sliderId);
+    const display = document.getElementById(displayId);
+    if (slider && display) {
+      const updateDisplay = () => {
+        display.textContent = Math.round(slider.value * 100) + '%';
+      };
+      slider.addEventListener('input', updateDisplay);
+      updateDisplay(); // Initial value
+    }
+  };
+
+  setupAlphaDisplay('text-modal-color-alpha', 'text-modal-color-alpha-value');
+  setupAlphaDisplay('text-modal-title-color-alpha', 'text-modal-title-color-alpha-value');
+  setupAlphaDisplay('text-modal-description-color-alpha', 'text-modal-description-color-alpha-value');
+  setupAlphaDisplay('text-modal-border-color-alpha', 'text-modal-border-color-alpha-value');
+
+  // Real-time update handlers - update the pin as user makes changes
+  const setupRealTimeUpdate = () => {
+    console.log('🔧 setupRealTimeUpdate called, currentEditingId:', currentEditingId);
+    if (!currentEditingId || !window.app || !window.app.appState) {
+      console.log('🔧 Early return - missing required objects');
+      return;
+    }
+    
+    const pin = window.app.appState.pins.find(p => p.id === currentEditingId);
+    if (!pin) {
+      console.log('🔧 Early return - pin not found');
+      return;
+    }
+    console.log('🔧 Found pin for real-time updates:', pin.id, 'current colorAlpha:', pin.colorAlpha);
+
+    // Get all form elements
+    const input = document.getElementById('text-modal-input');
+    const descriptionInput = document.getElementById('text-modal-description');
+    const typeSelect = document.getElementById('text-modal-type');
+    const tailTypeSelect = document.getElementById('text-modal-tail-type');
+    const bubbleColorInput = document.getElementById('text-modal-color');
+    const bubbleColorAlpha = document.getElementById('text-modal-color-alpha');
+    const textColorInput = document.getElementById('text-modal-text-color');
+    const textColorAlpha = document.getElementById('text-modal-text-color-alpha');
+    const borderColorInput = document.getElementById('text-modal-border-color');
+    const borderColorAlpha = document.getElementById('text-modal-border-color-alpha');
+    const widthSlider = document.getElementById('text-modal-width');
+    const heightSlider = document.getElementById('text-modal-height');
+    
+    console.log('🔧 bubbleColorAlpha element found:', !!bubbleColorAlpha);
+    const fontSizeSlider = document.getElementById('text-modal-font-size');
+    const borderWidthSlider = document.getElementById('text-modal-border-width');
+    const dropShadowCheckbox = document.getElementById('text-modal-drop-shadow');
+
+    // Helper to update and render
+    const updateAndRender = () => {
+      if (window.app.render) window.app.render();
+    };
+
+    // Title (label) - shown below bubble
+    if (input) {
+      input.addEventListener('input', () => {
+        pin.label = input.value.trim();
+        updateAndRender();
+      });
+    }
+
+    // Description - shown inside bubble (with auto-sizing)
+    if (descriptionInput) {
+      descriptionInput.addEventListener('input', () => {
+        pin.description = descriptionInput.value.trim();
+        
+        // Auto-size the bubble to fit the text
+        if (window.calculateTextDimensions && pin.description) {
+          const dims = window.calculateTextDimensions(
+            pin.description, 
+            pin.fontSize || 14,
+            'system-ui',
+            16, // padding
+            60, // minWidth
+            30, // minHeight
+            300 // maxWidth
+          );
+          pin.width = dims.width;
+          pin.height = dims.height;
+          
+          // Update the sliders in the modal to reflect new size
+          if (widthSlider) {
+            widthSlider.value = dims.width;
+            const widthDisplay = document.getElementById('text-modal-width-value');
+            if (widthDisplay) widthDisplay.textContent = dims.width + 'px';
+          }
+          if (heightSlider) {
+            heightSlider.value = dims.height;
+            const heightDisplay = document.getElementById('text-modal-height-value');
+            if (heightDisplay) heightDisplay.textContent = dims.height + 'px';
+          }
+        }
+        
+        updateAndRender();
+      });
+    }
+
+    // Shape type
+    const tailControlsGroup = document.getElementById('tail-controls-group');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', () => {
+        const oldShape = pin.shape;
+        pin.shape = typeSelect.value;
+        
+        // Handle tail type based on shape
+        if (pin.shape === 'bubble') {
+          // Switching TO bubble - set default tail if none
+          if (!pin.tailType || pin.tailType === 'none') {
+            pin.tailType = 'curved';
+            if (tailTypeSelect) tailTypeSelect.value = 'curved';
+          }
+          // Show tail controls group
+          if (tailControlsGroup) tailControlsGroup.style.display = 'block';
+        } else {
+          // Switching FROM bubble to another shape - hide tail
+          pin.tailType = 'none';
+          if (tailTypeSelect) tailTypeSelect.value = 'none';
+          // Hide tail controls group
+          if (tailControlsGroup) tailControlsGroup.style.display = 'none';
+        }
+        
+        console.log(`📝 Shape changed: "${oldShape}" → "${pin.shape}", tailType: "${pin.tailType}"`);
+        updateAndRender();
+      });
+    }
+
+    // Tail type
+    if (tailTypeSelect) {
+      tailTypeSelect.addEventListener('change', () => {
+        pin.tailType = tailTypeSelect.value;
+        console.log(`📝 Real-time tail type update: "${pin.tailType}"`);
+        updateAndRender();
+      });
+    }
+
+    // Tail angle (direction)
+    const tailAngleSlider = document.getElementById('text-modal-tail-angle');
+    if (tailAngleSlider) {
+      tailAngleSlider.addEventListener('input', () => {
+        if (!pin.tailPosition) pin.tailPosition = { angle: 225, distance: 0.9 };
+        pin.tailPosition.angle = parseInt(tailAngleSlider.value);
+        const angleDisplay = document.getElementById('text-modal-tail-angle-value');
+        if (angleDisplay) angleDisplay.textContent = pin.tailPosition.angle + '°';
+        updateAndRender();
+      });
+    }
+
+    // Tail length (distance)
+    const tailLengthSlider = document.getElementById('text-modal-tail-length');
+    if (tailLengthSlider) {
+      tailLengthSlider.addEventListener('input', () => {
+        if (!pin.tailPosition) pin.tailPosition = { angle: 225, distance: 0.9 };
+        pin.tailPosition.distance = parseFloat(tailLengthSlider.value);
+        const lengthDisplay = document.getElementById('text-modal-tail-length-value');
+        if (lengthDisplay) lengthDisplay.textContent = pin.tailPosition.distance + 'x';
+        updateAndRender();
+      });
+    }
+
+    // Tail auto-point to connection
+    const tailAutoPointCheckbox = document.getElementById('text-modal-tail-auto-point');
+    if (tailAutoPointCheckbox) {
+      tailAutoPointCheckbox.addEventListener('change', () => {
+        pin.tailAutoPoint = tailAutoPointCheckbox.checked;
+        updateAndRender();
+      });
+    }
+
+    // Bubble color
+    if (bubbleColorInput) {
+      bubbleColorInput.addEventListener('input', () => {
+        pin.color = bubbleColorInput.value;
+        updateAndRender();
+      });
+    }
+
+    // Bubble color alpha
+    if (bubbleColorAlpha) {
+      bubbleColorAlpha.addEventListener('input', () => {
+        const newAlpha = parseFloat(bubbleColorAlpha.value);
+        pin.colorAlpha = newAlpha;
+        updateAndRender();
+      });
+    }
+
+    // Title color
+    const titleColorInput = document.getElementById('text-modal-title-color');
+    if (titleColorInput) {
+      titleColorInput.addEventListener('input', () => {
+        pin.titleColor = titleColorInput.value;
+        updateAndRender();
+      });
+    }
+
+    // Title color alpha
+    const titleColorAlpha = document.getElementById('text-modal-title-color-alpha');
+    if (titleColorAlpha) {
+      titleColorAlpha.addEventListener('input', () => {
+        pin.titleColorAlpha = parseFloat(titleColorAlpha.value);
+        updateAndRender();
+      });
+    }
+
+    // Description color
+    const descriptionColorInput = document.getElementById('text-modal-description-color');
+    if (descriptionColorInput) {
+      descriptionColorInput.addEventListener('input', () => {
+        pin.descriptionColor = descriptionColorInput.value;
+        updateAndRender();
+      });
+    }
+
+    // Description color alpha
+    const descriptionColorAlpha = document.getElementById('text-modal-description-color-alpha');
+    if (descriptionColorAlpha) {
+      descriptionColorAlpha.addEventListener('input', () => {
+        pin.descriptionColorAlpha = parseFloat(descriptionColorAlpha.value);
+        updateAndRender();
+      });
+    }
+
+    // Border color
+    if (borderColorInput) {
+      borderColorInput.addEventListener('input', () => {
+        pin.borderColor = borderColorInput.value;
+        updateAndRender();
+      });
+    }
+
+    // Border color alpha
+    if (borderColorAlpha) {
+      borderColorAlpha.addEventListener('input', () => {
+        pin.borderColorAlpha = parseFloat(borderColorAlpha.value);
+        updateAndRender();
+      });
+    }
+
+    // Width
+    if (widthSlider) {
+      widthSlider.addEventListener('input', () => {
+        pin.width = parseInt(widthSlider.value);
+        updateAndRender();
+      });
+    }
+
+    // Height
+    if (heightSlider) {
+      heightSlider.addEventListener('input', () => {
+        pin.height = parseInt(heightSlider.value);
+        updateAndRender();
+      });
+    }
+
+    // Font size (with auto-resize)
+    if (fontSizeSlider) {
+      fontSizeSlider.addEventListener('input', () => {
+        pin.fontSize = parseInt(fontSizeSlider.value);
+        
+        // Auto-resize bubble when font size changes
+        if (window.calculateTextDimensions && pin.description) {
+          const dims = window.calculateTextDimensions(
+            pin.description,
+            pin.fontSize,
+            'system-ui',
+            16, 60, 30, 300
+          );
+          pin.width = dims.width;
+          pin.height = dims.height;
+          
+          // Update sliders
+          if (widthSlider) {
+            widthSlider.value = dims.width;
+            const widthDisplay = document.getElementById('text-modal-width-value');
+            if (widthDisplay) widthDisplay.textContent = dims.width + 'px';
+          }
+          if (heightSlider) {
+            heightSlider.value = dims.height;
+            const heightDisplay = document.getElementById('text-modal-height-value');
+            if (heightDisplay) heightDisplay.textContent = dims.height + 'px';
+          }
+        }
+        
+        updateAndRender();
+      });
+    }
+
+    // Border width
+    if (borderWidthSlider) {
+      borderWidthSlider.addEventListener('input', () => {
+        pin.borderWidth = parseFloat(borderWidthSlider.value);
+        updateAndRender();
+      });
+    }
+
+    // Drop shadow
+    if (dropShadowCheckbox) {
+      dropShadowCheckbox.addEventListener('change', () => {
+        pin.dropShadow = dropShadowCheckbox.checked;
+        updateAndRender();
+      });
+    }
+  };
+
+  // Store the setup function to be called when modal opens for editing
+  window.setupTextModalRealTimeUpdates = setupRealTimeUpdate;
 
   // Image upload handling
   const imageSelectBtn = document.getElementById('text-modal-image-select');
@@ -345,6 +721,7 @@ function setupTextModalHandlers() {
  */
 function handleTextSave() {
   const isEditing = currentEditingId !== null;
+  console.log(`📝 handleTextSave called, isEditing: ${isEditing}, currentEditingId: ${currentEditingId}`);
 
   // Get values from modal inputs
   const input = document.getElementById('text-modal-input');
@@ -353,9 +730,16 @@ function handleTextSave() {
   const typeSelect = document.getElementById('text-modal-type');
   const tailTypeSelect = document.getElementById('text-modal-tail-type');
   const bubbleColorInput = document.getElementById('text-modal-color');
-  const textColorInput = document.getElementById('text-modal-text-color');
+  const bubbleColorAlphaInput = document.getElementById('text-modal-color-alpha');
+  const titleColorInput = document.getElementById('text-modal-title-color');
+  const titleColorAlphaInput = document.getElementById('text-modal-title-color-alpha');
+  const descriptionColorInput = document.getElementById('text-modal-description-color');
+  const descriptionColorAlphaInput = document.getElementById('text-modal-description-color-alpha');
   const borderColorInput = document.getElementById('text-modal-border-color');
-  const opacitySlider = document.getElementById('text-modal-opacity');
+  const borderColorAlphaInput = document.getElementById('text-modal-border-color-alpha');
+  const tailAngleSlider = document.getElementById('text-modal-tail-angle');
+  const tailLengthSlider = document.getElementById('text-modal-tail-length');
+  const tailAutoPointCheckbox = document.getElementById('text-modal-tail-auto-point');
   const widthSlider = document.getElementById('text-modal-width');
   const heightSlider = document.getElementById('text-modal-height');
   const fontSizeSlider = document.getElementById('text-modal-font-size');
@@ -366,18 +750,36 @@ function handleTextSave() {
   const description = descriptionInput ? descriptionInput.value.trim() : ''; // Description (inside bubble)
   const date = dateInput ? dateInput.value : '';
   const shape = typeSelect ? typeSelect.value : 'bubble';
-  const tailType = tailTypeSelect ? tailTypeSelect.value : 'triangle';
+  // Only set tail type for bubble shapes
+  const tailType = (shape === 'bubble' && tailTypeSelect) ? tailTypeSelect.value : 'none';
   const bubbleColor = bubbleColorInput ? bubbleColorInput.value : '#ffffff';
-  const textColor = textColorInput ? textColorInput.value : '#000000';
+  const bubbleColorAlpha = bubbleColorAlphaInput ? parseFloat(bubbleColorAlphaInput.value) : 1;
+  const titleColor = titleColorInput ? titleColorInput.value : '#000000';
+  const titleColorAlpha = titleColorAlphaInput ? parseFloat(titleColorAlphaInput.value) : 1;
+  const descriptionColor = descriptionColorInput ? descriptionColorInput.value : '#000000';
+  const descriptionColorAlpha = descriptionColorAlphaInput ? parseFloat(descriptionColorAlphaInput.value) : 1;
   const borderColor = borderColorInput ? borderColorInput.value : '#000000';
-  const opacity = opacitySlider ? parseFloat(opacitySlider.value) : 1;
+  const borderColorAlpha = borderColorAlphaInput ? parseFloat(borderColorAlphaInput.value) : 1;
+  // Tail position settings
+  const tailAngle = tailAngleSlider ? parseInt(tailAngleSlider.value) : 225;
+  const tailLength = tailLengthSlider ? parseFloat(tailLengthSlider.value) : 0.9;
+  const tailAutoPoint = tailAutoPointCheckbox ? tailAutoPointCheckbox.checked : false;
   const width = widthSlider ? parseInt(widthSlider.value) : 120;
   const height = heightSlider ? parseInt(heightSlider.value) : 60;
   const fontSize = fontSizeSlider ? parseInt(fontSizeSlider.value) : 14;
   const borderWidth = borderWidthSlider ? parseFloat(borderWidthSlider.value) : 2;
   const dropShadow = dropShadowCheckbox ? dropShadowCheckbox.checked : false;
 
-  console.log(`💾 Saving text bubble: title="${textValue}", description="${description}", shape="${shape}"`);
+  console.log(`💾 Saving text pin:`, {
+    title: textValue,
+    description: description,
+    shape: shape,
+    tailType: tailType,
+    tailAngle: tailAngle,
+    tailLength: tailLength,
+    titleColor: titleColor,
+    descriptionColor: descriptionColor
+  });
 
   if (isEditing) {
     console.log(`Updating existing text pin ${currentEditingId}`);
@@ -386,21 +788,30 @@ function handleTextSave() {
     if (window.app && window.app.appState) {
       const pin = window.app.appState.pins.find(p => p.id === currentEditingId);
       if (pin) {
-        console.log(`🔄 Updating existing pin ${currentEditingId}: label="${textValue}", description="${description}"`);
+        console.log(`🔄 Pin BEFORE update:`, JSON.stringify(pin, null, 2));
+        
         pin.label = textValue; // Title (shown below bubble)
         pin.description = description; // Description (shown inside bubble)
         pin.date = date;
         pin.shape = shape;
         pin.tailType = tailType;
+        pin.tailPosition = { angle: tailAngle, distance: tailLength };
+        pin.tailAutoPoint = tailAutoPoint;
         pin.color = bubbleColor;
-        pin.textColor = textColor;
+        pin.colorAlpha = bubbleColorAlpha;
+        pin.titleColor = titleColor;
+        pin.titleColorAlpha = titleColorAlpha;
+        pin.descriptionColor = descriptionColor;
+        pin.descriptionColorAlpha = descriptionColorAlpha;
         pin.borderColor = borderColor;
-        pin.opacity = opacity;
+        pin.borderColorAlpha = borderColorAlpha;
         pin.width = width;
         pin.height = height;
         pin.fontSize = fontSize;
         pin.borderWidth = borderWidth;
         pin.dropShadow = dropShadow;
+        
+        console.log(`🔄 Pin AFTER update:`, JSON.stringify(pin, null, 2));
 
         // Handle image data
         if (currentImageData) {

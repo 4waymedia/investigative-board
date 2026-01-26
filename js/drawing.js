@@ -23,6 +23,103 @@ const DRAW_PHASES = {
   DEBUG: "debug", // optional overlay for development
 };
 
+// Helper function to convert hex color with alpha to rgba
+function hexToRgba(hex, alpha = 1) {
+  // Handle undefined/null hex
+  if (!hex) hex = '#ffffff';
+  
+  // Remove # if present
+  hex = hex.replace('#', '');
+  
+  // Handle short hex (e.g., "fff" -> "ffffff")
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  
+  // Parse hex values
+  const r = parseInt(hex.substring(0, 2), 16) || 0;
+  const g = parseInt(hex.substring(2, 4), 16) || 0;
+  const b = parseInt(hex.substring(4, 6), 16) || 0;
+  
+  // Ensure alpha is a valid number between 0 and 1
+  const a = (typeof alpha === 'number' && !isNaN(alpha)) ? Math.max(0, Math.min(1, alpha)) : 1;
+  
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+// Make helper globally available
+window.hexToRgba = hexToRgba;
+
+/**
+ * Calculate required dimensions for text content
+ * @param {string} text - The text content
+ * @param {number} fontSize - Font size in pixels
+ * @param {string} fontFamily - Font family (default: system-ui)
+ * @param {number} padding - Padding around text (default: 16)
+ * @param {number} minWidth - Minimum width (default: 60)
+ * @param {number} minHeight - Minimum height (default: 30)
+ * @param {number} maxWidth - Maximum width before wrapping (default: 300)
+ * @returns {Object} { width, height, lines }
+ */
+function calculateTextDimensions(text, fontSize = 14, fontFamily = 'system-ui', padding = 16, minWidth = 60, minHeight = 30, maxWidth = 300) {
+  if (!text) {
+    return { width: minWidth, height: minHeight, lines: [] };
+  }
+
+  // Create a temporary canvas for measuring
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${fontSize}px ${fontFamily}`;
+
+  // Split text into lines (respect existing newlines)
+  const paragraphs = text.split('\n');
+  const lines = [];
+  let maxLineWidth = 0;
+
+  // Word wrap each paragraph
+  paragraphs.forEach(paragraph => {
+    if (!paragraph.trim()) {
+      lines.push(''); // Empty line
+      return;
+    }
+
+    const words = paragraph.split(' ');
+    let currentLine = '';
+
+    words.forEach(word => {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const metrics = ctx.measureText(testLine);
+      
+      if (metrics.width > maxWidth - padding * 2 && currentLine) {
+        // Line is too long, start a new line
+        lines.push(currentLine);
+        maxLineWidth = Math.max(maxLineWidth, ctx.measureText(currentLine).width);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    });
+
+    // Don't forget the last line
+    if (currentLine) {
+      lines.push(currentLine);
+      maxLineWidth = Math.max(maxLineWidth, ctx.measureText(currentLine).width);
+    }
+  });
+
+  // Calculate dimensions
+  const lineHeight = fontSize * 1.3;
+  const textHeight = lines.length * lineHeight;
+  
+  const width = Math.max(minWidth, Math.min(maxWidth, maxLineWidth + padding * 2));
+  const height = Math.max(minHeight, textHeight + padding * 1.5);
+
+  return { width: Math.ceil(width), height: Math.ceil(height), lines };
+}
+
+// Make globally available
+window.calculateTextDimensions = calculateTextDimensions;
+
 // ── Base shape definitions ─────────────────────────────────────────────
 const baseShapes = {
   circle: {
@@ -215,16 +312,17 @@ function registerShape(shapeName, config) {
         },
       };
     } else {
-      // Full custom implementation
+      // Full custom implementation - check both flat (drawBackground) and nested (drawPhase.background) formats
+      const dp = config.drawPhase || {};
       rendererConfig = {
         getMetrics: config.getMetrics || defaultGetMetrics,
         drawPhase: {
-          shadow: config.drawShadow || defaultDrawShadow,
-          background: config.drawBackground || defaultDrawBackground,
-          main: config.drawMain || defaultDrawMain,
-          decoration: config.drawDecoration || (() => {}),
-          selection: config.drawSelection || defaultDrawSelection,
-          label: config.drawLabel || defaultDrawLabel,
+          shadow: dp.shadow || config.drawShadow || defaultDrawShadow,
+          background: dp.background || config.drawBackground || defaultDrawBackground,
+          main: dp.main || config.drawMain || defaultDrawMain,
+          decoration: dp.decoration || config.drawDecoration || (() => {}),
+          selection: dp.selection || config.drawSelection || defaultDrawSelection,
+          label: dp.label || config.drawLabel || defaultDrawLabel,
         },
       };
     }
@@ -1264,8 +1362,11 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
       }
 
       ctx.restore();
-    } catch (error) {}
+    } catch (error) {
+      console.error(`❌ Error drawing shape "${mergedMetrics.shape}":`, error);
+    }
   } else {
+    console.warn(`⚠️ No renderer found for shape "${mergedMetrics.shape}"`);
   }
 }
 
@@ -1692,7 +1793,27 @@ function drawTextElements(
 
 // Bubble tail drawing function
 function drawBubbleTail(ctx, pin, scr, width, height, tailType) {
-  const tailPos = pin.tailPosition || { angle: 270, distance: 0.8 }; // Default: bottom
+  let tailPos = pin.tailPosition || { angle: 270, distance: 0.8 }; // Default: bottom
+  
+  // Auto-point to first connection if enabled
+  if (pin.tailAutoPoint && window.app && window.app.appState) {
+    const connections = window.app.appState.document.connections || [];
+    const firstConnection = connections.find(c => c.from === pin.id || c.to === pin.id);
+    
+    if (firstConnection) {
+      const otherPinId = firstConnection.from === pin.id ? firstConnection.to : firstConnection.from;
+      const otherPin = window.app.appState.pins.find(p => p.id === otherPinId);
+      
+      if (otherPin) {
+        const dx = otherPin.x - pin.x;
+        const dy = otherPin.y - pin.y;
+        const angleRad = Math.atan2(dy, dx);
+        const angleDeg = (angleRad * 180) / Math.PI;
+        tailPos = { angle: angleDeg, distance: tailPos.distance };
+      }
+    }
+  }
+  
   const tailAngle = (tailPos.angle * Math.PI) / 180; // Convert degrees to radians
   const tailDistance = tailPos.distance;
 
@@ -1812,16 +1933,166 @@ function drawCurvedArrowTail(ctx, attachX, attachY, angle, length) {
   ctx.stroke();
 }
 
+/**
+ * Draw a comic book style speech bubble tail
+ * This creates a smooth, curved tail that looks natural coming from an oval bubble
+ */
+function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth) {
+  let tailPos = pin.tailPosition || { angle: 225, distance: 0.9 }; // Default: bottom-left
+  
+  // Auto-point to first connection if enabled
+  if (pin.tailAutoPoint && window.app && window.app.appState) {
+    const connections = window.app.appState.document.connections || [];
+    const firstConnection = connections.find(c => c.from === pin.id || c.to === pin.id);
+    
+    if (firstConnection) {
+      const otherPinId = firstConnection.from === pin.id ? firstConnection.to : firstConnection.from;
+      const otherPin = window.app.appState.pins.find(p => p.id === otherPinId);
+      
+      if (otherPin) {
+        // Calculate angle from this pin to the connected pin
+        const dx = otherPin.x - pin.x;
+        const dy = otherPin.y - pin.y;
+        const angleRad = Math.atan2(dy, dx);
+        const angleDeg = (angleRad * 180) / Math.PI;
+        tailPos = { angle: angleDeg, distance: tailPos.distance };
+      }
+    }
+  }
+  
+  const tailAngle = (tailPos.angle * Math.PI) / 180;
+  
+  // Calculate where the tail attaches to the ellipse
+  // For an ellipse, we need to find the point on the perimeter at the given angle
+  const rx = width / 2;  // x radius
+  const ry = height / 2; // y radius
+  
+  // Point on ellipse perimeter
+  const attachX = scr.x + rx * Math.cos(tailAngle) * 0.85;
+  const attachY = scr.y + ry * Math.sin(tailAngle) * 0.85;
+  
+  // Tail length based on bubble size
+  const tailLength = Math.min(width, height) * 0.5;
+  
+  // Tip of the tail (pointing away from bubble)
+  const tipX = scr.x + rx * Math.cos(tailAngle) * 1.8;
+  const tipY = scr.y + ry * Math.sin(tailAngle) * 1.8;
+  
+  // Width of tail at base
+  const baseWidth = Math.min(width, height) * 0.25;
+  
+  // Calculate perpendicular direction for tail width
+  const perpAngle = tailAngle + Math.PI / 2;
+  
+  ctx.save();
+  ctx.fillStyle = hexToRgba(fillColor, fillAlpha);
+  ctx.strokeStyle = hexToRgba(strokeColor, strokeAlpha);
+  ctx.lineWidth = strokeWidth;
+  
+  switch (tailType) {
+    case 'curved':
+      // Classic comic book curved tail
+      const cp1x = attachX + Math.cos(tailAngle) * tailLength * 0.3 + Math.cos(perpAngle) * baseWidth * 0.5;
+      const cp1y = attachY + Math.sin(tailAngle) * tailLength * 0.3 + Math.sin(perpAngle) * baseWidth * 0.5;
+      const cp2x = attachX + Math.cos(tailAngle) * tailLength * 0.3 - Math.cos(perpAngle) * baseWidth * 0.3;
+      const cp2y = attachY + Math.sin(tailAngle) * tailLength * 0.3 - Math.sin(perpAngle) * baseWidth * 0.3;
+      
+      ctx.beginPath();
+      // Left side of tail base
+      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.4, attachY + Math.sin(perpAngle) * baseWidth * 0.4);
+      // Curve to tip
+      ctx.quadraticCurveTo(cp1x, cp1y, tipX, tipY);
+      // Curve back to right side of tail base
+      ctx.quadraticCurveTo(cp2x, cp2y, attachX - Math.cos(perpAngle) * baseWidth * 0.4, attachY - Math.sin(perpAngle) * baseWidth * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+      
+    case 'triangle':
+      // Simple triangular tail
+      ctx.beginPath();
+      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.4, attachY + Math.sin(perpAngle) * baseWidth * 0.4);
+      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(attachX - Math.cos(perpAngle) * baseWidth * 0.4, attachY - Math.sin(perpAngle) * baseWidth * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+      
+    case 'thought':
+      // Thought bubble style (small circles leading away)
+      const numCircles = 3;
+      for (let i = 0; i < numCircles; i++) {
+        const t = (i + 1) / (numCircles + 1);
+        const cx = attachX + (tipX - attachX) * t;
+        const cy = attachY + (tipY - attachY) * t;
+        const radius = baseWidth * 0.3 * (1 - t * 0.5);
+        
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      break;
+      
+    case 'wavy':
+      // Wavy/squiggly tail for excited speech
+      ctx.beginPath();
+      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.3, attachY + Math.sin(perpAngle) * baseWidth * 0.3);
+      
+      const segments = 4;
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const x = attachX + (tipX - attachX) * t;
+        const y = attachY + (tipY - attachY) * t;
+        const wave = Math.sin(t * Math.PI * 2) * baseWidth * 0.2 * (1 - t);
+        const wx = x + Math.cos(perpAngle) * wave;
+        const wy = y + Math.sin(perpAngle) * wave;
+        
+        if (i === 0) {
+          ctx.lineTo(wx, wy);
+        } else {
+          ctx.lineTo(wx, wy);
+        }
+      }
+      
+      // Come back on the other side
+      for (let i = segments; i >= 0; i--) {
+        const t = i / segments;
+        const x = attachX + (tipX - attachX) * t;
+        const y = attachY + (tipY - attachY) * t;
+        const wave = Math.sin(t * Math.PI * 2) * baseWidth * 0.2 * (1 - t);
+        const wx = x - Math.cos(perpAngle) * (wave + baseWidth * 0.2 * (1 - t));
+        const wy = y - Math.sin(perpAngle) * (wave + baseWidth * 0.2 * (1 - t));
+        ctx.lineTo(wx, wy);
+      }
+      
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+      
+    default:
+      // Default to curved
+      drawComicBubbleTail(ctx, pin, scr, width, height, 'curved', fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth);
+      return;
+  }
+  
+  ctx.restore();
+}
+
 // Register text pin shapes (bubble and rectangle)
+// Comic book style speech bubble with oval shape
 registerShape("bubble", {
   getMetrics: function(pin) {
-    const width = pin.width || 120;
-    const height = pin.height || 60;
+    const width = pin.width || 140;
+    const height = pin.height || 80;
 
     return {
       shape: pin.shape || "bubble",
       width: width,
-      height: height, // Just the bubble height
+      height: height,
       radius: Math.min(width, height) / 2,
       labelOffsetY: 0
     };
@@ -1829,94 +2100,95 @@ registerShape("bubble", {
   drawPhase: {
     background: function(ctx, pin, metrics, scr, pinScale) {
       const bubbleColor = pin.color || "#ffffff";
+      const bubbleColorAlpha = pin.colorAlpha !== undefined ? pin.colorAlpha : 1;
       const borderColor = pin.borderColor || "#000000";
-      const width = pin.width || 120;
-      const bubbleHeight = metrics.bubbleHeight || pin.height || 60; // Use bubble-specific height
+      const borderColorAlpha = pin.borderColorAlpha !== undefined ? pin.borderColorAlpha : 1;
+      const width = pin.width || 140;
+      const height = pin.height || 80;
       const borderWidth = pin.borderWidth || 2;
-      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
       const dropShadow = pin.dropShadow || false;
 
-      // Save context for opacity
+      // Save context
       ctx.save();
-
-      // Apply opacity
-      ctx.globalAlpha = opacity;
 
       // Apply drop shadow if enabled
       if (dropShadow) {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 5;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
       }
 
-      ctx.fillStyle = bubbleColor;
-      ctx.strokeStyle = borderColor;
+      // Apply colors with alpha
+      ctx.fillStyle = hexToRgba(bubbleColor, bubbleColorAlpha);
+      ctx.strokeStyle = hexToRgba(borderColor, borderColorAlpha);
       ctx.lineWidth = borderWidth;
 
-      // Main bubble body (rounded rectangle) - centered at scr.y
-      const cornerRadius = Math.min(width, height) * 0.2; // Adaptive corner radius
-
-      window.DrawingUtils.roundRectPath(
-        ctx,
-        scr.x - width/2,
-        scr.y - height/2,
-        width,
-        height,
-        cornerRadius
-      );
+      // Draw oval/ellipse shape (comic book style)
+      ctx.beginPath();
+      ctx.ellipse(scr.x, scr.y, width/2, height/2, 0, 0, Math.PI * 2);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      // Add tail/pointer based on tailPosition and tailType (before restoring context)
-      const tailType = pin.tailType || 'triangle';
+      // Add tail/pointer based on tailPosition and tailType
+      const tailType = pin.tailType || 'curved';
       if (tailType !== 'none') {
-        drawBubbleTail(ctx, pin, scr, width, height, tailType);
+        drawComicBubbleTail(ctx, pin, scr, width, height, tailType, bubbleColor, bubbleColorAlpha, borderColor, borderColorAlpha, borderWidth);
       }
 
       // Restore context
       ctx.restore();
     },
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
-      console.log(`🎈 Bubble label phase called for pin id: ${pin.id}, shape: ${pin.shape}, description: "${pin.description}", label: "${pin.label}"`);
-      const textColor = pin.textColor || "#000000";
+      // Separate colors for title and description (with backwards compatibility)
+      const defaultTextColor = pin.textColor || "#000000";
+      const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
+      const titleColor = pin.titleColor || defaultTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : defaultTextAlpha;
+      const descriptionColor = pin.descriptionColor || defaultTextColor;
+      const descriptionColorAlpha = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : defaultTextAlpha;
       const fontSize = pin.fontSize || 14;
       const width = pin.width || 120;
       const height = pin.height || 60;
-      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
 
-      // Save context for opacity
+      // Save context
       ctx.save();
-      ctx.globalAlpha = opacity;
 
       // Draw description inside bubble (centered)
       if (pin.description) {
-        console.log(`🎯 Drawing bubble description: "${pin.description}" at (${scr.x}, ${scr.y}) with color ${textColor}`);
-        ctx.fillStyle = textColor;
+        ctx.fillStyle = hexToRgba(descriptionColor, descriptionColorAlpha);
         ctx.font = `${fontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
-        // Split description into lines if it contains newlines
-        const lines = pin.description.split('\n');
-        const lineHeight = fontSize * 1.2;
-        const startY = scr.y - (lines.length - 1) * lineHeight / 2;
-
-        console.log(`📝 Rendering ${lines.length} lines with font: ${ctx.font}, fillStyle: ${ctx.fillStyle}`);
-
-        lines.forEach((line, index) => {
-          const y = startY + index * lineHeight;
-          console.log(`📝 Drawing line ${index}: "${line}" at y=${y}`);
-          ctx.fillText(line, scr.x, y);
-        });
-      } else {
-        console.log(`⚠️ Bubble has no description, pin.description:`, pin.description);
+        // Word wrap and render text
+        if (window.calculateTextDimensions) {
+          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 16, 60, 30, width);
+          const lineHeight = fontSize * 1.3;
+          const startY = scr.y - (dims.lines.length - 1) * lineHeight / 2;
+          
+          dims.lines.forEach((line, index) => {
+            const y = startY + index * lineHeight;
+            ctx.fillText(line, scr.x, y);
+          });
+        } else {
+          // Fallback: simple newline split
+          const lines = pin.description.split('\n');
+          const lineHeight = fontSize * 1.2;
+          const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+          
+          lines.forEach((line, index) => {
+            const y = startY + index * lineHeight;
+            ctx.fillText(line, scr.x, y);
+          });
+        }
       }
 
       // Draw title below bubble (10% larger, centered)
       if (pin.label) {
         const titleFontSize = Math.round(fontSize * 1.1); // 10% larger
-        ctx.fillStyle = textColor;
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
         ctx.font = `${titleFontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top"; // Start from top of text
@@ -1947,18 +2219,16 @@ registerShape("rectangle", {
   drawPhase: {
     background: function(ctx, pin, metrics, scr, pinScale) {
       const bubbleColor = pin.color || "#ffffff";
+      const bubbleColorAlpha = pin.colorAlpha !== undefined ? pin.colorAlpha : 1;
       const borderColor = pin.borderColor || "#000000";
+      const borderColorAlpha = pin.borderColorAlpha !== undefined ? pin.borderColorAlpha : 1;
       const width = pin.width || 100;
       const height = pin.height || 40;
       const borderWidth = pin.borderWidth || 2;
-      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
       const dropShadow = pin.dropShadow || false;
 
-      // Save context for opacity
+      // Save context
       ctx.save();
-
-      // Apply opacity
-      ctx.globalAlpha = opacity;
 
       // Apply drop shadow if enabled
       if (dropShadow) {
@@ -1968,8 +2238,9 @@ registerShape("rectangle", {
         ctx.shadowOffsetY = 2;
       }
 
-      ctx.fillStyle = bubbleColor;
-      ctx.strokeStyle = borderColor;
+      // Apply colors with alpha
+      ctx.fillStyle = hexToRgba(bubbleColor, bubbleColorAlpha);
+      ctx.strokeStyle = hexToRgba(borderColor, borderColorAlpha);
       ctx.lineWidth = borderWidth;
 
       // Draw rounded rectangle
@@ -1989,39 +2260,54 @@ registerShape("rectangle", {
       ctx.restore();
     },
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
-      const textColor = pin.textColor || "#000000";
+      // Separate colors for title and description (with backwards compatibility)
+      const defaultTextColor = pin.textColor || "#000000";
+      const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
+      const titleColor = pin.titleColor || defaultTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : defaultTextAlpha;
+      const descriptionColor = pin.descriptionColor || defaultTextColor;
+      const descriptionColorAlpha = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : defaultTextAlpha;
       const fontSize = pin.fontSize || 14;
       const width = pin.width || 100;
       const height = pin.height || 40;
-      const opacity = pin.opacity !== undefined ? pin.opacity : 1;
 
-      // Save context for opacity
+      // Save context
       ctx.save();
-      ctx.globalAlpha = opacity;
 
-      // For rectangles, we don't draw tails, but we do use the same text layout as bubbles
       // Draw description inside rectangle (centered)
       if (pin.description) {
-        ctx.fillStyle = textColor;
+        ctx.fillStyle = hexToRgba(descriptionColor, descriptionColorAlpha);
         ctx.font = `${fontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
-        // Split description into lines if it contains newlines
-        const lines = pin.description.split('\n');
-        const lineHeight = fontSize * 1.2;
-        const startY = scr.y - (lines.length - 1) * lineHeight / 2;
-
-        lines.forEach((line, index) => {
-          const y = startY + index * lineHeight;
-          ctx.fillText(line, scr.x, y);
-        });
+        // Word wrap and render text
+        if (window.calculateTextDimensions) {
+          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 16, 60, 30, width);
+          const lineHeight = fontSize * 1.3;
+          const startY = scr.y - (dims.lines.length - 1) * lineHeight / 2;
+          
+          dims.lines.forEach((line, index) => {
+            const y = startY + index * lineHeight;
+            ctx.fillText(line, scr.x, y);
+          });
+        } else {
+          // Fallback: simple newline split
+          const lines = pin.description.split('\n');
+          const lineHeight = fontSize * 1.2;
+          const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+          
+          lines.forEach((line, index) => {
+            const y = startY + index * lineHeight;
+            ctx.fillText(line, scr.x, y);
+          });
+        }
       }
 
       // Draw title below rectangle (10% larger, centered)
       if (pin.label) {
         const titleFontSize = Math.round(fontSize * 1.1); // 10% larger
-        ctx.fillStyle = textColor;
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
         ctx.font = `${titleFontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top"; // Start from top of text
@@ -2032,6 +2318,168 @@ registerShape("rectangle", {
       }
 
       // Restore context
+      ctx.restore();
+    }
+  }
+});
+
+// Register text-plain shape (just text, no background)
+registerShape("text-plain", {
+  getMetrics: function(pin) {
+    const width = pin.width || 150;
+    const height = pin.height || 30;
+    return {
+      shape: pin.shape || "text-plain",
+      width: width,
+      height: height,
+      radius: 0,
+      labelOffsetY: 0
+    };
+  },
+  drawPhase: {
+    background: function(ctx, pin, metrics, scr, pinScale) {
+      // No background for plain text - just draw a subtle selection indicator if selected
+      const isSelected = pin.isSelected || false;
+      if (isSelected) {
+        const width = pin.width || 150;
+        const height = pin.height || 30;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(88, 166, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(scr.x - width/2 - 5, scr.y - height/2 - 5, width + 10, height + 10);
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    },
+    label: function(ctx, pin, metrics, scr, pinScale, appScale) {
+      // Separate colors for title and description (with backwards compatibility)
+      const defaultTextColor = pin.textColor || pin.color || "#ffffff";
+      const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
+      const titleColor = pin.titleColor || defaultTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : defaultTextAlpha;
+      const descriptionColor = pin.descriptionColor || defaultTextColor;
+      const descriptionColorAlpha = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : defaultTextAlpha;
+      const fontSize = pin.fontSize || 14;
+      const width = pin.width || 150;
+
+      ctx.save();
+
+      // Draw description (main text content) - centered in the bounds
+      if (pin.description) {
+        ctx.fillStyle = hexToRgba(descriptionColor, descriptionColorAlpha);
+        ctx.font = `${fontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        const lines = pin.description.split('\n');
+        const lineHeight = fontSize * 1.2;
+        const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+
+        lines.forEach((line, index) => {
+          const y = startY + index * lineHeight;
+          ctx.fillText(line, scr.x, y);
+        });
+      }
+
+      // Draw label below if present
+      if (pin.label) {
+        const labelFontSize = Math.round(fontSize * 0.85);
+        ctx.font = `${labelFontSize}px system-ui`;
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha * 0.7);
+        const height = pin.height || 30;
+        ctx.fillText(pin.label, scr.x, scr.y + height/2 + labelFontSize);
+      }
+
+      ctx.restore();
+    }
+  }
+});
+
+// Register text-title shape (large title text, with underline)
+registerShape("text-title", {
+  getMetrics: function(pin) {
+    const width = pin.width || 200;
+    const height = pin.height || 40;
+    return {
+      shape: pin.shape || "text-title",
+      width: width,
+      height: height,
+      radius: 0,
+      labelOffsetY: 0
+    };
+  },
+  drawPhase: {
+    background: function(ctx, pin, metrics, scr, pinScale) {
+      // Optional subtle underline for title
+      const width = pin.width || 200;
+      const height = pin.height || 40;
+      const showUnderline = pin.showUnderline !== false; // Default to true
+      const borderColorAlpha = pin.borderColorAlpha !== undefined ? pin.borderColorAlpha : 1;
+      
+      if (showUnderline) {
+        ctx.save();
+        const underlineColor = pin.borderColor || pin.color || '#58a6ff';
+        ctx.strokeStyle = hexToRgba(underlineColor, borderColorAlpha);
+        ctx.lineWidth = 3;
+        
+        ctx.beginPath();
+        ctx.moveTo(scr.x - width/2, scr.y + height/2 - 2);
+        ctx.lineTo(scr.x + width/2, scr.y + height/2 - 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      
+      // Selection indicator
+      const isSelected = pin.isSelected || false;
+      if (isSelected) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(88, 166, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(scr.x - width/2 - 5, scr.y - height/2 - 5, width + 10, height + 10);
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    },
+    label: function(ctx, pin, metrics, scr, pinScale, appScale) {
+      // Separate colors for title and description (with backwards compatibility)
+      const defaultTextColor = pin.textColor || "#ffffff";
+      const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
+      const titleColor = pin.titleColor || defaultTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : defaultTextAlpha;
+      const descriptionColor = pin.descriptionColor || defaultTextColor;
+      const descriptionColorAlpha = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : defaultTextAlpha;
+      const fontSize = pin.fontSize || 24;
+
+      ctx.save();
+
+      // For title shape, description IS the main title text (centered)
+      if (pin.description) {
+        ctx.fillStyle = hexToRgba(descriptionColor, descriptionColorAlpha);
+        ctx.font = `bold ${fontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        const lines = pin.description.split('\n');
+        const lineHeight = fontSize * 1.2;
+        const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+
+        lines.forEach((line, index) => {
+          const y = startY + index * lineHeight;
+          ctx.fillText(line, scr.x, y);
+        });
+      }
+
+      // Subtitle (label) below
+      if (pin.label) {
+        const subtitleFontSize = Math.round(fontSize * 0.6);
+        ctx.font = `${subtitleFontSize}px system-ui`;
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha * 0.7);
+        const height = pin.height || 40;
+        ctx.fillText(pin.label, scr.x, scr.y + height/2 + subtitleFontSize + 5);
+      }
+
       ctx.restore();
     }
   }

@@ -75,9 +75,10 @@ class AppState {
 
       // Additional tool state
       selectedTypeByFamily: {
-        pin: 0,  // Index into pin family types
-        card: 0, // Index into card family types
-        area: 0, // Index into area family types
+        pin: 0,   // Index into pin family types
+        card: 0,  // Index into card family types
+        area: 0,  // Index into area family types
+        text: 0,  // Index into text family types
       },
     };
 
@@ -251,7 +252,7 @@ class AppState {
       description: description, // Description text (inside bubble)
       label: properties.label || '', // Title text (below bubble)
       shape: properties.shape || 'bubble', // Default to comic bubble
-      tailType: properties.tailType || 'triangle', // Default tail type
+      tailType: properties.tailType || 'curved', // Default tail type (classic comic style)
       textColor: textColor,
       borderColor: properties.borderColor,
       fontSize: properties.fontSize || 16,
@@ -325,7 +326,9 @@ class AppState {
       ...properties
     };
 
+    console.log(`🔗 Adding connection: ${fromIndex} → ${toIndex} (${connection.color})`);
     this.document.connections.push(connection);
+    console.log(`🔗 Total connections: ${this.document.connections.length}`);
     return this.document.connections.length - 1;
   }
 
@@ -615,6 +618,7 @@ class AppState {
         pin: 0,
         card: 0,
         area: 0,
+        text: 0,
       },
     };
     this.history = [];

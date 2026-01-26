@@ -161,6 +161,14 @@ class DragManager {
   }
 
   /**
+   * Check if a pin is part of the active timeline
+   */
+  isTimelinePin(pin) {
+    if (!this.appState.timelineActive || !this.appState.timelinePins) return false;
+    return this.appState.timelinePins.some(tp => tp.pin === pin || tp.pin.id === pin.id);
+  }
+
+  /**
    * Update pin drag positions
    */
   updatePinDrag(mouseWorld) {
@@ -178,6 +186,15 @@ class DragManager {
     const primaryPin = this.appState.pins[this.dragTarget];
     if (!primaryPin) return;
 
+    // Check if this is a timeline pin - constrain to horizontal movement only
+    const isOnTimeline = this.isTimelinePin(primaryPin);
+    if (isOnTimeline) {
+      // Constrain X to timeline bounds
+      newX = Math.max(this.appState.timelineLeft, Math.min(this.appState.timelineRight, newX));
+      // Keep Y fixed (don't change vertical position - maintains connection to timeline)
+      newY = primaryPin.y;
+    }
+
     const moved = (newX !== primaryPin.x || newY !== primaryPin.y);
     if (moved) {
       this.hasMoved = true;
@@ -189,14 +206,23 @@ class DragManager {
       this.relativeOffsets.forEach(({ index, offsetX, offsetY }) => {
         const pin = this.appState.pins[index];
         if (pin) {
-          pin.x = newX + offsetX;
-          pin.y = newY + offsetY;
+          let pinNewX = newX + offsetX;
+          let pinNewY = newY + offsetY;
+
+          // Check if this secondary pin is also a timeline pin
+          if (this.isTimelinePin(pin)) {
+            pinNewX = Math.max(this.appState.timelineLeft, Math.min(this.appState.timelineRight, pinNewX));
+            pinNewY = pin.y; // Keep Y fixed for timeline pins
+          }
 
           // Apply bounds to secondary pins too
           if (this.bounds) {
-            pin.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, pin.x));
-            pin.y = Math.max(this.bounds.minY, Math.min(this.bounds.maxY, pin.y));
+            pinNewX = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, pinNewX));
+            pinNewY = Math.max(this.bounds.minY, Math.min(this.bounds.maxY, pinNewY));
           }
+
+          pin.x = pinNewX;
+          pin.y = pinNewY;
         }
       });
     } else {

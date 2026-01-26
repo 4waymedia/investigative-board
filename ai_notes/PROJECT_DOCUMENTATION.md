@@ -29,16 +29,31 @@ investigative-board/
 ### 1. Pin System
 
 #### Pin Types
+
 - **Circle Pin** (`pin:circle`) - Circular nodes, default radius 9px
 - **Square Pin** (`pin:square`) - Square nodes, 22x22px
 - **Pill Pin** (`pin:pill`) - Rounded rectangle nodes, 40x22px
 
 #### Card Types
+
 - **Note Card** (`card:card`) - Standard card format, 46x30px
 - **Doc Card** (`card:doc`) - Document-style card, 32x46px (vertical)
 - **Folder Card** (`card:folder`) - Folder-style card, 50x36px
 
+#### Area Types
+
+- **Circle**
+- **Square**
+
+#### Text Types
+
+- **Plain**
+- **Rectangle**
+- **Comic**
+- **Title**
+
 #### Pin Properties
+
 - Position (x, y coordinates in world space)
 - Color (customizable hex colors)
 - Label/Title
@@ -49,6 +64,7 @@ investigative-board/
 ### 2. Connection System
 
 #### Connection Types
+
 - **Straight Lines** - Default connection style
 - **Curved Lines** - Quadratic bezier curves with fan-out support
   - When multiple connections share an endpoint, they automatically fan out in an arc
@@ -56,6 +72,7 @@ investigative-board/
   - Global toggle for default connection type
 
 #### Connection Features
+
 - Color-coded connections
 - Per-connection type settings (can override global setting)
 - Click detection for connection deletion (Alt/Cmd + Click)
@@ -64,6 +81,7 @@ investigative-board/
 ### 3. Layout Algorithms
 
 #### Force-Directed Layout (Magic Layout) ★
+
 - Physics-based simulation using repulsion and attraction forces
 - Runs in Web Worker to prevent UI blocking
 - Configurable parameters:
@@ -73,18 +91,21 @@ investigative-board/
 - Updates at ~20fps (50ms intervals)
 
 #### Radial Mind Map 🌸
+
 - Centered layout with root pin at center
 - Gentle radial force pulling nodes toward center
 - Strong centering force for root pin
 - Ideal for hierarchical information structures
 
 #### Affinity Clusters ☁️
+
 - Groups pins by color
 - Stronger attraction for same-group connections
 - Increased repulsion for different groups
 - Creates visual clusters based on color affinity
 
 #### Auto Timeline ⏳
+
 - Arranges pins with dates along a horizontal timeline
 - Parses flexible date formats (e.g., "1958", "Jul 1947", "1963-11-22")
 - Calculates optimal timeline scale and positioning
@@ -93,16 +114,19 @@ investigative-board/
 ### 4. Tools & Interaction
 
 #### Tools
+
 - **Pin Tool** - Create new pins by clicking on canvas
 - **Select Tool** - Select and manipulate existing pins
 - **Pan Tool** - Navigate the canvas by dragging
 
 #### Selection Modes
+
 - **Single Selection** - Click to select one pin
 - **Marquee Selection** - Drag to select multiple pins
 - **Multi-selection** - Hold Ctrl/Cmd while selecting
 
 #### Pin Manipulation
+
 - Drag to move pins
 - Multi-pin dragging (selected pins move together)
 - Double-click to edit (opens modal)
@@ -112,6 +136,7 @@ investigative-board/
 ### 5. Radial Menu (Context Menu)
 
 Available actions:
+
 - **Connect** - Start connection from this pin
 - **Edit** - Open edit modal
 - **Delete** - Remove pin (with confirmation)
@@ -128,7 +153,9 @@ Available actions:
 ### 7. Persistence
 
 #### Local Storage
+
 All board state is saved to browser localStorage:
+
 - Pin positions and properties
 - Connections (with types and colors)
 - Camera state (zoom, pan position)
@@ -138,6 +165,7 @@ All board state is saved to browser localStorage:
 - Selection state
 
 #### Undo/Redo System
+
 - History stack (max 100 entries)
 - Ctrl/Cmd + Z for undo
 - Captures state snapshots before major operations
@@ -145,6 +173,7 @@ All board state is saved to browser localStorage:
 ### 8. UI Components
 
 #### Top Menu Bar
+
 - Tool selection buttons
 - Color palette picker
 - Pin/Card type selector with cycling
@@ -152,16 +181,19 @@ All board state is saved to browser localStorage:
 - Type family toggle (Pin/Card)
 
 #### Side Panel (Pin Info)
+
 - Displays selected pin details
 - Title, subtitle, notes, date
 - Color indicator
 - Metadata display
 
 #### Bottom Tray
+
 - Card list for card-type pins
 - Drag cards to canvas to create card pins
 
 #### Control Buttons
+
 - **Reset** (↻) - Clear entire board
 - **Magic Layout** (★) - Toggle force-directed layout
 - **Radial Mind Map** (🌸) - Apply radial layout
@@ -169,6 +201,7 @@ All board state is saved to browser localStorage:
 - **Auto Timeline** (⏳) - Apply timeline layout
 
 #### Modal Dialog
+
 - Edit pin properties (title, color, notes, date)
 - Form validation
 - Save/Cancel actions
@@ -177,25 +210,26 @@ All board state is saved to browser localStorage:
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `P` | Switch to Pin tool |
-| `S` | Switch to Select tool |
-| `M` | Switch to Pan/Move tool |
-| `1` | Switch to Pin family (or cycle pin variants) |
-| `2` | Switch to Card family (or cycle card variants) |
-| `T` | Toggle connection type (straight/curved) |
-| `Ctrl/Cmd + Z` | Undo last action |
-| `Delete` / `Backspace` | Delete selected pin(s) |
-| `Escape` | Deselect all pins / Close modals |
-| `Ctrl/Cmd + Click` | Multi-select pins |
-| `Alt/Cmd + Click` (connection) | Delete connection |
+| Shortcut                       | Action                                         |
+| ------------------------------ | ---------------------------------------------- |
+| `P`                            | Switch to Pin tool                             |
+| `S`                            | Switch to Select tool                          |
+| `M`                            | Switch to Pan/Move tool                        |
+| `1`                            | Switch to Pin family (or cycle pin variants)   |
+| `2`                            | Switch to Card family (or cycle card variants) |
+| `T`                            | Toggle connection type (straight/curved)       |
+| `Ctrl/Cmd + Z`                 | Undo last action                               |
+| `Delete` / `Backspace`         | Delete selected pin(s)                         |
+| `Escape`                       | Deselect all pins / Close modals               |
+| `Ctrl/Cmd + Click`             | Multi-select pins                              |
+| `Alt/Cmd + Click` (connection) | Delete connection                              |
 
 ---
 
 ## Technical Architecture
 
 ### Core Technologies
+
 - **HTML5 Canvas** - Primary rendering surface
 - **Web Workers** - Offloads force-directed layout calculations
 - **LocalStorage API** - State persistence
@@ -204,23 +238,27 @@ All board state is saved to browser localStorage:
 ### Coordinate Systems
 
 #### World Coordinates
+
 - Infinite 2D space for pin/connection data
 - Pins stored with world-space (x, y) positions
 - Independent of viewport
 
 #### Screen Coordinates
+
 - Pixel positions on canvas
 - Transformed from world coordinates using:
   - Scale (zoom level)
   - Offset (pan position)
 
 #### Transform Functions
+
 - `worldToScreen(x, y)` - Convert world → screen
 - `screenToWorld(sx, sy)` - Convert screen → world
 
 ### State Management
 
 #### Global State Variables
+
 ```javascript
 // View/Camera
 scale, offsetX, offsetY
@@ -242,6 +280,7 @@ currentTool, selectedColor, currentTypeId, connectionType
 ### Web Worker Communication
 
 #### Main Thread → Worker
+
 ```javascript
 {
   command: "start",
@@ -252,6 +291,7 @@ currentTool, selectedColor, currentTypeId, connectionType
 ```
 
 #### Worker → Main Thread
+
 ```javascript
 {
   command: "update",
@@ -281,6 +321,7 @@ currentTool, selectedColor, currentTypeId, connectionType
 ## Recent Improvements & Bug Fixes
 
 ### Connection System Enhancements
+
 - ✅ Curved connection lines with quadratic bezier curves
 - ✅ Automatic fan-out for multiple connections to single pin
 - ✅ Per-connection type override capability
@@ -289,27 +330,32 @@ currentTool, selectedColor, currentTypeId, connectionType
 - ✅ Radial menu integration for per-pin connection type changes
 
 ### Hit Detection Improvements
+
 - ✅ Proper bounding-box detection for cards and rectangular shapes
 - ✅ Prevents placing pins on top of existing pins
 - ✅ Clicking existing pin in pin tool mode selects it instead
 
 ### Worker & Performance
+
 - ✅ Fixed console spam (17,000+ warnings eliminated)
 - ✅ Silently filters invalid messages from browser extensions
 - ✅ Added concurrent request prevention flag
 - ✅ Improved error handling in worker communication
 
 ### Timeline Persistence
+
 - ✅ Timeline pins now properly saved/loaded from localStorage
 - ✅ Timeline state persists across page refreshes
 - ✅ Pin references stored by index instead of object references
 
 ### Selection & Dragging
+
 - ✅ Multi-pin selection preserved during dragging
 - ✅ Marquee selection works correctly for multi-pin movement
 - ✅ Single pin and multi-pin dragging both functional
 
 ### Connection Management
+
 - ✅ Alt/Cmd + Click on connection to delete
 - ✅ Connection hit testing with distance calculations
 - ✅ Proper cleanup of orphaned connections
@@ -347,6 +393,7 @@ The main `index.html` file is organized into logical sections:
 ## Current Status
 
 ### ✅ Working Features
+
 - All pin types (circle, square, pill) functional
 - All card types (card, doc, folder) functional
 - Straight and curved connections with fan-out
@@ -361,9 +408,11 @@ The main `index.html` file is organized into logical sections:
 - Web Worker integration
 
 ### 🔧 Known Issues / Future Improvements
+
 - None currently documented - application is stable and feature-complete
 
 ### 📝 Technical Debt
+
 - Multiple backup HTML files (index2.html, index3.html, etc.) - could be cleaned up
 - Layout worker has a backup copy file
 
@@ -381,12 +430,14 @@ The main `index.html` file is organized into logical sections:
 ## Development Notes
 
 ### Adding New Pin Types
+
 1. Add entry to `NODE_TYPES` array with id, label, icon, family, variant
 2. Add shape definition to `PIN_BASES` with shape, dimensions
 3. Update drawing logic in `drawPinShape` if needed
 4. Update hit testing in `findPinAt` if shape is non-standard
 
 ### Adding New Layout Modes
+
 1. Add case to `layoutWorker.js` switch statement
 2. Define physics constants (K, C, repulsion_mult, attraction_mult)
 3. Add UI button in controls section
@@ -394,6 +445,7 @@ The main `index.html` file is organized into logical sections:
 5. Update `applyLayout` function
 
 ### Debugging Tips
+
 - Check browser console for errors
 - Worker errors logged separately
 - Use browser DevTools to inspect localStorage state
@@ -409,14 +461,4 @@ The main `index.html` file is organized into logical sections:
 
 ---
 
-*Last Updated: December 2024*
-
-
-
-
-
-
-
-
-
-
+_Last Updated: December 2024_

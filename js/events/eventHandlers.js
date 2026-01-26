@@ -31,19 +31,75 @@ class BaseTool {
 
 class PanTool extends BaseTool {
   onMouseDown(e, mousePos, clickedPinIndex) {
+    // Get the current selection from appState (the source of truth)
+    const selectedPins = this.appState.selectedPins || [];
+    
+    // If clicking on a selected pin, move all selected pins
+    if (clickedPinIndex !== null && selectedPins.includes(clickedPinIndex)) {
+      // Sync local selectedPins with appState
+      this.eventHandlers.selectedPins = [...selectedPins];
+      
+      // Start dragging all selected pins
+      if (window.dragManager) {
+        window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, selectedPins);
+        this.eventHandlers.isDragManagerDragging = true;
+      } else {
+        // Fallback drag
+        this.eventHandlers.isDraggingPin = true;
+        this.eventHandlers.dragPinIndex = clickedPinIndex;
+      }
+      console.log(`👆 Move tool: Moving ${selectedPins.length} selected pin(s): [${selectedPins.join(', ')}]`);
+      return;
+    }
+    
+    // If clicking on an unselected pin, select it and prepare to move
+    if (clickedPinIndex !== null) {
+      this.appState.setSelectedPins([clickedPinIndex]);
+      this.eventHandlers.selectedPins = [clickedPinIndex];
+      
+      if (window.dragManager) {
+        window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, [clickedPinIndex]);
+        this.eventHandlers.isDragManagerDragging = true;
+      }
+      console.log(`👆 Move tool: Selected and moving pin ${clickedPinIndex}`);
+      return;
+    }
+    
+    // Clicking on empty space - pan the canvas
     this.eventHandlers.isPanning = true;
     this.eventHandlers.prevScreenX = e.clientX;
     this.eventHandlers.prevScreenY = e.clientY;
-    console.log(`👆 Pan mode activated at (${e.clientX}, ${e.clientY})`);
+    console.log(`👆 Move tool: Pan mode activated at (${e.clientX}, ${e.clientY})`);
   }
 }
 
 class SelectTool extends BaseTool {
   onMouseDown(e, mousePos, clickedPinIndex) {
+    // If clicking on an existing pin, select it instead of starting marquee
+    if (clickedPinIndex !== null) {
+      this.eventHandlers.setSelectedPin(clickedPinIndex);
+      this.eventHandlers.selectedPins = [clickedPinIndex];
+      
+      // Enable dragging of the selected pin
+      if (window.dragManager) {
+        window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, this.eventHandlers.selectedPins);
+        this.eventHandlers.isDragManagerDragging = true;
+      }
+      console.log(`👆 Select tool: Pin ${clickedPinIndex} selected`);
+      return;
+    }
+    
+    // Start marquee selection on empty space
     this.eventHandlers.isMarqueeSelecting = true;
     this.eventHandlers.marqueeStart = mousePos.world;
     this.eventHandlers.marqueeEnd = mousePos.world;
-    console.log(`👆 Left-click: Marquee selection started`);
+    
+    // Start animation for marching ants effect
+    if (window.app) {
+      window.app.startAnimation();
+    }
+    
+    console.log(`👆 Left-click: Marquee selection started at (${mousePos.world.x.toFixed(0)}, ${mousePos.world.y.toFixed(0)})`);
   }
 }
 
@@ -61,10 +117,12 @@ class PinTool extends BaseTool {
     // Only auto-connect in 'sequential' mode, not in 'parent' mode
     if (this.appState.selectedPinIndex !== null && this.appState.selectedPinIndex !== clickedPinIndex && this.appState.connectionMode === 'sequential') {
       // Check if connection already exists between these pins (bidirectional)
-      const existingConnection = this.appState.connections.find(conn =>
-        (conn.startIndex === this.appState.selectedPinIndex && conn.endIndex === clickedPinIndex) ||
-        (conn.startIndex === clickedPinIndex && conn.endIndex === this.appState.selectedPinIndex)
-      );
+      const existingConnection = this.appState.connections.find(conn => {
+        const connStart = conn.from !== undefined ? conn.from : conn.startIndex;
+        const connEnd = conn.to !== undefined ? conn.to : conn.endIndex;
+        return (connStart === this.appState.selectedPinIndex && connEnd === clickedPinIndex) ||
+               (connStart === clickedPinIndex && connEnd === this.appState.selectedPinIndex);
+      });
 
       if (existingConnection) {
         console.log(`⚠️ Connection already exists between pin ${this.appState.selectedPinIndex} and pin ${clickedPinIndex}`);
@@ -76,13 +134,10 @@ class PinTool extends BaseTool {
       }
 
       // Connect the selected pin to the clicked pin
-      const connection = {
-        startIndex: this.appState.selectedPinIndex,
-        endIndex: clickedPinIndex,
+      this.appState.addConnection(this.appState.selectedPinIndex, clickedPinIndex, {
         color: this.appState.selectedColor,
         type: this.appState.connectionType
-      };
-      this.appState.connections.push(connection);
+      });
       this.appState.saveHistory();
       if (this.saveAppState) {
         this.saveAppState(this.appState);
@@ -561,6 +616,8 @@ class EventHandlers {
             this.stopMarqueeAnimation();
           } else {
             console.log(`🔗 Creating connection: ${this.appState.connectStartIndex} → ${clickedPinIndex}`);
+            console.log(`🔗 connectStartIndex type: ${typeof this.appState.connectStartIndex}, value: ${this.appState.connectStartIndex}`);
+            console.log(`🔗 clickedPinIndex type: ${typeof clickedPinIndex}, value: ${clickedPinIndex}`);
             this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
               color: this.appState.selectedColor,
               type: this.appState.connectionType
@@ -620,48 +677,59 @@ class EventHandlers {
 
     // Handle left-click pin interaction first (works with any tool)
     // This should prevent tool-specific actions when interacting with existing pins
-    if (e.button === 0 && !e.shiftKey && clickedPinIndex !== null) {
-      const pin = this.appState.pins[clickedPinIndex];
-
-      // Check if clicked on bubble tail first
-      if (pin && pin.shape === 'bubble' && this.isPointOnBubbleTail(pin, mousePos.world.x, mousePos.world.y)) {
-        // Start tail dragging - this takes priority over normal pin dragging
-        this.isDraggingTail = true;
-        this.draggingTailPinIndex = clickedPinIndex;
-        console.log(`🎯 Started dragging tail of bubble pin ${clickedPinIndex}`);
-        return; // Don't continue with any other logic
-      } else {
-        // Normal pin interaction - select and prepare for drag
-        this.setSelectedPin(clickedPinIndex);
-        this.selectedPins = [clickedPinIndex];
-
-        // Start drag using drag manager
-        if (window.dragManager) {
-          window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, this.selectedPins);
-          this.isDragManagerDragging = true; // Track that drag manager is active
-        } else {
-          // Fallback if drag manager not available
-          this.isDraggingPin = true;
-          this.dragPinIndex = clickedPinIndex;
-        }
-
-        // Set as connection source for next pin placement (sequential mode)
-        this.appState.connectStartIndex = clickedPinIndex;
-        this.appState.connectionMode = 'sequential';
-
-        // Start marquee animation to show connection mode is active
-        this.startMarqueeAnimation();
-
-        console.log(`🎯 Left-click: Selected pin ${clickedPinIndex} and started drag`);
-        return; // Don't continue to tool-specific logic
-      }
-    }
-
     // Handle left-click using tool pattern
     if (e.button === 0) { // Left click
       const currentTool = this.appState.currentTool || "pin";
       const tool = this.tools[currentTool];
 
+      // For 'pan' (Move) and 'select' tools, let the tool handle pin clicks
+      if (currentTool === 'pan' || currentTool === 'select') {
+        if (tool) {
+          tool.onMouseDown(e, mousePos, clickedPinIndex);
+        }
+        return;
+      }
+
+      // For other tools, check for bubble tail dragging first
+      if (!e.shiftKey && clickedPinIndex !== null) {
+        const pin = this.appState.pins[clickedPinIndex];
+
+        // Check if clicked on bubble tail first
+        if (pin && pin.shape === 'bubble' && this.isPointOnBubbleTail(pin, mousePos.world.x, mousePos.world.y)) {
+          // Start tail dragging - this takes priority over normal pin dragging
+          this.isDraggingTail = true;
+          this.draggingTailPinIndex = clickedPinIndex;
+          console.log(`🎯 Started dragging tail of bubble pin ${clickedPinIndex}`);
+          return; // Don't continue with any other logic
+        } else {
+          // Normal pin interaction - select and prepare for drag
+          this.setSelectedPin(clickedPinIndex);
+          this.selectedPins = [clickedPinIndex];
+          this.appState.setSelectedPins([clickedPinIndex]);
+
+          // Start drag using drag manager
+          if (window.dragManager) {
+            window.dragManager.startPinDrag(clickedPinIndex, mousePos.world, this.selectedPins);
+            this.isDragManagerDragging = true; // Track that drag manager is active
+          } else {
+            // Fallback if drag manager not available
+            this.isDraggingPin = true;
+            this.dragPinIndex = clickedPinIndex;
+          }
+
+          // Set as connection source for next pin placement (sequential mode)
+          this.appState.connectStartIndex = clickedPinIndex;
+          this.appState.connectionMode = 'sequential';
+
+          // Start marquee animation to show connection mode is active
+          this.startMarqueeAnimation();
+
+          console.log(`🎯 Left-click: Selected pin ${clickedPinIndex} and started drag`);
+          return; // Don't continue to tool-specific logic
+        }
+      }
+
+      // For other tools (pin, text, area, etc.), let them handle empty space clicks
       if (tool) {
         tool.onMouseDown(e, mousePos, clickedPinIndex);
       }
@@ -681,9 +749,10 @@ class EventHandlers {
     e.returnValue = false; // For older browsers
 
     if (clickedPinIndex !== null) {
-      // Check if it's a text pin (bubble or rectangle shape)
+      // Check if it's a text pin (any text shape)
       const pin = this.appState.pins[clickedPinIndex];
-      const isTextPin = pin && (pin.shape === 'bubble' || pin.shape === 'rectangle');
+      const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
+      const isTextPin = pin && textShapes.includes(pin.shape);
 
       if (isTextPin) {
         // Right-click on text pin - open radial menu and activate marquee for connections
@@ -930,24 +999,25 @@ class EventHandlers {
 
     // Connect the new pin to both ends of the connection
     if (connection) {
+      const connStart = connection.from !== undefined ? connection.from : connection.startIndex;
+      const connEnd = connection.to !== undefined ? connection.to : connection.endIndex;
+
       // Replace the original connection with the start-to-middle connection
       this.appState.connections[connectionIndex] = {
-        startIndex: connection.startIndex,
-        endIndex: newIndex,
+        id: this.appState._generateId('connection'),
+        from: connStart,
+        to: newIndex,
         color: connection.color, // Preserve original color
         type: connection.type    // Preserve original type
       };
 
       // Add the middle-to-end connection
-      const endConnection = {
-        startIndex: newIndex,
-        endIndex: connection.endIndex,
+      this.appState.addConnection(newIndex, connEnd, {
         color: connection.color, // Preserve original color
         type: connection.type    // Preserve original type
-      };
-      this.appState.connections.push(endConnection);
+      });
 
-      console.log(`🔗 Split connection: ${connection.startIndex} → ${newIndex} → ${connection.endIndex}`);
+      console.log(`🔗 Split connection: ${connStart} → ${newIndex} → ${connEnd}`);
     }
 
     this.appState.saveHistory();
@@ -1080,35 +1150,35 @@ class EventHandlers {
           }
 
           // Check if connection already exists
-          const existingStart = this.appState.connections.find(conn =>
-            (conn.startIndex === connection.startIndex && conn.endIndex === this.dragStartPinIndex) ||
-            (conn.startIndex === this.dragStartPinIndex && conn.endIndex === connection.startIndex)
-          );
-          const existingEnd = this.appState.connections.find(conn =>
-            (conn.startIndex === connection.endIndex && conn.endIndex === this.dragStartPinIndex) ||
-            (conn.startIndex === this.dragStartPinIndex && conn.endIndex === connection.endIndex)
-          );
+          const connStart = connection.from !== undefined ? connection.from : connection.startIndex;
+          const connEnd = connection.to !== undefined ? connection.to : connection.endIndex;
+          const existingStart = this.appState.connections.find(conn => {
+            const cStart = conn.from !== undefined ? conn.from : conn.startIndex;
+            const cEnd = conn.to !== undefined ? conn.to : conn.endIndex;
+            return (cStart === connStart && cEnd === this.dragStartPinIndex) ||
+                   (cStart === this.dragStartPinIndex && cEnd === connStart);
+          });
+          const existingEnd = this.appState.connections.find(conn => {
+            const cStart = conn.from !== undefined ? conn.from : conn.startIndex;
+            const cEnd = conn.to !== undefined ? conn.to : conn.endIndex;
+            return (cStart === connEnd && cEnd === this.dragStartPinIndex) ||
+                   (cStart === this.dragStartPinIndex && cEnd === connEnd);
+          });
 
           if (!existingStart) {
-            const startConnection = {
-              startIndex: connection.startIndex,
-              endIndex: this.dragStartPinIndex,
+            this.appState.addConnection(connStart, this.dragStartPinIndex, {
               color: this.appState.selectedColor,
               type: this.appState.connectionType
-            };
-            this.appState.connections.push(startConnection);
-            console.log(`🔗 Drag-to-line: Connected ${connection.startIndex} to dragged pin ${this.dragStartPinIndex}`);
+            });
+            console.log(`🔗 Drag-to-line: Connected ${connStart} to dragged pin ${this.dragStartPinIndex}`);
           }
 
           if (!existingEnd) {
-            const endConnection = {
-              startIndex: this.dragStartPinIndex,
-              endIndex: connection.endIndex,
+            this.appState.addConnection(this.dragStartPinIndex, connEnd, {
               color: this.appState.selectedColor,
               type: this.appState.connectionType
-            };
-            this.appState.connections.push(endConnection);
-            console.log(`🔗 Drag-to-line: Connected dragged pin ${this.dragStartPinIndex} to ${connection.endIndex}`);
+            });
+            console.log(`🔗 Drag-to-line: Connected dragged pin ${this.dragStartPinIndex} to ${connEnd}`);
           }
 
           this.appState.saveHistory();
@@ -1137,22 +1207,29 @@ class EventHandlers {
         const minY = Math.min(start.y, end.y);
         const maxY = Math.max(start.y, end.y);
 
-        this.selectedPins = [];
+        // Find all pins within the marquee bounds
+        const pinsInMarquee = [];
         for (let i = 0; i < this.appState.pins.length; i++) {
           const pin = this.appState.pins[i];
           if (pin.x >= minX && pin.x <= maxX && pin.y >= minY && pin.y <= maxY) {
-            this.selectedPins.push(i);
+            pinsInMarquee.push(i);
           }
         }
-        if (this.selectedPins.length > 0) {
-          this.setSelectedPin(this.selectedPins[0]);
-        }
+        
+        // Update both local and appState selection
+        this.selectedPins = pinsInMarquee;
+        this.appState.setSelectedPins(pinsInMarquee);
+        
+        console.log(`📦 Marquee selected ${pinsInMarquee.length} pins: [${pinsInMarquee.join(', ')}]`);
       }
 
       // Clear marquee immediately to prevent ghost marquee
       this.marqueeStart = null;
       this.marqueeEnd = null;
       this.isMarqueeSelecting = false;
+      
+      // Redraw to show selection
+      this.draw();
     }
 
     // Handle connection creation if connectStartIndex is set (when marquee is active)
@@ -1164,6 +1241,8 @@ class EventHandlers {
       if (clickedPinIndex !== null && clickedPinIndex !== this.appState.connectStartIndex) {
         // Clicked on existing pin - create connection to it
         console.log(`🔗 Creating connection to existing pin: ${this.appState.connectStartIndex} → ${clickedPinIndex}`);
+        console.log(`🔗 connectStartIndex type: ${typeof this.appState.connectStartIndex}, value: ${this.appState.connectStartIndex}`);
+        console.log(`🔗 clickedPinIndex type: ${typeof clickedPinIndex}, value: ${clickedPinIndex}`);
         this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
           color: this.appState.selectedColor,
           type: this.appState.connectionType
@@ -1312,16 +1391,23 @@ class EventHandlers {
     if (!this.isMarqueeSelecting && this.appState.currentTool === "text" && this.dragStartPinIndex === null && !this.isDraggingTextBubble) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       if (clickedPinIndex === null) {
+        // Get the correct shape based on the current text type
+        const textTypeConfig = this.getTextTypeConfig();
+        
+        console.log(`📝 Creating text pin: typeId=${this.appState.currentTypeId}, shape=${textTypeConfig.shape}, config=`, textTypeConfig);
+        
         // Create new text pin at click location (default size)
         const newPinIndex = this.appState.addTextPin(mouseWorld.x, mouseWorld.y, "", {
           color: this.appState.selectedColor,
-          shape: "bubble",
-          fontSize: 16,
-          width: 120,  // Default width
-          height: 60   // Default height
+          typeId: this.appState.currentTypeId,
+          shape: textTypeConfig.shape,
+          fontSize: textTypeConfig.fontSize || 16,
+          width: textTypeConfig.defaultWidth,
+          height: textTypeConfig.defaultHeight,
+          tailType: textTypeConfig.shape === 'bubble' ? 'curved' : 'none'
         });
 
-        console.log(`📝 Created text bubble at (${mouseWorld.x}, ${mouseWorld.y}) via click`);
+        console.log(`📝 Created ${textTypeConfig.shape} text at (${mouseWorld.x}, ${mouseWorld.y}) via click`);
         this.appState.saveHistory();
         if (this.saveAppState) {
           this.saveAppState(this.appState);
@@ -1331,27 +1417,34 @@ class EventHandlers {
       }
     }
 
-    // Handle text bubble creation from marquee drag
+    // Handle text creation from marquee drag
     if (this.isDraggingTextBubble && this.textBubbleDragStart && this.textBubbleDragCurrent) {
+      const centerX = this.textBubbleDragStart.x;
+      const centerY = this.textBubbleDragStart.y;
       const dx = Math.abs(this.textBubbleDragCurrent.x - this.textBubbleDragStart.x);
       const dy = Math.abs(this.textBubbleDragCurrent.y - this.textBubbleDragStart.y);
       const dragDistance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Get the correct shape based on the current text type
+      const textTypeConfig = this.getTextTypeConfig();
 
-      // For text bubbles, we want to create them even with small drags
+      // For text pins, we want to create them even with small drags
       // Only skip creation if it's an actual click on an existing pin
       if (dragDistance < 2) {
         // Very small movement - might be accidental, check if there's a pin here
         const existingPinIndex = this.findPinAt(centerX, centerY);
         if (existingPinIndex !== null) {
-          console.log(`⚠️ Text bubble click too close to existing pin ${existingPinIndex}, skipping creation`);
+          console.log(`⚠️ Text click too close to existing pin ${existingPinIndex}, skipping creation`);
         } else {
-          // No pin here, create a default-sized bubble
+          // No pin here, create a default-sized text
           const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
             color: this.appState.selectedColor,
-            shape: "bubble",
-            width: 120,  // Default width
-            height: 60,  // Default height
-            tailPosition: { angle: 270, distance: 0.8 } // Default tail at bottom
+            typeId: this.appState.currentTypeId,
+            shape: textTypeConfig.shape,
+            width: textTypeConfig.defaultWidth,
+            height: textTypeConfig.defaultHeight,
+            tailType: textTypeConfig.shape === 'bubble' ? 'curved' : 'none',
+            tailPosition: textTypeConfig.shape === 'bubble' ? { angle: 225, distance: 0.9 } : null
           });
 
           // Set as connection source for next pin placement
@@ -1361,7 +1454,7 @@ class EventHandlers {
           // Start marquee animation to show connection mode is active
           this.startMarqueeAnimation();
 
-          console.log(`💭 Created default text bubble at (${centerX}, ${centerY})`);
+          console.log(`💭 Created default ${textTypeConfig.shape} text at (${centerX}, ${centerY})`);
           this.appState.saveHistory();
           if (this.saveAppState) {
             this.saveAppState(this.appState);
@@ -1371,23 +1464,23 @@ class EventHandlers {
         }
       } else {
         // Check for collision with existing pins at the center location
-        const centerX = this.textBubbleDragStart.x;
-        const centerY = this.textBubbleDragStart.y;
         const existingPinIndex = this.findPinAt(centerX, centerY);
 
         if (existingPinIndex !== null) {
-          console.log(`⚠️ Cannot create text bubble: pin already exists at center location (${centerX}, ${centerY})`);
+          console.log(`⚠️ Cannot create text: pin already exists at center location (${centerX}, ${centerY})`);
         } else {
-          // Create text bubble with drag dimensions
-          const width = Math.max(dx * 2, 120); // Minimum width
-          const height = Math.max(dy * 2, 60);  // Minimum height
+          // Create text with drag dimensions
+          const width = Math.max(dx * 2, textTypeConfig.defaultWidth);
+          const height = Math.max(dy * 2, textTypeConfig.defaultHeight);
 
           const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
             color: this.appState.selectedColor,
-            shape: "bubble",
+            typeId: this.appState.currentTypeId,
+            shape: textTypeConfig.shape,
             width: width,
             height: height,
-            tailPosition: { angle: 270, distance: 0.8 } // Default tail at bottom
+            tailType: textTypeConfig.shape === 'bubble' ? 'curved' : 'none',
+            tailPosition: textTypeConfig.shape === 'bubble' ? { angle: 225, distance: 0.9 } : null
           });
 
           // Set as connection source for next pin placement
@@ -1397,7 +1490,7 @@ class EventHandlers {
           // Start marquee animation to show connection mode is active
           this.startMarqueeAnimation();
 
-          console.log(`💭 Created text bubble at (${centerX}, ${centerY}) with size ${width}x${height}`);
+          console.log(`💭 Created ${textTypeConfig.shape} text at (${centerX}, ${centerY}) with size ${width}x${height}`);
           this.appState.saveHistory();
           if (this.saveAppState) {
             this.saveAppState(this.appState);
@@ -1407,7 +1500,7 @@ class EventHandlers {
         }
       }
 
-      // Reset text bubble drag state
+      // Reset text drag state
       this.isDraggingTextBubble = false;
       this.textBubbleDragStart = null;
       this.textBubbleDragCurrent = null;
@@ -1461,20 +1554,19 @@ class EventHandlers {
         let connectionCreated = false;
         if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== newIndex) {
           // Check if connection already exists (shouldn't happen for new pin, but safety check)
-          const existingConnection = this.appState.connections.find(conn =>
-            (conn.startIndex === this.appState.connectStartIndex && conn.endIndex === newIndex) ||
-            (conn.startIndex === newIndex && conn.endIndex === this.appState.connectStartIndex)
-          );
+          const existingConnection = this.appState.connections.find(conn => {
+            const cStart = conn.from !== undefined ? conn.from : conn.startIndex;
+            const cEnd = conn.to !== undefined ? conn.to : conn.endIndex;
+            return (cStart === this.appState.connectStartIndex && cEnd === newIndex) ||
+                   (cStart === newIndex && cEnd === this.appState.connectStartIndex);
+          });
 
           if (!existingConnection) {
             // Create connection between active source and new pin
-            const connection = {
-              startIndex: this.appState.connectStartIndex,
-              endIndex: newIndex,
+            this.appState.addConnection(this.appState.connectStartIndex, newIndex, {
               color: this.appState.selectedColor,
               type: this.appState.connectionType
-            };
-            this.appState.connections.push(connection);
+            });
             this.appState.saveHistory();
             if (this.saveAppState) {
               this.saveAppState(this.appState);
@@ -1747,9 +1839,10 @@ class EventHandlers {
     console.log(`📍 Double-click world coords: (${mouseWorld.x}, ${mouseWorld.y}), found pin: ${clickedPinIndex}`);
 
     if (clickedPinIndex !== null) {
-      // Check if it's a text pin (bubble or rectangle shape)
+      // Check if it's a text pin (any text shape)
       const pin = this.appState.pins[clickedPinIndex];
-      const isTextPin = pin && (pin.shape === 'bubble' || pin.shape === 'rectangle');
+      const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
+      const isTextPin = pin && textShapes.includes(pin.shape);
 
       if (isTextPin) {
         // Stop marquee animation when opening modal
@@ -1880,14 +1973,23 @@ class EventHandlers {
       activeElement.contentEditable === 'true'
     );
 
-    // Check if any modals are currently open
+    // Check if any modals are currently open (use computed style to honor CSS)
+    const isElementVisible = (el) => {
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") {
+        return false;
+      }
+      // Guard against hidden ancestors (e.g., backdrop display: none)
+      return el.getClientRects().length > 0;
+    };
     const isModalOpen = (
-      (document.getElementById("pin-modal")?.style.display !== "none") ||
-      (document.getElementById("card-modal")?.style.display !== "none") ||
-      (document.getElementById("add-color-modal")?.style.display !== "none") ||
-      (document.getElementById("load-modal")?.style.display !== "none") ||
-      (document.getElementById("text-modal")?.style.display !== "none") ||
-      (document.getElementById("text-modal-backdrop")?.style.display !== "none")
+      isElementVisible(document.getElementById("pin-modal-backdrop")) ||
+      isElementVisible(document.getElementById("card-modal-backdrop")) ||
+      isElementVisible(document.getElementById("add-color-modal-backdrop")) ||
+      isElementVisible(document.getElementById("load-modal-backdrop")) ||
+      isElementVisible(document.getElementById("text-modal-backdrop")) ||
+      isElementVisible(document.getElementById("app-info-modal-backdrop"))
     );
 
     // Allow ESC key even in input fields or modals (it's a cancel action)
@@ -1905,24 +2007,30 @@ class EventHandlers {
     }
 
     // Handle conditional keys (numbers with modifier checks)
-    if (e.key >= '1' && e.key <= '3' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+    if (e.key >= '1' && e.key <= '4' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      const typeMap = { '1': 'pin', '2': 'card', '3': 'area' };
-      this.cycleTypeInFamily(typeMap[e.key]);
+      const typeMap = { '1': 'pin', '2': 'card', '3': 'area', '4': 'text' };
+      const family = typeMap[e.key];
+      console.log(`🎹 Key '${e.key}' pressed - cycling types in family '${family}'`);
+      this.cycleTypeInFamily(family);
       return;
-    }
-    // Handle text tool cycling (4 key when text tool is active)
-    else if (this.appState.currentTool === 'text' && e.key === '4' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      this.cycleTextType();
     }
     // Handle Shift+1,2,3: Change selected pin type (if pin is selected)
     else if ((e.key === '!' || (e.key === '1' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
+      console.log('🎹 Shift+1 pressed - cycling selected pin to pin types');
       this.cycleSelectedPinType('pin');
+      return;
     } else if ((e.key === '@' || (e.key === '2' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
+      console.log('🎹 Shift+2 pressed - cycling selected pin to card types');
       this.cycleSelectedPinType('card');
+      return;
+    } else if ((e.key === '#' || (e.key === '3' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      console.log('🎹 Shift+3 pressed - cycling selected pin to area types');
+      this.cycleSelectedPinType('area');
+      return;
     }
     // Handle Shift+Number: Quick color selection (Shift+1=first color, Shift+2=second color, etc.)
     // Note: This conflicts with Shift+1,2,3 for pin type selection - prioritize pin type selection
@@ -2138,28 +2246,59 @@ class EventHandlers {
 
   // Select a tool
   selectTool(toolId) {
+    console.log(`🔧 eventHandlers.selectTool: ${toolId}`);
     this.appState.currentTool = toolId;
 
-    // Update toolbar if available
+    // Update toolbar UI (not full re-render to preserve click handlers)
     if (window.app && window.app.toolbarManager) {
-      window.app.toolbarManager.render();
+      window.app.toolbarManager.updateActiveToolUI(toolId);
     }
   }
 
-  // Cycle through text types
+  // Cycle through text types (now using the same system as other families)
   cycleTextType() {
-    if (this.appState.currentTextType) {
-      const textTypes = ["plain", "rectangle", "comic", "title"];
-      const currentIndex = textTypes.indexOf(this.appState.currentTextType);
-      const nextIndex = (currentIndex + 1) % textTypes.length;
-      this.appState.currentTextType = textTypes[nextIndex];
-      console.log(`📝 Text type cycled to: ${this.appState.currentTextType}`);
+    this.cycleTypeInFamily('text');
+  }
 
-      // Update UI if available
-      if (window.renderMenu) {
-        window.renderMenu();
-      }
+  // Get text type configuration based on current text type selection
+  getTextTypeConfig() {
+    const currentTypeId = this.appState.currentTypeId || 'text:comic';
+    
+    // Get the NODE_TYPE configuration
+    const nodeType = window.NODE_TYPES?.find(t => t.id === currentTypeId);
+    
+    // Get the PIN_BASES configuration for default dimensions
+    const pinBase = window.PIN_BASES?.[currentTypeId];
+    
+    // Default configuration
+    const defaults = {
+      shape: 'bubble',
+      defaultWidth: 140,
+      defaultHeight: 70,
+      fontSize: 16,
+      hasTail: true
+    };
+    
+    // Build config based on type
+    if (nodeType && pinBase) {
+      return {
+        shape: nodeType.shape || pinBase.shape || defaults.shape,
+        defaultWidth: pinBase.defaultWidth || defaults.defaultWidth,
+        defaultHeight: pinBase.defaultHeight || defaults.defaultHeight,
+        fontSize: currentTypeId === 'text:title' ? 24 : (currentTypeId === 'text:plain' ? 14 : 16),
+        hasTail: nodeType.shape === 'bubble'
+      };
     }
+    
+    // Fallback based on type ID
+    const textTypeConfigs = {
+      'text:plain': { shape: 'text-plain', defaultWidth: 150, defaultHeight: 30, fontSize: 14, hasTail: false },
+      'text:rectangle': { shape: 'rectangle', defaultWidth: 120, defaultHeight: 60, fontSize: 16, hasTail: false },
+      'text:comic': { shape: 'bubble', defaultWidth: 140, defaultHeight: 70, fontSize: 16, hasTail: true },
+      'text:title': { shape: 'text-title', defaultWidth: 200, defaultHeight: 40, fontSize: 24, hasTail: false }
+    };
+    
+    return textTypeConfigs[currentTypeId] || defaults;
   }
 
   // Toggle connection type (straight/curved)
@@ -2215,17 +2354,27 @@ class EventHandlers {
 
   // Cycle through types within a family
   cycleTypeInFamily(family) {
-    const types = window.NODE_TYPES ? window.NODE_TYPES.filter(t => t.family === family) : [];
+    console.log(`🔄 cycleTypeInFamily('${family}') called`);
+    
+    // Defensive check for NODE_TYPES
+    if (!window.NODE_TYPES) {
+      console.error('❌ window.NODE_TYPES is not defined!');
+      return;
+    }
+    
+    const types = window.NODE_TYPES.filter(t => t.family === family);
     if (types.length === 0) {
       console.log(`❌ No types found for family: ${family}`);
       return;
     }
+    console.log(`📋 Found ${types.length} types for family '${family}':`, types.map(t => t.id));
 
     // Ensure we have a selectedTypeByFamily object
     this.appState.selectedTypeByFamily = this.appState.selectedTypeByFamily || {};
 
     // Get current type index for this family
     let currentIndex = this.appState.selectedTypeByFamily[family] || 0;
+    const oldIndex = currentIndex;
 
     // Cycle to next type
     currentIndex = (currentIndex + 1) % types.length;
@@ -2234,24 +2383,45 @@ class EventHandlers {
     // Set this family as active and update current type ID
     this.appState.currentTool = family;
     this.appState.currentFamily = family;
+    
+    const newType = types[currentIndex];
+    console.log(`✅ Cycled from index ${oldIndex} to ${currentIndex}: ${newType.id} (${newType.label})`);
 
     // Update current type ID via toolbar manager
     if (window.app && window.app.toolbarManager) {
       window.app.toolbarManager.updateCurrentTypeId();
       window.app.toolbarManager.render();
+      console.log(`🎨 Toolbar updated, currentTypeId: ${this.appState.currentTypeId}`);
+    } else {
+      console.warn('⚠️ window.app.toolbarManager not available - toolbar not updated');
+      // Fallback: directly set the currentTypeId
+      this.appState.currentTypeId = newType.id;
+      console.log(`🎨 Fallback: Set currentTypeId directly to ${newType.id}`);
     }
   }
 
   cycleSelectedPinType(family) {
+    console.log(`🔄 cycleSelectedPinType('${family}') called`);
+    
     // Check if there's a selected pin
     const selectedPinIndex = this.appState.selectedPinIndex;
     if (selectedPinIndex === null || selectedPinIndex === undefined) {
+      console.log('⚠️ No pin selected - cannot cycle pin type');
       return; // No pin selected
     }
+    console.log(`📍 Selected pin index: ${selectedPinIndex}`);
 
     const pin = this.appState.pins[selectedPinIndex];
     if (!pin) {
+      console.log(`❌ Pin at index ${selectedPinIndex} not found`);
       return; // Pin not found
+    }
+    console.log(`📍 Current pin typeId: ${pin.typeId}`);
+    
+    // Defensive check for NODE_TYPES
+    if (!window.NODE_TYPES) {
+      console.error('❌ window.NODE_TYPES is not defined!');
+      return;
     }
 
     // Special handling for area pins: change the center pin type, not the area shape
@@ -2303,31 +2473,39 @@ class EventHandlers {
     } else {
       // Regular pins: change the typeId as before
       // Get all types for this family
-      const types = window.NODE_TYPES ? window.NODE_TYPES.filter(t => t.family === family) : [];
+      const types = window.NODE_TYPES.filter(t => t.family === family);
       if (types.length === 0) {
+        console.log(`❌ No types found for family: ${family}`);
         return;
       }
+      console.log(`📋 Found ${types.length} types for family '${family}'`);
 
       // Find current type index within this family
       const currentTypeId = pin.typeId || pin.id;
       let currentIndex = types.findIndex(t => t.id === currentTypeId);
+      const wasInFamily = currentIndex !== -1;
 
       // If current type not found in family, start from beginning
       if (currentIndex === -1) {
         currentIndex = 0;
+        console.log(`📍 Pin was not in '${family}' family, starting at index 0`);
       } else {
         // Cycle to next type
+        const oldIndex = currentIndex;
         currentIndex = (currentIndex + 1) % types.length;
+        console.log(`📍 Cycling from index ${oldIndex} to ${currentIndex}`);
       }
 
       // Update pin type
       const newType = types[currentIndex];
       pin.typeId = newType.id;
       pin.variant = newType.variant; // Also update the variant for proper rendering
+      console.log(`✅ Pin typeId changed to: ${newType.id} (${newType.label})`);
     }
 
     // Save history (handles persistence automatically)
     this.appState.saveHistory();
+    console.log('💾 History saved');
     if (this.saveAppState) {
       this.saveAppState(this.appState);
     }
@@ -2341,55 +2519,17 @@ class EventHandlers {
 
 
   // Handle Shift+key shortcuts
+  // NOTE: Shift+1,2,3 are now handled in handleKeyDown with cycleSelectedPinType()
+  // This method is kept for any future Shift+key shortcuts that aren't numbers
   handleShiftShortcuts(e) {
-    // Shift+1: Cycle pin shapes
-    if (e.key === '1') {
-      e.preventDefault();
-      if (this.appState.selectedPinIndex !== null) {
-        const pin = this.appState.pins[this.appState.selectedPinIndex];
-        if (pin && pin.typeId && pin.typeId.startsWith("pin:")) {
-          const pinTypes = ["pin:circle", "pin:square", "pin:pill", "pin:diamond", "pin:person", "pin:business-building"];
-          const currentIndex = pinTypes.indexOf(pin.typeId);
-          const nextIndex = (currentIndex + 1) % pinTypes.length;
-          pin.typeId = pinTypes[nextIndex];
-          this.appState.saveHistory(); // Type changes should be undoable
-          this.draw();
-        } else {
-        }
-      } else {
-      }
+    // Shift+1,2,3 are handled in handleKeyDown - they should not reach here
+    // due to the return statements in the main handler
+    if (e.key === '1' || e.key === '2' || e.key === '3') {
+      console.log(`⚠️ handleShiftShortcuts received Shift+${e.key} - this should be handled earlier`);
+      return;
     }
-    // Shift+2: Cycle card shapes
-    else if (e.key === '2') {
-      e.preventDefault();
-      if (this.appState.selectedPinIndex !== null) {
-        const pin = this.appState.pins[this.appState.selectedPinIndex];
-        if (pin && pin.typeId && pin.typeId.startsWith("card:")) {
-          const cardTypes = ["card:card", "card:doc", "card:folder"];
-          const currentIndex = cardTypes.indexOf(pin.typeId);
-          const nextIndex = (currentIndex + 1) % cardTypes.length;
-          pin.typeId = cardTypes[nextIndex];
-          this.saveAppState(this.appState);
-          this.draw();
-        }
-      }
-    }
-    // Shift+3: Cycle area shapes
-    else if (e.key === '3') {
-      e.preventDefault();
-      if (this.appState.selectedPinIndex !== null) {
-        const pin = this.appState.pins[this.appState.selectedPinIndex];
-        if (pin && pin.typeId && pin.typeId.startsWith("area:")) {
-          const areaTypes = ["area:circle"];
-          // For now, only one area type, but can be extended
-          const currentIndex = areaTypes.indexOf(pin.typeId);
-          const nextIndex = (currentIndex + 1) % areaTypes.length;
-          pin.typeId = areaTypes[nextIndex];
-          this.saveAppState(this.appState);
-          this.draw();
-        }
-      }
-    }
+    
+    // Add any other Shift+key shortcuts here in the future
   }
 
 
