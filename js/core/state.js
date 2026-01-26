@@ -248,6 +248,15 @@ class AppState {
     const bubbleColor = properties.color || this.session.selectedColor;
     const textColor = properties.textColor || this.calculateTextColor(bubbleColor);
 
+    // Always create a fresh tailPosition object to avoid shared references
+    const defaultTailPosition = { angle: 270, distance: 0.8 };
+    const tailPosition = properties.tailPosition 
+      ? { ...defaultTailPosition, ...properties.tailPosition } // Merge with defaults, creating new object
+      : { ...defaultTailPosition }; // Fresh copy of defaults
+
+    // Create properties without tailPosition to avoid ...properties overriding our fresh copy
+    const { tailPosition: _ignoredTailPos, ...restProperties } = properties;
+
     return this.addPin(x, y, {
       description: description, // Description text (inside bubble)
       label: properties.label || '', // Title text (below bubble)
@@ -258,8 +267,8 @@ class AppState {
       fontSize: properties.fontSize || 16,
       width: properties.width || 200,
       height: properties.height || 50,
-      tailPosition: properties.tailPosition || { angle: 270, distance: 0.8 }, // Default tail at bottom
-      ...properties
+      tailPosition: tailPosition, // Always a fresh object
+      ...restProperties
     });
   }
 

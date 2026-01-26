@@ -1270,11 +1270,19 @@ class EventHandlers {
         return; // Don't create a new pin
       } else if (clickedPinIndex === null) {
         // Clicked in empty space - create new pin and connect it
-        console.log(`📍 Creating new pin connected to active pin ${this.appState.connectStartIndex} at (${mouseWorld.x}, ${mouseWorld.y})`);
+        console.log(`📍 CONNECTED PIN CREATION DEBUG:`);
+        console.log(`   connectStartIndex: ${this.appState.connectStartIndex}`);
+        console.log(`   currentTool: ${this.appState.currentTool}`);
+        console.log(`   currentFamily: ${this.appState.currentFamily}`);
+        console.log(`   currentTypeId: ${this.appState.currentTypeId}`);
+        console.log(`   selectedTypeByFamily:`, JSON.stringify(this.appState.selectedTypeByFamily));
 
         // Create the new pin first
         const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
         const pinShape = nodeType?.family === 'card' ? 'card' : (nodeType?.variant || 'circle');
+        
+        console.log(`   nodeType found:`, nodeType ? `${nodeType.id} (variant: ${nodeType.variant})` : 'NOT FOUND');
+        console.log(`   pinShape: ${pinShape}`);
 
         const newPin = this.appState.addPin(mouseWorld.x, mouseWorld.y, {
           color: this.appState.selectedColor,
@@ -1282,8 +1290,11 @@ class EventHandlers {
           note: "",
           date: "",
           typeId: this.appState.currentTypeId,
+          variant: nodeType?.variant || 'default',
           shape: pinShape
         });
+        
+        console.log(`   Created pin with typeId: ${this.appState.currentTypeId}, variant: ${nodeType?.variant}, shape: ${pinShape}`);
 
         const newPinIndex = this.appState.pins.length - 1;
 
@@ -1516,7 +1527,14 @@ class EventHandlers {
       if (!areaCreated && clickedPinIndex === null && this.appState.currentTypeId && isCreationTool) {
       // Create new pin at click location
       // Look up the node type to get variant and other properties
+      console.log(`🔍 PIN CREATION DEBUG:`);
+      console.log(`   currentTool: ${this.appState.currentTool}`);
+      console.log(`   currentFamily: ${this.appState.currentFamily}`);
+      console.log(`   currentTypeId: ${this.appState.currentTypeId}`);
+      console.log(`   selectedTypeByFamily:`, JSON.stringify(this.appState.selectedTypeByFamily));
+      
       const nodeType = window.NODE_TYPES?.find(nt => nt.id === this.appState.currentTypeId);
+      console.log(`   nodeType found:`, nodeType ? `${nodeType.id} (variant: ${nodeType.variant})` : 'NOT FOUND');
 
       const pinProperties = {
         color: this.appState.selectedColor,
@@ -1528,6 +1546,7 @@ class EventHandlers {
         pinScale: 1,
         shape: nodeType?.family === 'card' ? 'card' : (nodeType?.variant || 'circle') // Set shape based on family
       };
+      console.log(`   Creating pin with typeId: ${pinProperties.typeId}, variant: ${pinProperties.variant}, shape: ${pinProperties.shape}`);
 
         // Add pin-specific properties based on type
         if (this.appState.currentTypeId.startsWith("area:")) {
@@ -2031,12 +2050,17 @@ class EventHandlers {
       console.log('🎹 Shift+3 pressed - cycling selected pin to area types');
       this.cycleSelectedPinType('area');
       return;
-    }
-    // Handle Shift+Number: Quick color selection (Shift+1=first color, Shift+2=second color, etc.)
-    // Note: This conflicts with Shift+1,2,3 for pin type selection - prioritize pin type selection
-    else if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key >= '4' && e.key <= '9') {
+    } else if ((e.key === '$' || (e.key === '4' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      const colorIndex = parseInt(e.key) - 1; // Convert "4" to index 3, "5" to index 4, etc.
+      console.log('🎹 Shift+4 pressed - cycling selected pin to text types');
+      this.cycleSelectedPinType('text');
+      return;
+    }
+    // Handle Shift+Number: Quick color selection (Shift+5=fifth color, etc.)
+    // Note: Shift+1,2,3,4 are used for pin type selection
+    else if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key >= '5' && e.key <= '9') {
+      e.preventDefault();
+      const colorIndex = parseInt(e.key) - 1; // Convert "5" to index 4, "6" to index 5, etc.
       const currentPalette = typeof getPalette === 'function' ? getPalette() : [];
       if (colorIndex < currentPalette.length) {
         if (typeof setSelectedColor === 'function') {
@@ -2369,6 +2393,21 @@ class EventHandlers {
     }
     console.log(`📋 Found ${types.length} types for family '${family}':`, types.map(t => t.id));
 
+    // Check if we're switching TO this family or already IN this family
+    const previousFamily = this.appState.currentFamily;
+    const isSwitchingFamily = previousFamily !== family;
+    
+    // KEEP connection state (marquee) active when switching types/families
+    // This allows rapid placement of connected pins with different types
+    if (this.appState.connectStartIndex !== null) {
+      console.log(`🔗 Keeping connection active from pin ${this.appState.connectStartIndex} while switching ${isSwitchingFamily ? 'family' : 'type'}`);
+    }
+    
+    // Don't clear selection - keep the workflow smooth
+    if (isSwitchingFamily) {
+      console.log(`🔄 Switching from family '${previousFamily}' to '${family}'`);
+    }
+
     // Ensure we have a selectedTypeByFamily object
     this.appState.selectedTypeByFamily = this.appState.selectedTypeByFamily || {};
 
@@ -2376,28 +2415,41 @@ class EventHandlers {
     let currentIndex = this.appState.selectedTypeByFamily[family] || 0;
     const oldIndex = currentIndex;
 
-    // Cycle to next type
-    currentIndex = (currentIndex + 1) % types.length;
-    this.appState.selectedTypeByFamily[family] = currentIndex;
+    // Only cycle to next type if we're already in this family
+    // First press just selects the family with current type, subsequent presses cycle
+    if (!isSwitchingFamily) {
+      currentIndex = (currentIndex + 1) % types.length;
+      this.appState.selectedTypeByFamily[family] = currentIndex;
+      console.log(`✅ Cycled from index ${oldIndex} to ${currentIndex}: ${types[currentIndex].id} (${types[currentIndex].label})`);
+    } else {
+      console.log(`✅ Switched to family '${family}', keeping type at index ${currentIndex}: ${types[currentIndex].id} (${types[currentIndex].label})`);
+    }
 
     // Set this family as active and update current type ID
     this.appState.currentTool = family;
     this.appState.currentFamily = family;
     
     const newType = types[currentIndex];
-    console.log(`✅ Cycled from index ${oldIndex} to ${currentIndex}: ${newType.id} (${newType.label})`);
+    
+    // DIRECTLY set currentTypeId to ensure it's updated
+    this.appState.currentTypeId = newType.id;
+    console.log(`📌 Set currentTypeId to: ${this.appState.currentTypeId}`);
 
-    // Update current type ID via toolbar manager
+    // Update toolbar UI - use updateTypeGroupsUI instead of full render to avoid any potential state issues
     if (window.app && window.app.toolbarManager) {
-      window.app.toolbarManager.updateCurrentTypeId();
-      window.app.toolbarManager.render();
-      console.log(`🎨 Toolbar updated, currentTypeId: ${this.appState.currentTypeId}`);
-    } else {
-      console.warn('⚠️ window.app.toolbarManager not available - toolbar not updated');
-      // Fallback: directly set the currentTypeId
-      this.appState.currentTypeId = newType.id;
-      console.log(`🎨 Fallback: Set currentTypeId directly to ${newType.id}`);
+      window.app.toolbarManager.updateActiveToolUI(family);
+      window.app.toolbarManager.updateTypeGroupsUI();
     }
+    
+    // Verify the state is correct
+    console.log(`🎨 After cycle - VERIFY STATE:`);
+    console.log(`   currentTool: ${this.appState.currentTool}`);
+    console.log(`   currentFamily: ${this.appState.currentFamily}`);
+    console.log(`   currentTypeId: ${this.appState.currentTypeId}`);
+    console.log(`   selectedTypeByFamily:`, JSON.stringify(this.appState.selectedTypeByFamily));
+    
+    // Redraw to reflect changes
+    this.draw();
   }
 
   cycleSelectedPinType(family) {
@@ -2500,6 +2552,24 @@ class EventHandlers {
       const newType = types[currentIndex];
       pin.typeId = newType.id;
       pin.variant = newType.variant; // Also update the variant for proper rendering
+      
+      // Special handling for text pins - update shape property
+      if (family === 'text' && newType.shape) {
+        pin.shape = newType.shape;
+        // Update tail visibility based on shape
+        if (newType.shape === 'bubble') {
+          pin.tailType = pin.tailType || 'curved'; // Restore tail for bubble
+        } else {
+          pin.tailType = 'none'; // Hide tail for non-bubble shapes
+        }
+        console.log(`📝 Text pin shape changed to: ${pin.shape}, tailType: ${pin.tailType}`);
+      }
+      
+      // Special handling for card pins - update shape property
+      if (family === 'card') {
+        pin.shape = 'card';
+      }
+      
       console.log(`✅ Pin typeId changed to: ${newType.id} (${newType.label})`);
     }
 
@@ -2519,12 +2589,12 @@ class EventHandlers {
 
 
   // Handle Shift+key shortcuts
-  // NOTE: Shift+1,2,3 are now handled in handleKeyDown with cycleSelectedPinType()
+  // NOTE: Shift+1,2,3,4 are now handled in handleKeyDown with cycleSelectedPinType()
   // This method is kept for any future Shift+key shortcuts that aren't numbers
   handleShiftShortcuts(e) {
-    // Shift+1,2,3 are handled in handleKeyDown - they should not reach here
+    // Shift+1,2,3,4 are handled in handleKeyDown - they should not reach here
     // due to the return statements in the main handler
-    if (e.key === '1' || e.key === '2' || e.key === '3') {
+    if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4') {
       console.log(`⚠️ handleShiftShortcuts received Shift+${e.key} - this should be handled earlier`);
       return;
     }

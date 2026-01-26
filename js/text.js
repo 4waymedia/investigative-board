@@ -8,6 +8,7 @@ let currentEditingId = null;
 let currentImageData = null;
 let textModalHandlers = null;
 let marqueeWasActive = false; // Track if marquee was running when modal opened
+let realTimeAbortController = null; // For cleaning up event listeners
 
 /**
  * Open text modal for creating/editing text with state handling
@@ -178,6 +179,13 @@ function closeTextModal() {
   if (backdrop) backdrop.style.display = 'none';
 
   currentEditingId = null;
+  
+  // Clean up event listeners from real-time updates
+  if (realTimeAbortController) {
+    realTimeAbortController.abort();
+    realTimeAbortController = null;
+    console.log('🔧 Cleaned up real-time update listeners');
+  }
 
   // Restart marquee if it was active before modal opened
   if (marqueeWasActive && window.app && window.app.eventHandlers) {
@@ -326,6 +334,15 @@ function setupTextModalHandlers() {
   // Real-time update handlers - update the pin as user makes changes
   const setupRealTimeUpdate = () => {
     console.log('🔧 setupRealTimeUpdate called, currentEditingId:', currentEditingId);
+    
+    // Clean up any existing listeners from previous modal sessions
+    if (realTimeAbortController) {
+      console.log('🔧 Aborting previous event listeners');
+      realTimeAbortController.abort();
+    }
+    realTimeAbortController = new AbortController();
+    const signal = realTimeAbortController.signal;
+    
     if (!currentEditingId || !window.app || !window.app.appState) {
       console.log('🔧 Early return - missing required objects');
       return;
@@ -367,7 +384,7 @@ function setupTextModalHandlers() {
       input.addEventListener('input', () => {
         pin.label = input.value.trim();
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Description - shown inside bubble (with auto-sizing)
@@ -403,7 +420,7 @@ function setupTextModalHandlers() {
         }
         
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Shape type
@@ -432,7 +449,7 @@ function setupTextModalHandlers() {
         
         console.log(`📝 Shape changed: "${oldShape}" → "${pin.shape}", tailType: "${pin.tailType}"`);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Tail type
@@ -441,7 +458,7 @@ function setupTextModalHandlers() {
         pin.tailType = tailTypeSelect.value;
         console.log(`📝 Real-time tail type update: "${pin.tailType}"`);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Tail angle (direction)
@@ -453,7 +470,7 @@ function setupTextModalHandlers() {
         const angleDisplay = document.getElementById('text-modal-tail-angle-value');
         if (angleDisplay) angleDisplay.textContent = pin.tailPosition.angle + '°';
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Tail length (distance)
@@ -465,7 +482,7 @@ function setupTextModalHandlers() {
         const lengthDisplay = document.getElementById('text-modal-tail-length-value');
         if (lengthDisplay) lengthDisplay.textContent = pin.tailPosition.distance + 'x';
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Tail auto-point to connection
@@ -474,7 +491,7 @@ function setupTextModalHandlers() {
       tailAutoPointCheckbox.addEventListener('change', () => {
         pin.tailAutoPoint = tailAutoPointCheckbox.checked;
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Bubble color
@@ -482,7 +499,7 @@ function setupTextModalHandlers() {
       bubbleColorInput.addEventListener('input', () => {
         pin.color = bubbleColorInput.value;
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Bubble color alpha
@@ -491,7 +508,7 @@ function setupTextModalHandlers() {
         const newAlpha = parseFloat(bubbleColorAlpha.value);
         pin.colorAlpha = newAlpha;
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Title color
@@ -500,7 +517,7 @@ function setupTextModalHandlers() {
       titleColorInput.addEventListener('input', () => {
         pin.titleColor = titleColorInput.value;
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Title color alpha
@@ -509,7 +526,7 @@ function setupTextModalHandlers() {
       titleColorAlpha.addEventListener('input', () => {
         pin.titleColorAlpha = parseFloat(titleColorAlpha.value);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Description color
@@ -518,7 +535,7 @@ function setupTextModalHandlers() {
       descriptionColorInput.addEventListener('input', () => {
         pin.descriptionColor = descriptionColorInput.value;
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Description color alpha
@@ -527,7 +544,7 @@ function setupTextModalHandlers() {
       descriptionColorAlpha.addEventListener('input', () => {
         pin.descriptionColorAlpha = parseFloat(descriptionColorAlpha.value);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Border color
@@ -535,7 +552,7 @@ function setupTextModalHandlers() {
       borderColorInput.addEventListener('input', () => {
         pin.borderColor = borderColorInput.value;
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Border color alpha
@@ -543,7 +560,7 @@ function setupTextModalHandlers() {
       borderColorAlpha.addEventListener('input', () => {
         pin.borderColorAlpha = parseFloat(borderColorAlpha.value);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Width
@@ -551,7 +568,7 @@ function setupTextModalHandlers() {
       widthSlider.addEventListener('input', () => {
         pin.width = parseInt(widthSlider.value);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Height
@@ -559,7 +576,7 @@ function setupTextModalHandlers() {
       heightSlider.addEventListener('input', () => {
         pin.height = parseInt(heightSlider.value);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Font size (with auto-resize)
@@ -592,7 +609,7 @@ function setupTextModalHandlers() {
         }
         
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Border width
@@ -600,7 +617,7 @@ function setupTextModalHandlers() {
       borderWidthSlider.addEventListener('input', () => {
         pin.borderWidth = parseFloat(borderWidthSlider.value);
         updateAndRender();
-      });
+      }, { signal });
     }
 
     // Drop shadow
@@ -608,7 +625,7 @@ function setupTextModalHandlers() {
       dropShadowCheckbox.addEventListener('change', () => {
         pin.dropShadow = dropShadowCheckbox.checked;
         updateAndRender();
-      });
+      }, { signal });
     }
   };
 

@@ -1978,8 +1978,8 @@ function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, 
   const tipX = scr.x + rx * Math.cos(tailAngle) * 1.8;
   const tipY = scr.y + ry * Math.sin(tailAngle) * 1.8;
   
-  // Width of tail at base
-  const baseWidth = Math.min(width, height) * 0.25;
+  // Width of tail at base (wider for better connection appearance)
+  const baseWidth = Math.min(width, height) * 0.4;
   
   // Calculate perpendicular direction for tail width
   const perpAngle = tailAngle + Math.PI / 2;
@@ -1991,30 +1991,30 @@ function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, 
   
   switch (tailType) {
     case 'curved':
-      // Classic comic book curved tail
-      const cp1x = attachX + Math.cos(tailAngle) * tailLength * 0.3 + Math.cos(perpAngle) * baseWidth * 0.5;
-      const cp1y = attachY + Math.sin(tailAngle) * tailLength * 0.3 + Math.sin(perpAngle) * baseWidth * 0.5;
-      const cp2x = attachX + Math.cos(tailAngle) * tailLength * 0.3 - Math.cos(perpAngle) * baseWidth * 0.3;
-      const cp2y = attachY + Math.sin(tailAngle) * tailLength * 0.3 - Math.sin(perpAngle) * baseWidth * 0.3;
+      // Classic comic book curved tail with wider base
+      const cp1x = attachX + Math.cos(tailAngle) * tailLength * 0.3 + Math.cos(perpAngle) * baseWidth * 0.6;
+      const cp1y = attachY + Math.sin(tailAngle) * tailLength * 0.3 + Math.sin(perpAngle) * baseWidth * 0.6;
+      const cp2x = attachX + Math.cos(tailAngle) * tailLength * 0.3 - Math.cos(perpAngle) * baseWidth * 0.4;
+      const cp2y = attachY + Math.sin(tailAngle) * tailLength * 0.3 - Math.sin(perpAngle) * baseWidth * 0.4;
       
       ctx.beginPath();
-      // Left side of tail base
-      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.4, attachY + Math.sin(perpAngle) * baseWidth * 0.4);
+      // Left side of tail base (wider connection)
+      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.5, attachY + Math.sin(perpAngle) * baseWidth * 0.5);
       // Curve to tip
       ctx.quadraticCurveTo(cp1x, cp1y, tipX, tipY);
       // Curve back to right side of tail base
-      ctx.quadraticCurveTo(cp2x, cp2y, attachX - Math.cos(perpAngle) * baseWidth * 0.4, attachY - Math.sin(perpAngle) * baseWidth * 0.4);
+      ctx.quadraticCurveTo(cp2x, cp2y, attachX - Math.cos(perpAngle) * baseWidth * 0.5, attachY - Math.sin(perpAngle) * baseWidth * 0.5);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
       break;
       
     case 'triangle':
-      // Simple triangular tail
+      // Simple triangular tail with wider base
       ctx.beginPath();
-      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.4, attachY + Math.sin(perpAngle) * baseWidth * 0.4);
+      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.5, attachY + Math.sin(perpAngle) * baseWidth * 0.5);
       ctx.lineTo(tipX, tipY);
-      ctx.lineTo(attachX - Math.cos(perpAngle) * baseWidth * 0.4, attachY - Math.sin(perpAngle) * baseWidth * 0.4);
+      ctx.lineTo(attachX - Math.cos(perpAngle) * baseWidth * 0.5, attachY - Math.sin(perpAngle) * baseWidth * 0.5);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -2037,9 +2037,9 @@ function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, 
       break;
       
     case 'wavy':
-      // Wavy/squiggly tail for excited speech
+      // Wavy/squiggly tail for excited speech with wider base
       ctx.beginPath();
-      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.3, attachY + Math.sin(perpAngle) * baseWidth * 0.3);
+      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.5, attachY + Math.sin(perpAngle) * baseWidth * 0.5);
       
       const segments = 4;
       for (let i = 0; i <= segments; i++) {
@@ -2057,14 +2057,14 @@ function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, 
         }
       }
       
-      // Come back on the other side
+      // Come back on the other side with wider base
       for (let i = segments; i >= 0; i--) {
         const t = i / segments;
         const x = attachX + (tipX - attachX) * t;
         const y = attachY + (tipY - attachY) * t;
-        const wave = Math.sin(t * Math.PI * 2) * baseWidth * 0.2 * (1 - t);
-        const wx = x - Math.cos(perpAngle) * (wave + baseWidth * 0.2 * (1 - t));
-        const wy = y - Math.sin(perpAngle) * (wave + baseWidth * 0.2 * (1 - t));
+        const wave = Math.sin(t * Math.PI * 2) * baseWidth * 0.25 * (1 - t);
+        const wx = x - Math.cos(perpAngle) * (wave + baseWidth * 0.35 * (1 - t));
+        const wy = y - Math.sin(perpAngle) * (wave + baseWidth * 0.35 * (1 - t));
         ctx.lineTo(wx, wy);
       }
       

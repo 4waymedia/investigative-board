@@ -410,7 +410,19 @@ class ToolbarManager {
     this.families.forEach((family) => {
       const typeOption = this.typesContainer.querySelector(`.type-option[data-family-id="${family.id}"]`);
       if (typeOption) {
+        // Update active state
         typeOption.classList.toggle("active", this.appState.currentFamily === family.id);
+        
+        // Update the icon and label to reflect current type selection
+        const types = this.nodeTypes.filter((t) => t.family === family.id);
+        const selectedIndex = (this.appState.selectedTypeByFamily && 
+          this.appState.selectedTypeByFamily[family.id]) || 0;
+        const currentType = types[selectedIndex] || { icon: family.defaultIcon, label: family.name };
+        
+        const iconEl = typeOption.querySelector('.type-option-icon');
+        const labelEl = typeOption.querySelector('.label');
+        if (iconEl) iconEl.textContent = currentType.icon;
+        if (labelEl) labelEl.textContent = currentType.label || family.name;
       }
     });
   }
@@ -604,10 +616,13 @@ class ToolbarManager {
     const typeIndex = selectedTypeByFamily[family] || 0;
     const types = this.nodeTypes.filter((t) => t.family === family);
 
+    console.log(`🔄 updateCurrentTypeId: family=${family}, typeIndex=${typeIndex}, types=`, types.map(t => t.id));
+
     // Guard against stale state - ensure typeIndex is valid
     const safeTypeIndex = Math.min(typeIndex, types.length - 1);
     if (types[safeTypeIndex]) {
       this.appState.currentTypeId = types[safeTypeIndex].id;
+      console.log(`✅ Set currentTypeId to: ${this.appState.currentTypeId}`);
 
       // Update the selected index if it was out of bounds
       if (safeTypeIndex !== typeIndex) {
