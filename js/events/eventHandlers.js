@@ -2553,6 +2553,12 @@ class EventHandlers {
       pin.typeId = newType.id;
       pin.variant = newType.variant; // Also update the variant for proper rendering
       
+      // Special handling for regular pins - update shape from PIN_BASES
+      if (family === 'pin' && window.PIN_BASES && window.PIN_BASES[newType.id]) {
+        pin.shape = window.PIN_BASES[newType.id].shape;
+        console.log(`📍 Pin shape changed to: ${pin.shape} (from PIN_BASES)`);
+      }
+      
       // Special handling for text pins - update shape property
       if (family === 'text' && newType.shape) {
         pin.shape = newType.shape;
