@@ -19,6 +19,11 @@ class SystemMenuManager {
     this.fileMenuDropdown = null;
     this.isFileMenuOpen = false;
 
+    // References to managers (set during initialize)
+    this.boardManager = null;
+    this.boardPickerUI = null;
+    this.app = null;
+
     // Get references to global functions
     this.saveAppState = null;
     this.loadFromFile = null;
@@ -32,6 +37,9 @@ class SystemMenuManager {
     this.loadFromFile = dependencies.loadFromFile;
     this.exportData = dependencies.exportData;
     this.importData = dependencies.importData;
+    this.boardManager = dependencies.boardManager;
+    this.boardPickerUI = dependencies.boardPickerUI;
+    this.app = dependencies.app;
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -155,23 +163,45 @@ class SystemMenuManager {
 
   // Get HTML for file menu dropdown
   getFileMenuHTML() {
+    const boardTitle = this.appState?.meta?.title || 'Untitled Board';
+    const canCreateBoard = this.boardManager?.canCreateBoard() ?? true;
+    
     return `
       <div class="file-menu-section">
-        <div class="file-menu-item" data-action="save">
-          <span class="file-menu-icon">💾</span>
-          <span class="file-menu-label">Save</span>
+        <div class="file-menu-board-info">
+          <span class="file-menu-board-icon">📋</span>
+          <span class="file-menu-board-title">${this._escapeHtml(boardTitle)}</span>
         </div>
       </div>
       <div class="file-menu-separator"></div>
       <div class="file-menu-section">
-        <div class="file-menu-header">Data</div>
+        <div class="file-menu-item ${!canCreateBoard ? 'file-menu-item-disabled' : ''}" data-action="new-board" ${!canCreateBoard ? 'title="Board limit reached"' : ''}>
+          <span class="file-menu-icon">➕</span>
+          <span class="file-menu-label">New Board</span>
+        </div>
+        <div class="file-menu-item" data-action="open-boards">
+          <span class="file-menu-icon">📂</span>
+          <span class="file-menu-label">Open Board...</span>
+        </div>
+        <div class="file-menu-item" data-action="save">
+          <span class="file-menu-icon">💾</span>
+          <span class="file-menu-label">Save</span>
+        </div>
+        <div class="file-menu-item" data-action="close-board">
+          <span class="file-menu-icon">✖️</span>
+          <span class="file-menu-label">Close Board</span>
+        </div>
+      </div>
+      <div class="file-menu-separator"></div>
+      <div class="file-menu-section">
+        <div class="file-menu-header">Import / Export</div>
         <div class="file-menu-item" data-action="export">
           <span class="file-menu-icon">📤</span>
-          <span class="file-menu-label">Export</span>
+          <span class="file-menu-label">Export Board...</span>
         </div>
-        <div class="file-menu-item" data-action="import">
+        <div class="file-menu-item ${!canCreateBoard ? 'file-menu-item-disabled' : ''}" data-action="import" ${!canCreateBoard ? 'title="Board limit reached"' : ''}>
           <span class="file-menu-icon">📥</span>
-          <span class="file-menu-label">Import</span>
+          <span class="file-menu-label">Import Board...</span>
         </div>
       </div>
       <div class="file-menu-separator"></div>
@@ -180,10 +210,6 @@ class SystemMenuManager {
         <div class="file-menu-item" data-action="load-shapes">
           <span class="file-menu-icon">🔷</span>
           <span class="file-menu-label">Shapes</span>
-        </div>
-        <div class="file-menu-item" data-action="load-board">
-          <span class="file-menu-icon">📋</span>
-          <span class="file-menu-label">Board</span>
         </div>
         <div class="file-menu-item" data-action="load-assets">
           <span class="file-menu-icon">🖼️</span>
@@ -216,6 +242,14 @@ class SystemMenuManager {
     `;
   }
 
+  // Escape HTML to prevent XSS
+  _escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
   // Set up event handlers for file menu items
   setupFileMenuEventHandlers() {
     if (!this.fileMenuDropdown) return;
@@ -233,8 +267,17 @@ class SystemMenuManager {
   // Handle file menu actions
   handleFileMenuAction(action) {
     switch (action) {
+      case "new-board":
+        this.handleNewBoard();
+        break;
+      case "open-boards":
+        this.handleOpenBoards();
+        break;
       case "save":
         this.handleSave();
+        break;
+      case "close-board":
+        this.handleCloseBoard();
         break;
       case "export":
         this.handleExport();
@@ -244,9 +287,6 @@ class SystemMenuManager {
         break;
       case "load-shapes":
         this.handleLoadShapes();
-        break;
-      case "load-board":
-        this.handleLoadBoard();
         break;
       case "load-assets":
         this.handleLoadAssets();
@@ -269,8 +309,49 @@ class SystemMenuManager {
   }
 
   // File menu action handlers
+  
+  handleNewBoard() {
+    if (!this.boardManager) {
+      this.showToast("Board manager not available", "error");
+      return;
+    }
+
+    if (!this.boardManager.canCreateBoard()) {
+      this.showToast("Board limit reached. Upgrade your membership for more boards.", "warning");
+      return;
+    }
+
+    const title = prompt("Enter board name:", "Untitled Board");
+    if (title === null) return; // Cancelled
+
+    // Save current board first
+    if (this.appState.meta?.id) {
+      this.boardManager.saveBoard();
+    }
+
+    const boardId = this.boardManager.createBoard(title.trim() || "Untitled Board");
+    if (boardId) {
+      this.boardManager.loadBoard(boardId);
+      this._notifyBoardChange();
+      this.showToast(`Created "${title}"`, "success");
+    } else {
+      this.showToast("Failed to create board", "error");
+    }
+  }
+
+  handleOpenBoards() {
+    if (this.boardPickerUI) {
+      this.boardPickerUI.open();
+    } else {
+      this.showToast("Board picker not available", "error");
+    }
+  }
+
   handleSave() {
-    if (this.saveAppState) {
+    if (this.boardManager && this.appState.meta?.id) {
+      this.boardManager.saveBoard();
+      this.showToast("Board saved successfully!", "success");
+    } else if (this.saveAppState) {
       this.saveAppState(this.appState);
       this.showToast("Board saved successfully!", "success");
     } else {
@@ -278,21 +359,63 @@ class SystemMenuManager {
     }
   }
 
+  handleCloseBoard() {
+    if (!this.boardManager) {
+      this.showToast("Board manager not available", "error");
+      return;
+    }
+
+    // Confirm if there's an active board
+    if (this.appState.meta?.id) {
+      if (!confirm("Close the current board? Unsaved changes will be saved automatically.")) {
+        return;
+      }
+      
+      // Save before closing
+      this.boardManager.saveBoard();
+    }
+
+    // Clear the board
+    this.appState.clearBoard();
+    this._notifyBoardChange();
+    this.showToast("Board closed", "info");
+  }
+
   handleExport() {
-    if (this.exportData) {
+    if (this.boardManager) {
+      this.boardManager.exportBoard();
+      this.showToast("Board exported successfully!", "success");
+    } else if (this.exportData) {
       this.exportData();
       this.showToast("Data exported successfully!", "success");
     } else {
-      this.showToast("Export functionality not implemented yet", "info");
+      this.showToast("Export functionality not available", "error");
     }
   }
 
-  handleImport() {
-    if (this.importData) {
-      this.importData();
-      this.showToast("Import functionality not implemented yet", "info");
-    } else {
-      this.showToast("Import functionality not implemented yet", "info");
+  async handleImport() {
+    if (!this.boardManager) {
+      this.showToast("Board manager not available", "error");
+      return;
+    }
+
+    if (!this.boardManager.canCreateBoard()) {
+      this.showToast("Board limit reached. Upgrade your membership for more boards.", "warning");
+      return;
+    }
+
+    try {
+      const boardId = await this.boardManager.importBoardFromFile();
+      if (boardId) {
+        this.showToast("Board imported successfully!", "success");
+        // Optionally load the imported board
+        if (confirm("Load the imported board now?")) {
+          this.boardManager.loadBoard(boardId);
+          this._notifyBoardChange();
+        }
+      }
+    } catch (err) {
+      this.showToast("Failed to import board: " + err.message, "error");
     }
   }
 
@@ -300,16 +423,26 @@ class SystemMenuManager {
     this.showToast("Load Shapes - Feature coming soon!", "info");
   }
 
-  handleLoadBoard() {
-    if (this.loadFromFile) {
-      this.loadFromFile();
-    } else {
-      this.showToast("Load Board functionality not available", "error");
-    }
-  }
-
   handleLoadAssets() {
     this.showToast("Load Assets - Feature coming soon!", "info");
+  }
+
+  // Notify the application that the board has changed
+  _notifyBoardChange() {
+    // Sync global variables
+    if (this.app && this.app.syncGlobalVariables) {
+      this.app.syncGlobalVariables();
+    }
+    
+    // Trigger redraw
+    if (this.app && this.app.render) {
+      this.app.render();
+    }
+    
+    // Re-render tray with cards
+    if (this.app && this.app.trayManager) {
+      this.app.trayManager.render();
+    }
   }
 
   handleHelpInstructions() {

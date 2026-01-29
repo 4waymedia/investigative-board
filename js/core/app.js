@@ -6,11 +6,14 @@ class Application {
     // Store dependencies (with defaults to window objects for backward compatibility)
     this.deps = {
       AppState: deps.AppState || window.AppState,
+      BoardManager: deps.BoardManager || window.BoardManager,
+      BoardPickerUI: deps.BoardPickerUI || window.BoardPickerUI,
       ModalManager: deps.ModalManager || window.ModalManager,
       TrayManager: deps.TrayManager || window.TrayManager,
       ToolbarManager: deps.ToolbarManager || window.ToolbarManager,
       EventHandlers: deps.EventHandlers || window.EventHandlers,
       DragManager: deps.DragManager || window.DragManager,
+      SystemMenuManager: deps.SystemMenuManager || window.SystemMenuManager,
       loadThemes: deps.loadThemes || window.loadThemes,
       loadAppState: deps.loadAppState || window.loadAppState,
       saveAppState: deps.saveAppState || window.saveAppState,
@@ -27,6 +30,9 @@ class Application {
     };
 
     this.appState = null;
+    this.boardManager = null;
+    this.boardPickerUI = null;
+    this.systemMenuManager = null;
     this.eventHandlers = null;
     this.modalManager = null;
     this.trayManager = null;
@@ -83,30 +89,68 @@ class Application {
     // Initialize AppState
     this.appState = new this.deps.AppState();
 
+    // Initialize BoardManager (handles multi-board storage)
+    if (this.deps.BoardManager) {
+      this.boardManager = new this.deps.BoardManager();
+      this.boardManager.initialize(this.appState, this);
+      window.boardManager = this.boardManager; // Make globally available
+      console.log("📋 BoardManager initialized");
+    }
+
     // Load themes
     if (this.deps.loadThemes) {
       await this.deps.loadThemes();
     }
 
-    // Load saved state
+    // Load saved state using BoardManager (handles migration from legacy format)
     console.log("📥 Loading saved state...");
-    try {
-      const stored = localStorage.getItem(this.deps.STORAGE_KEY || 'msc-investigativeboard');
-      console.log("📥 Raw localStorage data:", stored ? "Found data" : "No data found");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        console.log("📥 Parsed localStorage keys:", Object.keys(parsed));
-        console.log("📥 Sample data - pins:", parsed.pins?.length || 0, "connections:", parsed.connections?.length || 0);
-      }
-    } catch (e) {
-      console.error("📥 Error checking localStorage:", e);
-    }
+    let stateLoaded = false;
 
-    const stateLoaded = this.deps.loadAppState(this.appState);
-    console.log("📥 State loaded:", stateLoaded);
+    if (this.boardManager) {
+      // Check if there's an active board to load
+      const activeBoardId = this.boardManager.getActiveBoardId();
+      if (activeBoardId) {
+        stateLoaded = this.boardManager.loadBoard(activeBoardId);
+        console.log("📥 Loaded active board:", activeBoardId, "success:", stateLoaded);
+      } else {
+        // Check for any boards in the index
+        const boards = this.boardManager.getBoardList();
+        if (boards.length > 0) {
+          // Load the first board
+          stateLoaded = this.boardManager.loadBoard(boards[0].id);
+          console.log("📥 Loaded first available board:", boards[0].id);
+        } else {
+          // No boards exist - create a default board
+          console.log("📥 No boards found, creating default board...");
+          const newBoardId = this.boardManager.createBoard("My Board", "");
+          if (newBoardId) {
+            stateLoaded = this.boardManager.loadBoard(newBoardId);
+            // Set default cards for new boards
+            this.appState.cards = this.deps.DEFAULT_CARDS || [];
+          }
+        }
+      }
+    } else {
+      // Fallback to legacy loading if BoardManager not available
+      try {
+        const stored = localStorage.getItem(this.deps.STORAGE_KEY || 'msc-investigativeboard');
+        console.log("📥 Raw localStorage data:", stored ? "Found data" : "No data found");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          console.log("📥 Parsed localStorage keys:", Object.keys(parsed));
+          console.log("📥 Sample data - pins:", parsed.pins?.length || 0, "connections:", parsed.connections?.length || 0);
+        }
+      } catch (e) {
+        console.error("📥 Error checking localStorage:", e);
+      }
+
+      stateLoaded = this.deps.loadAppState(this.appState);
+      console.log("📥 State loaded (legacy):", stateLoaded);
+    }
 
     if (stateLoaded) {
       console.log("📊 Loaded state summary:");
+      console.log("  - Board:", this.appState.meta?.title || "Untitled");
       console.log("  - Pins:", this.appState.pins?.length || 0);
       console.log("  - Connections:", this.appState.connections?.length || 0);
       console.log("  - Scale:", this.appState.scale);
@@ -135,6 +179,38 @@ class Application {
     // Initialize managers
     this.initializeManagers();
 
+    // Initialize BoardPickerUI
+    if (this.deps.BoardPickerUI && this.boardManager) {
+      this.boardPickerUI = new this.deps.BoardPickerUI();
+      this.boardPickerUI.initialize(this.boardManager, this.appState, this, {
+        onBoardLoad: (boardId) => {
+          this.syncGlobalVariables();
+          this.render();
+          if (this.trayManager) this.trayManager.render();
+        },
+        onBoardCreate: (boardId) => {
+          this.syncGlobalVariables();
+          this.render();
+          if (this.trayManager) this.trayManager.render();
+        }
+      });
+      window.boardPickerUI = this.boardPickerUI;
+      console.log("📋 BoardPickerUI initialized");
+    }
+
+    // Initialize SystemMenuManager with BoardManager reference
+    if (this.deps.SystemMenuManager) {
+      this.systemMenuManager = new this.deps.SystemMenuManager(this.appState);
+      this.systemMenuManager.initialize({
+        saveAppState: this.deps.saveAppState,
+        boardManager: this.boardManager,
+        boardPickerUI: this.boardPickerUI,
+        app: this
+      });
+      window.systemMenuManager = this.systemMenuManager;
+      console.log("📋 SystemMenuManager initialized with BoardManager");
+    }
+
     // Set up canvas and rendering
     this.setupCanvas();
 
@@ -159,8 +235,33 @@ class Application {
     // Set up control button handlers
     this.setupControlHandlers();
 
+    // Set up auto-save through BoardManager
+    this._setupAutoSave();
+
     // Initial render is handled earlier in the method
 
+  }
+
+  // Set up auto-save functionality through BoardManager
+  _setupAutoSave() {
+    if (!this.boardManager) return;
+
+    // Debounced auto-save
+    let saveTimeout = null;
+    const autoSave = () => {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        if (this.appState.meta?.id) {
+          this.boardManager.saveBoard(false); // Don't update thumbnail on every auto-save
+          console.log("💾 Auto-saved board");
+        }
+      }, 2000); // Save 2 seconds after last change
+    };
+
+    // Subscribe to state changes for auto-save
+    this.subscribeToStateChanges(() => {
+      autoSave();
+    });
   }
 
   // Create temporary state aliases for backward compatibility
@@ -1177,7 +1278,11 @@ class Application {
 
   // Save application state
   saveState() {
-    if (this.deps.saveAppState && this.appState) {
+    if (this.boardManager && this.appState.meta?.id) {
+      // Use BoardManager for multi-board system
+      this.boardManager.saveBoard();
+    } else if (this.deps.saveAppState && this.appState) {
+      // Fallback to legacy save
       this.deps.saveAppState(this.appState);
     }
   }
@@ -1199,6 +1304,160 @@ class Application {
       this.eventHandlers.destroy();
     }
     // Clean up other resources
+  }
+
+  // ============================================================================
+  // THUMBNAIL GENERATION
+  // ============================================================================
+
+  /**
+   * Generate a thumbnail of the current board state
+   * Creates a scaled-down snapshot of the canvas content
+   * @param {number} maxWidth - Maximum thumbnail width (default 200)
+   * @param {number} maxHeight - Maximum thumbnail height (default 150)
+   * @returns {string|null} Data URL of the thumbnail image, or null if no content
+   */
+  generateThumbnail(maxWidth = 200, maxHeight = 150) {
+    if (!this.canvas || !this.ctx) {
+      console.warn('Cannot generate thumbnail: canvas not available');
+      return null;
+    }
+
+    // Calculate content bounds
+    const bounds = this.calculateContentBounds();
+    if (!bounds) {
+      // No content, return a simple placeholder
+      return this._generateEmptyThumbnail(maxWidth, maxHeight);
+    }
+
+    // Add some padding around the content
+    const padding = 50;
+    const contentWidth = bounds.width + padding * 2;
+    const contentHeight = bounds.height + padding * 2;
+
+    // Calculate scale to fit within max dimensions while maintaining aspect ratio
+    const scaleX = maxWidth / contentWidth;
+    const scaleY = maxHeight / contentHeight;
+    const thumbScale = Math.min(scaleX, scaleY, 1); // Don't upscale
+
+    // Calculate final thumbnail dimensions
+    const thumbWidth = Math.ceil(contentWidth * thumbScale);
+    const thumbHeight = Math.ceil(contentHeight * thumbScale);
+
+    // Create offscreen canvas for thumbnail
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = maxWidth;
+    thumbCanvas.height = maxHeight;
+    const thumbCtx = thumbCanvas.getContext('2d');
+
+    // Fill with dark background
+    thumbCtx.fillStyle = '#1e1e2e';
+    thumbCtx.fillRect(0, 0, maxWidth, maxHeight);
+
+    // Center the content in the thumbnail
+    const offsetX = (maxWidth - thumbWidth) / 2;
+    const offsetY = (maxHeight - thumbHeight) / 2;
+
+    // Set up transform to draw content centered and scaled
+    thumbCtx.save();
+    thumbCtx.translate(offsetX, offsetY);
+    thumbCtx.scale(thumbScale, thumbScale);
+    thumbCtx.translate(-bounds.left + padding, -bounds.top + padding);
+
+    // Draw connections
+    this._drawConnectionsToContext(thumbCtx);
+
+    // Draw pins (simplified for thumbnail)
+    this._drawPinsToContext(thumbCtx);
+
+    thumbCtx.restore();
+
+    // Convert to data URL with compression
+    try {
+      return thumbCanvas.toDataURL('image/png');
+    } catch (e) {
+      console.error('Failed to generate thumbnail:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Generate a placeholder thumbnail for empty boards
+   * @private
+   */
+  _generateEmptyThumbnail(width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    // Dark background
+    ctx.fillStyle = '#1e1e2e';
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle grid
+    ctx.strokeStyle = '#2a2a3e';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < height; y += 20) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    return canvas.toDataURL('image/png');
+  }
+
+  /**
+   * Draw connections to a given context (for thumbnails)
+   * @private
+   */
+  _drawConnectionsToContext(ctx) {
+    if (!this.appState.connections || !this.appState.pins) return;
+
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+
+    this.appState.connections.forEach(conn => {
+      const startPin = this.appState.pins[conn.from];
+      const endPin = this.appState.pins[conn.to];
+      if (!startPin || !endPin) return;
+
+      ctx.strokeStyle = conn.color || '#666666';
+      ctx.beginPath();
+      ctx.moveTo(startPin.x, startPin.y);
+      ctx.lineTo(endPin.x, endPin.y);
+      ctx.stroke();
+    });
+  }
+
+  /**
+   * Draw pins to a given context (simplified for thumbnails)
+   * @private
+   */
+  _drawPinsToContext(ctx) {
+    if (!this.appState.pins) return;
+
+    this.appState.pins.forEach(pin => {
+      const radius = 8;
+
+      // Draw pin circle
+      ctx.fillStyle = pin.color || '#58a6ff';
+      ctx.beginPath();
+      ctx.arc(pin.x, pin.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Add slight border
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
   }
 
   // Set up control button event handlers

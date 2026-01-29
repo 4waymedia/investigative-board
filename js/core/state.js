@@ -11,6 +11,19 @@
 class AppState {
   constructor() {
     // ============================================================================
+    // BOARD METADATA - Identity and management info for multi-board system
+    // ============================================================================
+    this.meta = {
+      id: null,
+      title: "Untitled Board",
+      description: "",
+      userId: null,
+      created: null,
+      lastModified: null,
+      thumbnail: null
+    };
+
+    // ============================================================================
     // VIEW STATE - Camera, zoom, and rendering
     // ============================================================================
     this.view = {
@@ -432,6 +445,7 @@ class AppState {
   /**
    * Save current state to history for undo functionality
    * Uses surgical cloning for better performance
+   * Respects configurable history depth from BoardManager
    */
   saveHistory() {
     const snapshot = {
@@ -458,7 +472,10 @@ class AppState {
       }
     };
     this.history.push(snapshot);
-    if (this.history.length > window.MAX_HISTORY) {
+    
+    // Use BoardManager's configured history depth, or fall back to MAX_HISTORY
+    const maxHistory = window.boardManager?.getHistoryDepth() || window.MAX_HISTORY || 20;
+    if (this.history.length > maxHistory) {
       this.history.shift();
     }
   }
@@ -631,6 +648,218 @@ class AppState {
       },
     };
     this.history = [];
+  }
+
+  // ============================================================================
+  // MULTI-BOARD SERIALIZATION
+  // ============================================================================
+
+  /**
+   * Convert state to full board data format (for BoardManager)
+   * Includes metadata and history for complete board persistence
+   * @returns {Object} Complete board data object
+   */
+  toBoardData() {
+    return {
+      id: this.meta.id,
+      meta: {
+        id: this.meta.id,
+        title: this.meta.title,
+        description: this.meta.description,
+        userId: this.meta.userId,
+        created: this.meta.created,
+        lastModified: this.meta.lastModified,
+        thumbnail: this.meta.thumbnail
+      },
+      document: {
+        pins: this.document.pins.map(pin => ({ ...pin })),
+        connections: this.document.connections.map(conn => ({ ...conn })),
+        cards: this.document.cards.map(card => ({ ...card })),
+        textElements: this.document.textElements.map(text => ({ ...text })),
+        areas: this.document.areas.map(area => ({ ...area })),
+        currentThemeId: this.document.currentThemeId,
+        palette: [...this.document.palette],
+        timelineActive: this.document.timelineActive,
+        timelinePins: [...this.document.timelinePins],
+        timelineY: this.document.timelineY,
+        timelineLeft: this.document.timelineLeft,
+        timelineRight: this.document.timelineRight,
+      },
+      view: {
+        scale: this.view.scale,
+        offsetX: this.view.offsetX,
+        offsetY: this.view.offsetY,
+        isLayoutSimulating: this.view.isLayoutSimulating,
+      },
+      history: this.history.map(snapshot => ({
+        document: { ...snapshot.document },
+        view: { ...snapshot.view }
+      }))
+    };
+  }
+
+  /**
+   * Load state from full board data format (from BoardManager)
+   * Restores metadata, document, view, and history
+   * @param {Object} boardData - Complete board data object
+   */
+  fromBoardData(boardData) {
+    // Load metadata
+    if (boardData.meta) {
+      this.meta = {
+        id: boardData.meta.id || boardData.id,
+        title: boardData.meta.title || "Untitled Board",
+        description: boardData.meta.description || "",
+        userId: boardData.meta.userId || null,
+        created: boardData.meta.created || null,
+        lastModified: boardData.meta.lastModified || null,
+        thumbnail: boardData.meta.thumbnail || null
+      };
+    } else {
+      this.meta.id = boardData.id;
+    }
+
+    // Load document
+    if (boardData.document) {
+      this.document = {
+        pins: boardData.document.pins || [],
+        connections: boardData.document.connections || [],
+        cards: boardData.document.cards || [],
+        textElements: boardData.document.textElements || [],
+        areas: boardData.document.areas || [],
+        currentThemeId: boardData.document.currentThemeId || "default",
+        palette: boardData.document.palette || [
+          { name: "Red", value: "#f85149" },
+          { name: "Blue", value: "#58a6ff" },
+          { name: "Green", value: "#3fb950" },
+          { name: "Yellow", value: "#f1c40f" },
+          { name: "Purple", value: "#a471f7" },
+        ],
+        timelineActive: boardData.document.timelineActive || false,
+        timelinePins: boardData.document.timelinePins || [],
+        timelineY: boardData.document.timelineY || 0,
+        timelineLeft: boardData.document.timelineLeft || 0,
+        timelineRight: boardData.document.timelineRight || 0,
+      };
+    }
+
+    // Load view
+    if (boardData.view) {
+      this.view = {
+        scale: boardData.view.scale || 1,
+        offsetX: boardData.view.offsetX || 0,
+        offsetY: boardData.view.offsetY || 0,
+        isLayoutSimulating: boardData.view.isLayoutSimulating || false,
+      };
+    }
+
+    // Load history
+    this.history = boardData.history || [];
+
+    // Reset session state (transient)
+    this.session = {
+      selectedPins: [],
+      selectedTextIndex: null,
+      connectStartIndex: null,
+      connectMousePos: null,
+      connectionMode: null,
+      marqueeStart: null,
+      marqueeEnd: null,
+      mouseScreenX: 0,
+      mouseScreenY: 0,
+      didDrag: false,
+      time: 0,
+      currentTool: "pin",
+      currentFamily: "pin",
+      currentTypeId: "pin:circle",
+      selectedColor: "#58a6ff",
+      connectionType: "straight",
+      selectedTypeByFamily: {
+        pin: 0,
+        card: 0,
+        area: 0,
+        text: 0,
+      },
+    };
+  }
+
+  /**
+   * Clear the board (for "New Board" or "Close Board" actions)
+   * Resets to a fresh empty state while preserving session preferences
+   */
+  clearBoard() {
+    const selectedColor = this.session.selectedColor;
+    const connectionType = this.session.connectionType;
+
+    // Reset meta to defaults
+    this.meta = {
+      id: null,
+      title: "Untitled Board",
+      description: "",
+      userId: null,
+      created: null,
+      lastModified: null,
+      thumbnail: null
+    };
+
+    // Reset document to empty
+    this.document = {
+      pins: [],
+      connections: [],
+      cards: [],
+      textElements: [],
+      areas: [],
+      currentThemeId: "default",
+      palette: [
+        { name: "Red", value: "#f85149" },
+        { name: "Blue", value: "#58a6ff" },
+        { name: "Green", value: "#3fb950" },
+        { name: "Yellow", value: "#f1c40f" },
+        { name: "Purple", value: "#a471f7" },
+      ],
+      timelineActive: false,
+      timelinePins: [],
+      timelineY: 0,
+      timelineLeft: 0,
+      timelineRight: 0,
+    };
+
+    // Reset view to defaults
+    this.view = {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      isLayoutSimulating: false,
+    };
+
+    // Clear history
+    this.history = [];
+
+    // Reset session but preserve some preferences
+    this.session = {
+      selectedPins: [],
+      selectedTextIndex: null,
+      connectStartIndex: null,
+      connectMousePos: null,
+      connectionMode: null,
+      marqueeStart: null,
+      marqueeEnd: null,
+      mouseScreenX: 0,
+      mouseScreenY: 0,
+      didDrag: false,
+      time: 0,
+      currentTool: "pin",
+      currentFamily: "pin",
+      currentTypeId: "pin:circle",
+      selectedColor: selectedColor,
+      connectionType: connectionType,
+      selectedTypeByFamily: {
+        pin: 0,
+        card: 0,
+        area: 0,
+        text: 0,
+      },
+    };
   }
 
   // ============================================================================
