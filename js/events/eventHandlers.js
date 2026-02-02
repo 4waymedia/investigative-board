@@ -205,6 +205,12 @@ class TextTool extends BaseTool {
       console.log(`⚠️ Text tool: Pin interaction already handled for pin ${clickedPinIndex}`);
       return;
     }
+    
+    // Also check if dragStartPinIndex is set (means we clicked on a pin)
+    if (this.eventHandlers.dragStartPinIndex !== null) {
+      console.log(`⚠️ Text tool: Drag started from existing pin ${this.eventHandlers.dragStartPinIndex}, skipping text creation`);
+      return;
+    }
 
     // Text tool - register center and start marquee preview for sizing
     this.eventHandlers.isDraggingTextBubble = true;
@@ -352,6 +358,11 @@ class EventHandlers {
     this.dragStartPinIndex = null;
     this.isDraggingFromPin = false;
 
+    // Connection click tracking (to prevent pin creation when clicking on connections)
+    this.clickedOnConnection = false;
+    // Track if connection was created in mouseDown (to prevent duplicate in mouseUp)
+    this.connectionCreatedInMouseDown = false;
+
     // Scroll direction tracking for modifier keys (since deltaY is suppressed)
     this._lastShiftScrollTime = 0;
     this._shiftScrollDirection = 1; // 1 = right, -1 = left
@@ -487,6 +498,7 @@ class EventHandlers {
     // Skip rendering during layout simulation unless user is actively interacting
     if (this.isLayoutSimulating && !this.isUserInteracting) return;
 
+    const mousePos = this.getMousePos(e); // Get mouse position in world coordinates
     const dx = e.clientX - this.prevScreenX;
     const dy = e.clientY - this.prevScreenY;
 
@@ -505,21 +517,18 @@ class EventHandlers {
       this.appState.offsetY += dy;
       this.appState.saveHistory(); // Pan operations should be undoable
     } else if (this.isDraggingArea) {
-      console.log(`🎯 AREA DRAGGING: Updating marquee preview - this.isDraggingArea = ${this.isDraggingArea}`);
       this.isUserInteracting = true;
-      this.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y }; // Update current drag position for marquee
+      this.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y };
 
       // Update marquee animation and draw animated marquee
       this.updateMarqueeAnimation();
       this.drawAnimatedMarquee();
     } else if (this.isDraggingTextBubble) {
-      console.log(`💭 TEXT BUBBLE DRAGGING: Updating marquee preview`);
       this.isUserInteracting = true;
-      this.textBubbleDragCurrent = { x: mousePos.world.x, y: mousePos.world.y }; // Update current drag position for marquee
+      this.textBubbleDragCurrent = { x: mousePos.world.x, y: mousePos.world.y };
 
-      // Update marquee animation and draw animated marquee
-      this.updateMarqueeAnimation();
-      this.drawAnimatedMarquee();
+      // Just call draw directly - don't use requestRedraw which starts animation loop
+      this.draw();
     } else if (this.isDraggingTail && this.draggingTailPinIndex !== null) {
       console.log(`🎯 TAIL DRAGGING: Updating tail position`);
       this.isUserInteracting = true;
@@ -586,6 +595,10 @@ class EventHandlers {
       e.preventDefault();
     }
 
+    // Reset connection click flag at start of each mouseDown
+    this.clickedOnConnection = false;
+    this.connectionCreatedInMouseDown = false;
+
     const mousePos = this.getMousePos(e);
     const clickedPinIndex = this.findPinAt(mousePos.world.x, mousePos.world.y);
     const clickedConnectionIndex = this.findConnectionNear(mousePos.world.x, mousePos.world.y);
@@ -601,6 +614,8 @@ class EventHandlers {
       // Prioritize pin clicks over connection clicks
       if (clickedPinIndex !== null) {
         // Shift+click on pin for connections
+        // Set flag to prevent mouseUp from creating duplicate connections
+        this.connectionCreatedInMouseDown = false;
 
         if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== clickedPinIndex) {
           // Create connection
@@ -616,13 +631,14 @@ class EventHandlers {
             this.stopMarqueeAnimation();
           } else {
             console.log(`🔗 Creating connection: ${this.appState.connectStartIndex} → ${clickedPinIndex}`);
-            console.log(`🔗 connectStartIndex type: ${typeof this.appState.connectStartIndex}, value: ${this.appState.connectStartIndex}`);
-            console.log(`🔗 clickedPinIndex type: ${typeof clickedPinIndex}, value: ${clickedPinIndex}`);
             this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
               color: this.appState.selectedColor,
               type: this.appState.connectionType
             });
             console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to pin ${clickedPinIndex} via shift+click`);
+            
+            // Mark that we created a connection in mouseDown to prevent duplicate in mouseUp
+            this.connectionCreatedInMouseDown = true;
 
             if (this.appState.connectionMode === 'sequential') {
               this.appState.connectStartIndex = clickedPinIndex;
@@ -670,7 +686,7 @@ class EventHandlers {
 
     // Handle right-click separately
     if (e.button === 2) {
-      this.handleCanvasRightClick(e, mousePos.world, clickedPinIndex);
+      this.handleCanvasRightClick(e, mousePos.world, clickedPinIndex, clickedConnectionIndex);
       return;
     }
 
@@ -693,6 +709,9 @@ class EventHandlers {
       // For other tools, check for bubble tail dragging first
       if (!e.shiftKey && clickedPinIndex !== null) {
         const pin = this.appState.pins[clickedPinIndex];
+
+        // Clear connection selection when clicking on a pin
+        this.appState.clearConnectionSelection();
 
         // Check if clicked on bubble tail first
         if (pin && pin.shape === 'bubble' && this.isPointOnBubbleTail(pin, mousePos.world.x, mousePos.world.y)) {
@@ -729,6 +748,27 @@ class EventHandlers {
         }
       }
 
+      // Check for connection click (when not clicking on a pin)
+      if (!e.shiftKey && clickedPinIndex === null && clickedConnectionIndex !== null) {
+        // Select the connection
+        this.appState.setSelectedConnection(clickedConnectionIndex);
+        this.clickedOnConnection = true; // Prevent pin creation in mouseUp
+        console.log(`🔗 Left-click: Selected connection ${clickedConnectionIndex}`);
+        
+        // Start animation loop for marching ants effect
+        if (window.app && window.app.startAnimationLoop) {
+          window.app.startAnimationLoop();
+        }
+        
+        this.draw();
+        return; // Don't continue to tool-specific logic
+      }
+
+      // Clicking on empty space - clear all selections
+      if (!e.shiftKey && clickedPinIndex === null && clickedConnectionIndex === null) {
+        this.appState.clearConnectionSelection();
+      }
+
       // For other tools (pin, text, area, etc.), let them handle empty space clicks
       if (tool) {
         tool.onMouseDown(e, mousePos, clickedPinIndex);
@@ -742,7 +782,7 @@ class EventHandlers {
   }
 
   // Canvas right-click handler (separated for clarity)
-  handleCanvasRightClick(e, mouseWorld, clickedPinIndex) {
+  handleCanvasRightClick(e, mouseWorld, clickedPinIndex, clickedConnectionIndex) {
     e.preventDefault(); // Prevent context menu from showing
     e.stopPropagation(); // Stop event bubbling
     e.stopImmediatePropagation(); // Stop other handlers
@@ -829,6 +869,29 @@ class EventHandlers {
       }
 
       console.log(`🔗 Pin ${clickedPinIndex} set as parent - marquee activated + radial menu open`);
+      return;
+    }
+
+    // Right-click on connection (when not clicking on a pin)
+    if (clickedConnectionIndex !== null) {
+      console.log(`🔗 RIGHT-CLICK: Opening radial menu for connection ${clickedConnectionIndex}`);
+      
+      // Select the connection
+      this.appState.setSelectedConnection(clickedConnectionIndex);
+      
+      // Start animation loop for marching ants effect
+      if (window.app && window.app.startAnimationLoop) {
+        window.app.startAnimationLoop();
+      }
+      
+      // Open connection radial menu
+      if (window.openConnectionRadialMenu) {
+        window.openConnectionRadialMenu(clickedConnectionIndex, e.clientX, e.clientY);
+      } else {
+        console.log(`⚠️ openConnectionRadialMenu not available yet`);
+      }
+      
+      this.draw();
       return;
     }
 
@@ -964,8 +1027,11 @@ class EventHandlers {
       return;
     }
 
-    const startPin = this.appState.pins[connection.startIndex];
-    const endPin = this.appState.pins[connection.endIndex];
+    // Handle both property name formats: from/to and startIndex/endIndex
+    const startIndex = connection.from !== undefined ? connection.from : connection.startIndex;
+    const endIndex = connection.to !== undefined ? connection.to : connection.endIndex;
+    const startPin = this.appState.pins[startIndex];
+    const endPin = this.appState.pins[endIndex];
 
     if (!startPin || !endPin) {
       console.error(`❌ Invalid connection: missing start or end pin`);
@@ -1051,6 +1117,14 @@ class EventHandlers {
         this.didDrag = true;
       }
 
+      // Handle canvas panning (Move tool on empty space)
+      if (this.isPanning) {
+        this.isUserInteracting = true;
+        this.appState.offsetX += dx;
+        this.appState.offsetY += dy;
+        this.draw();
+      }
+
       this.prevScreenX = e.clientX;
       this.prevScreenY = e.clientY;
     }
@@ -1083,16 +1157,22 @@ class EventHandlers {
     }
 
     if (this.isDraggingArea) {
-      console.log(`🎯 AREA DRAGGING: About to execute area dragging code - this.isDraggingArea = ${this.isDraggingArea}`);
       this.isUserInteracting = true;
-      console.log(`🎯 screenToWorld(${canvasX}, ${canvasY}) returned: (${mousePos.world.x}, ${mousePos.world.y})`);
-      console.log(`🎯 areaDragCurrent before: (${this.areaDragCurrent.x}, ${this.areaDragCurrent.y})`);
-      this.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y }; // Explicit assignment
-      console.log(`🎯 areaDragCurrent after: (${this.areaDragCurrent.x}, ${this.areaDragCurrent.y})`);
+      this.areaDragCurrent = { x: mousePos.world.x, y: mousePos.world.y };
 
       // Update marquee animation and draw animated marquee
       this.updateMarqueeAnimation();
       this.drawAnimatedMarquee();
+    }
+
+    // Handle text bubble drag (for tail positioning preview)
+    if (this.isDraggingTextBubble && this.textBubbleDragStart) {
+      this.isUserInteracting = true;
+      this.textBubbleDragCurrent = { x: mousePos.world.x, y: mousePos.world.y };
+      
+      // Use same animation pattern as area tool for consistent behavior
+      this.updateMarqueeAnimation();
+      this.draw(); // Redraw to show bubble preview with tail
     }
   }
 
@@ -1233,16 +1313,26 @@ class EventHandlers {
     }
 
     // Handle connection creation if connectStartIndex is set (when marquee is active)
-    if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null) {
+    // BUT skip if connection was already created in mouseDown (shift+click case)
+    if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null && !this.connectionCreatedInMouseDown) {
       console.log(`🎯 Marquee active, connectStartIndex: ${this.appState.connectStartIndex}`);
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       console.log(`🎯 Clicked pin index: ${clickedPinIndex}`);
 
       if (clickedPinIndex !== null && clickedPinIndex !== this.appState.connectStartIndex) {
+        // Check if connection already exists (prevents duplicates)
+        const existingConnection = this.appState.connections.find(conn =>
+          (conn.from === this.appState.connectStartIndex && conn.to === clickedPinIndex) ||
+          (conn.from === clickedPinIndex && conn.to === this.appState.connectStartIndex)
+        );
+        
+        if (existingConnection) {
+          console.log(`⚠️ Connection already exists, skipping duplicate`);
+          return; // Don't create duplicate connection
+        }
+        
         // Clicked on existing pin - create connection to it
         console.log(`🔗 Creating connection to existing pin: ${this.appState.connectStartIndex} → ${clickedPinIndex}`);
-        console.log(`🔗 connectStartIndex type: ${typeof this.appState.connectStartIndex}, value: ${this.appState.connectStartIndex}`);
-        console.log(`🔗 clickedPinIndex type: ${typeof clickedPinIndex}, value: ${clickedPinIndex}`);
         this.appState.addConnection(this.appState.connectStartIndex, clickedPinIndex, {
           color: this.appState.selectedColor,
           type: this.appState.connectionType
@@ -1429,7 +1519,8 @@ class EventHandlers {
     }
 
     // Handle text creation from marquee drag
-    if (this.isDraggingTextBubble && this.textBubbleDragStart && this.textBubbleDragCurrent) {
+    // Skip if we were dragging an existing pin (dragStartPinIndex is set)
+    if (this.isDraggingTextBubble && this.textBubbleDragStart && this.textBubbleDragCurrent && this.dragStartPinIndex === null) {
       const centerX = this.textBubbleDragStart.x;
       const centerY = this.textBubbleDragStart.y;
       const dx = Math.abs(this.textBubbleDragCurrent.x - this.textBubbleDragStart.x);
@@ -1441,29 +1532,34 @@ class EventHandlers {
 
       // For text pins, we want to create them even with small drags
       // Only skip creation if it's an actual click on an existing pin
-      if (dragDistance < 2) {
-        // Very small movement - might be accidental, check if there's a pin here
+      if (dragDistance < 10) {
+        // Small movement - treat as a click, create with default tail (bottom-left)
         const existingPinIndex = this.findPinAt(centerX, centerY);
         if (existingPinIndex !== null) {
           console.log(`⚠️ Text click too close to existing pin ${existingPinIndex}, skipping creation`);
         } else {
-          // No pin here, create a default-sized text
+          // No pin here, create a default-sized text with default tail
+          // Determine tail type based on shape
+          const getTailType = (shape) => {
+            if (shape === 'bubble') return 'curved';
+            if (shape === 'thought') return 'thought';
+            return 'none';
+          };
           const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
             color: this.appState.selectedColor,
             typeId: this.appState.currentTypeId,
             shape: textTypeConfig.shape,
             width: textTypeConfig.defaultWidth,
             height: textTypeConfig.defaultHeight,
-            tailType: textTypeConfig.shape === 'bubble' ? 'curved' : 'none',
-            tailPosition: textTypeConfig.shape === 'bubble' ? { angle: 225, distance: 0.9 } : null
+            tailType: getTailType(textTypeConfig.shape),
+            tailPosition: textTypeConfig.hasTail ? { angle: 225, distance: 0.9 } : null
           });
 
-          // Set as connection source for next pin placement
-          this.appState.connectStartIndex = newPinIndex;
-          this.appState.connectionMode = 'parent';
-
-          // Start marquee animation to show connection mode is active
-          this.startMarqueeAnimation();
+          // Reset text drag state BEFORE any other operations
+          this.isDraggingTextBubble = false;
+          this.textBubbleDragStart = null;
+          this.textBubbleDragCurrent = null;
+          this.stopMarqueeAnimation();
 
           console.log(`💭 Created default ${textTypeConfig.shape} text at (${centerX}, ${centerY})`);
           this.appState.saveHistory();
@@ -1480,9 +1576,42 @@ class EventHandlers {
         if (existingPinIndex !== null) {
           console.log(`⚠️ Cannot create text: pin already exists at center location (${centerX}, ${centerY})`);
         } else {
-          // Create text with drag dimensions
-          const width = Math.max(dx * 2, textTypeConfig.defaultWidth);
-          const height = Math.max(dy * 2, textTypeConfig.defaultHeight);
+          // For bubble/thought shapes: use drag direction for tail, keep default size
+          // For other text shapes: use drag for sizing
+          let width, height, tailPosition;
+          
+          // Helper to get tail type
+          const getTailType = (shape) => {
+            if (shape === 'bubble') return 'curved';
+            if (shape === 'thought') return 'thought';
+            return 'none';
+          };
+          
+          if (textTypeConfig.shape === 'bubble' || textTypeConfig.shape === 'thought') {
+            // Bubble/Thought: drag sets tail direction, not size
+            width = textTypeConfig.defaultWidth;
+            height = textTypeConfig.defaultHeight;
+            
+            // Calculate tail angle from drag direction
+            const dragDx = this.textBubbleDragCurrent.x - this.textBubbleDragStart.x;
+            const dragDy = this.textBubbleDragCurrent.y - this.textBubbleDragStart.y;
+            const dragDist = Math.sqrt(dragDx * dragDx + dragDy * dragDy);
+            
+            if (dragDist > 10) {
+              // User dragged - use drag direction for tail
+              const tailAngle = Math.atan2(dragDy, dragDx) * 180 / Math.PI;
+              tailPosition = { angle: tailAngle, distance: 0.9 };
+              console.log(`💭 ${textTypeConfig.shape} tail angle from drag: ${tailAngle.toFixed(1)}°`);
+            } else {
+              // No significant drag - use default (bottom-left)
+              tailPosition = { angle: 225, distance: 0.9 };
+            }
+          } else {
+            // Other text types: use drag for sizing
+            width = Math.max(dx * 2, textTypeConfig.defaultWidth);
+            height = Math.max(dy * 2, textTypeConfig.defaultHeight);
+            tailPosition = null;
+          }
 
           const newPinIndex = this.appState.addTextPin(centerX, centerY, "", {
             color: this.appState.selectedColor,
@@ -1490,16 +1619,15 @@ class EventHandlers {
             shape: textTypeConfig.shape,
             width: width,
             height: height,
-            tailType: textTypeConfig.shape === 'bubble' ? 'curved' : 'none',
-            tailPosition: textTypeConfig.shape === 'bubble' ? { angle: 225, distance: 0.9 } : null
+            tailType: getTailType(textTypeConfig.shape),
+            tailPosition: tailPosition
           });
 
-          // Set as connection source for next pin placement
-          this.appState.connectStartIndex = newPinIndex;
-          this.appState.connectionMode = 'parent';
-
-          // Start marquee animation to show connection mode is active
-          this.startMarqueeAnimation();
+          // Reset text drag state BEFORE any other operations
+          this.isDraggingTextBubble = false;
+          this.textBubbleDragStart = null;
+          this.textBubbleDragCurrent = null;
+          this.stopMarqueeAnimation();
 
           console.log(`💭 Created ${textTypeConfig.shape} text at (${centerX}, ${centerY}) with size ${width}x${height}`);
           this.appState.saveHistory();
@@ -1511,7 +1639,7 @@ class EventHandlers {
         }
       }
 
-      // Reset text drag state
+      // Reset text drag state (fallback for any path that doesn't return early)
       this.isDraggingTextBubble = false;
       this.textBubbleDragStart = null;
       this.textBubbleDragCurrent = null;
@@ -1520,7 +1648,8 @@ class EventHandlers {
 
     // Create pin if clicking on empty space with a pin/card type selected
     // Note: Area tools handle their own pin creation in AreaTool.onMouseDown
-    if (!this.isMarqueeSelecting) {
+    // Skip if we clicked on a connection (to select it, not create a pin)
+    if (!this.isMarqueeSelecting && !this.clickedOnConnection) {
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       const isCreationTool = ["pin", "card"].includes(this.appState.currentTool); // Removed "area"
 
@@ -1858,44 +1987,15 @@ class EventHandlers {
     console.log(`📍 Double-click world coords: (${mouseWorld.x}, ${mouseWorld.y}), found pin: ${clickedPinIndex}`);
 
     if (clickedPinIndex !== null) {
-      // Check if it's a text pin (any text shape)
-      const pin = this.appState.pins[clickedPinIndex];
-      const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
-      const isTextPin = pin && textShapes.includes(pin.shape);
+      // Stop marquee animation when opening modal
+      this.stopMarqueeAnimation();
 
-      if (isTextPin) {
-        // Stop marquee animation when opening modal
-        this.stopMarqueeAnimation();
-
-        // Open text modal for text pin editing
-        if (window.openTextModal) {
-          console.log(`📝 Opening text modal for text pin ${clickedPinIndex}`);
-          window.openTextModal({
-            id: pin.id,
-            x: e.clientX,
-            y: e.clientY,
-            initialText: pin.label || '',
-            width: pin.width || 200,
-            height: pin.height || 50
-          });
-        } else {
-          console.error(`❌ Text modal not available`);
-        }
+      // Use centralized action system for edit
+      if (window.executeAction) {
+        console.log(`📝 Executing pin:edit action for pin ${clickedPinIndex}`);
+        window.executeAction("pin:edit", clickedPinIndex);
       } else {
-        // Stop marquee animation when opening modal
-        this.stopMarqueeAnimation();
-
-        // Open modal for pin editing
-        if (window.app && window.app.modalManager && window.app.modalManager.openPinModal) {
-          console.log(`📝 Opening modal for pin ${clickedPinIndex}`);
-          window.app.modalManager.openPinModal(clickedPinIndex);
-        } else {
-          console.error(`❌ Modal manager not available:`, {
-            app: !!window.app,
-            modalManager: !!(window.app && window.app.modalManager),
-            openPinModal: !!(window.app && window.app.modalManager && window.app.modalManager.openPinModal)
-          });
-        }
+        console.error(`❌ Action system not available`);
       }
     } else {
       console.log(`❌ No pin found at double-click location`);
@@ -2086,10 +2186,44 @@ class EventHandlers {
           window.closeRadialMenu();
         }
       }
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      // Delete selected pin
-      if (this.appState.selectedPinIndex !== null) {
-        // Delete selected pin
+    }
+    // 'x' key: Open color picker for selected pin
+    else if (e.key === 'x' || e.key === 'X') {
+      const selectedPinIndex = this.appState.selectedPinIndex;
+      if (selectedPinIndex !== null && selectedPinIndex !== undefined && selectedPinIndex >= 0) {
+        e.preventDefault();
+        if (window.openColorRadialForPin) {
+          window.openColorRadialForPin(selectedPinIndex);
+        }
+      }
+    }
+    else if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Delete selected pins (supports multiple selection)
+      const selectedPins = this.appState.selectedPins || [];
+      
+      if (selectedPins.length > 0) {
+        // Sort indices in descending order to delete from end first
+        // This prevents index shifting issues when deleting multiple items
+        const sortedIndices = [...selectedPins].sort((a, b) => b - a);
+        
+        console.log(`🗑️ Deleting ${sortedIndices.length} selected pin(s): [${sortedIndices.join(', ')}]`);
+        
+        // Delete each pin from highest index to lowest
+        sortedIndices.forEach(index => {
+          this.appState.pins.splice(index, 1);
+        });
+        
+        // Clear selection
+        this.appState.clearSelection();
+        this.selectedPins = [];
+        
+        this.appState.saveHistory();
+        if (this.saveAppState) {
+          this.saveAppState(this.appState);
+        }
+        this.draw();
+      } else if (this.appState.selectedPinIndex !== null) {
+        // Fallback for single selection (backward compatibility)
         this.appState.pins.splice(this.appState.selectedPinIndex, 1);
         this.setSelectedPin(null);
         this.appState.saveHistory();
@@ -2162,12 +2296,14 @@ class EventHandlers {
         }
       }
 
-      // Always cancel marquee and deselect active pins
+      // Always cancel marquee and deselect active pins/connections
       const hadActiveConnection = this.appState.connectStartIndex !== null;
       const hadSelectedPin = this.appState.selectedPinIndex !== null;
+      const hadSelectedConnectionLine = this.appState.selectedConnectionIndex !== null;
 
       this.setSelectedPin(null);
       this.selectedPins = [];
+      this.appState.clearConnectionSelection(); // Clear selected connection
       this.appState.connectStartIndex = null;
       this.appState.connectMousePos = null;
       this.appState.connectionMode = null;
@@ -2188,6 +2324,7 @@ class EventHandlers {
       console.log(`🎯 Escape: Cleared selections and connection modes`);
       if (hadActiveConnection) console.log(`   ↳ Cancelled active marquee/connection`);
       if (hadSelectedPin) console.log(`   ↳ Deselected active pin`);
+      if (hadSelectedConnectionLine) console.log(`   ↳ Deselected connection line`);
 
       this.draw();
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -2254,6 +2391,10 @@ class EventHandlers {
         this.appState.connectionType = this.appState.connectionType === "curved" ? "straight" : "curved";
         this.appState.saveState();
         console.log(`🔗 Connection type: ${this.appState.connectionType}`);
+        // Update toolbar line toggle icon
+        if (window.app && window.app.toolbarManager) {
+          window.app.toolbarManager.renderLineToggle();
+        }
         this.draw();
       }
     } else if (e.shiftKey) {
@@ -2319,6 +2460,7 @@ class EventHandlers {
       'text:plain': { shape: 'text-plain', defaultWidth: 150, defaultHeight: 30, fontSize: 14, hasTail: false },
       'text:rectangle': { shape: 'rectangle', defaultWidth: 120, defaultHeight: 60, fontSize: 16, hasTail: false },
       'text:comic': { shape: 'bubble', defaultWidth: 140, defaultHeight: 70, fontSize: 16, hasTail: true },
+      'text:thought': { shape: 'thought', defaultWidth: 140, defaultHeight: 90, fontSize: 14, hasTail: true },
       'text:title': { shape: 'text-title', defaultWidth: 200, defaultHeight: 40, fontSize: 24, hasTail: false }
     };
     
@@ -2329,8 +2471,16 @@ class EventHandlers {
   toggleConnectionType() {
     if (this.appState) {
       this.appState.connectionType = this.appState.connectionType === "curved" ? "straight" : "curved";
+      console.log(`🔗 Connection type toggled to: ${this.appState.connectionType}`);
+      
+      // Update toolbar line toggle icon
+      if (window.app && window.app.toolbarManager) {
+        // Ensure toolbar sees the same appState
+        window.app.toolbarManager.appState.connectionType = this.appState.connectionType;
+        window.app.toolbarManager.renderLineToggle();
+      }
+      
       this.appState.saveState();
-      console.log(`🔗 Connection type: ${this.appState.connectionType}`);
       this.draw();
     }
   }

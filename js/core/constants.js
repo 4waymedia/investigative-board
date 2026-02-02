@@ -144,6 +144,14 @@ const NODE_TYPES = [
     shape: "bubble", // Speech bubble with tail
   },
   {
+    id: "text:thought",
+    label: "Thought Bubble",
+    icon: "💭",
+    family: "text",
+    variant: "thought",
+    shape: "thought", // Cloud-shaped thought bubble with trailing circles
+  },
+  {
     id: "text:title",
     label: "Title",
     icon: "📰",
@@ -176,6 +184,28 @@ const CONNECTION_TYPES = [
 ];
 
 // ============================================================================
+// RELATIONSHIP TYPES - Semantic types for connections
+// ============================================================================
+
+const RELATIONSHIP_TYPES = [
+  { id: "none", label: "None", icon: "—", description: "No specific relationship" },
+  { id: "causes", label: "Causes", icon: "→", description: "A causes or leads to B" },
+  { id: "correlates", label: "Correlates", icon: "↔", description: "A and B are correlated" },
+  { id: "contradicts", label: "Contradicts", icon: "✕", description: "A contradicts or opposes B" },
+  { id: "supports", label: "Supports", icon: "✓", description: "A supports or confirms B" },
+  { id: "contains", label: "Contains", icon: "⊃", description: "A contains or includes B" },
+  { id: "partOf", label: "Part Of", icon: "⊂", description: "A is part of B" },
+  { id: "relatedTo", label: "Related To", icon: "~", description: "A is related to B" },
+  { id: "precedes", label: "Precedes", icon: "◀", description: "A happens before B" },
+  { id: "follows", label: "Follows", icon: "▶", description: "A happens after B" },
+  { id: "influences", label: "Influences", icon: "⇝", description: "A influences B" },
+  { id: "dependsOn", label: "Depends On", icon: "⤓", description: "A depends on B" },
+  { id: "knows", label: "Knows", icon: "👤", description: "Person A knows person B" },
+  { id: "worksFor", label: "Works For", icon: "🏢", description: "A works for/at B" },
+  { id: "funds", label: "Funds", icon: "💰", description: "A funds or finances B" },
+];
+
+// ============================================================================
 // PIN BASE PROPERTIES (for hit detection and rendering)
 // ============================================================================
 
@@ -201,6 +231,7 @@ const PIN_BASES = {
   "text:plain": { shape: "text-plain", baseRadius: 12, defaultWidth: 150, defaultHeight: 30 },
   "text:rectangle": { shape: "rectangle", baseRadius: 12, defaultWidth: 120, defaultHeight: 60 },
   "text:comic": { shape: "bubble", baseRadius: 12, defaultWidth: 140, defaultHeight: 70 },
+  "text:thought": { shape: "thought", baseRadius: 12, defaultWidth: 140, defaultHeight: 90 },
   "text:title": { shape: "text-title", baseRadius: 16, defaultWidth: 200, defaultHeight: 40 },
 };
 
@@ -276,4 +307,5 @@ window.DEFAULT_CARDS = DEFAULT_CARDS;
 window.NODE_TYPES = NODE_TYPES;
 window.TEXT_TYPES = TEXT_TYPES;
 window.CONNECTION_TYPES = CONNECTION_TYPES;
+window.RELATIONSHIP_TYPES = RELATIONSHIP_TYPES;
 window.PIN_BASES = PIN_BASES;

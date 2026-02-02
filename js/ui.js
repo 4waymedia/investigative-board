@@ -39,14 +39,112 @@ let radialMenuOutsideClickHandler;
 // ============================================================================
 
 /**
- * Open the add color modal
+ * Open the add color modal (now includes theme selection)
  */
 function openAddColorModal() {
   renderAddColorPicker();
+  populateThemeSelector();
   if (addColorModalBackdrop) {
     addColorModalBackdrop.style.display = "flex";
     // Focus on the modal
     addColorModalBackdrop.focus();
+  }
+}
+
+/**
+ * Populate the theme selector with preview cards
+ */
+function populateThemeSelector() {
+  const themeGrid = document.getElementById("theme-preview-grid");
+  if (!themeGrid) return;
+  
+  // Get available themes from themeManager (contains full theme data)
+  const themes = window.themeManager?.getThemes() || [{ id: "default", name: "Default" }];
+  const currentThemeId = window.app?.appState?.currentThemeId || window.themeManager?.getCurrentThemeId() || "default";
+  
+  // Clear existing content
+  themeGrid.innerHTML = "";
+  
+  // Create preview cards for each theme
+  themes.forEach(theme => {
+    const isActive = theme.id === currentThemeId;
+    
+    // Create theme card
+    const card = document.createElement("div");
+    card.className = `theme-card ${isActive ? 'theme-card-active' : ''}`;
+    card.dataset.themeId = theme.id;
+    
+    // Prepare theme data for preview renderer
+    // Convert colors array [{name, value}] to simple color array [value]
+    const previewData = {
+      background: theme.background,
+      'color-list': theme.colors ? theme.colors.map(c => c.value || c) : []
+    };
+    
+    // Generate preview using PreviewRenderer
+    let previewUrl = '';
+    if (window.previewRenderer) {
+      previewUrl = window.previewRenderer.generateThemePreview(previewData);
+    }
+    
+    card.innerHTML = `
+      <div class="theme-card-preview" style="background-image: url('${previewUrl}')">
+        ${isActive ? '<div class="theme-card-badge">Active</div>' : ''}
+      </div>
+      <div class="theme-card-name">${theme.name}</div>
+    `;
+    
+    // Click handler to select theme
+    card.onclick = () => {
+      selectTheme(theme.id);
+      // Update active state in UI
+      themeGrid.querySelectorAll('.theme-card').forEach(c => {
+        c.classList.toggle('theme-card-active', c.dataset.themeId === theme.id);
+        const badge = c.querySelector('.theme-card-badge');
+        if (c.dataset.themeId === theme.id) {
+          if (!badge) {
+            const preview = c.querySelector('.theme-card-preview');
+            preview.innerHTML = '<div class="theme-card-badge">Active</div>';
+          }
+        } else if (badge) {
+          badge.remove();
+        }
+      });
+    };
+    
+    themeGrid.appendChild(card);
+  });
+}
+
+/**
+ * Apply a theme by ID
+ */
+function selectTheme(themeId) {
+  if (window.schemaManager) {
+    // Check if the convert toggle is enabled
+    const convertToggle = document.getElementById("theme-convert-toggle");
+    const convertElements = convertToggle ? convertToggle.checked : true;
+    
+    // Apply theme with conversion flag
+    window.schemaManager.setTheme(themeId, convertElements);
+    
+    // Update app state
+    if (window.app?.appState) {
+      window.app.appState.currentThemeId = themeId;
+    }
+    
+    // Update toolbar color palette
+    if (window.app?.toolbarManager) {
+      window.app.toolbarManager.updateColorPalette(window.DEFAULT_COLORS);
+      window.app.toolbarManager.render();
+    }
+    
+    // Save state
+    if (window.app?.appState?.saveState) {
+      window.app.appState.saveState();
+    }
+    
+    console.log(`🎨 Theme changed to: ${themeId} (convert: ${convertElements})`);
   }
 }
 
@@ -325,6 +423,7 @@ function openRadialMenu(pinIndex, screenX, screenY) {
   const items = [
     { icon: "🔗", action: "connect", title: "Connect" },
     { icon: "✏️", action: "edit", title: "Edit" },
+    { icon: "🎨", action: "color", title: "Color", hasSubmenu: true },
     {
       icon: "🗑️",
       action: "delete",
@@ -382,11 +481,27 @@ function openRadialMenu(pinIndex, screenX, screenY) {
     itemEl.style.left = x + "px";
     itemEl.style.top = y + "px";
     itemEl.title = item.title;
-    itemEl.onclick = (e) => {
-      e.stopPropagation();
-      closeRadialMenu();
-      executeRadialAction(item.action, pinIndex);
-    };
+    itemEl.dataset.action = item.action;
+    itemEl.dataset.index = i;
+    
+    // Handle items with submenus (like color)
+    if (item.hasSubmenu && item.action === "color") {
+      itemEl.onmouseenter = (e) => {
+        e.stopPropagation();
+        showColorSubmenu(pinIndex, centerOffset, radius, angle);
+      };
+      itemEl.onclick = (e) => {
+        e.stopPropagation();
+        // Toggle submenu on click too
+        showColorSubmenu(pinIndex, centerOffset, radius, angle);
+      };
+    } else {
+      itemEl.onclick = (e) => {
+        e.stopPropagation();
+        closeRadialMenu();
+        executeRadialAction(item.action, pinIndex);
+      };
+    }
     radialMenuEl.appendChild(itemEl);
   });
 
@@ -445,11 +560,17 @@ function updateRadialSelection() {
  * Execute selected radial menu item
  */
 function executeSelectedRadialItem() {
-  if (!window.currentRadialItems || !window.currentRadialPinIndex) return;
-
+  if (!window.currentRadialItems) return;
+  
   const selectedItem = window.currentRadialItems[window.currentRadialSelection];
-  if (selectedItem) {
-    closeRadialMenu();
+  if (!selectedItem) return;
+
+  closeRadialMenu();
+  
+  // Check if this is a connection or pin radial menu
+  if (window.currentRadialConnectionIndex !== null && window.currentRadialConnectionIndex !== undefined) {
+    executeConnectionRadialAction(selectedItem.action, window.currentRadialConnectionIndex);
+  } else if (window.currentRadialPinIndex !== null && window.currentRadialPinIndex !== undefined) {
     executeRadialAction(selectedItem.action, window.currentRadialPinIndex);
   }
 }
@@ -460,9 +581,11 @@ function executeSelectedRadialItem() {
 function closeRadialMenu() {
   if (!radialMenuEl) return; // Guard against null
 
-  // Clear global flag and remove global wheel handler
+  // Clear global flags and remove global wheel handler
   window.isRadialMenuOpen = false;
+  window.isConnectionRadialMenuOpen = false;
   window.currentRadialSelection = -1;
+  window.currentRadialConnectionIndex = null;
 
   if (window._radialMenuWheelHandler) {
     document.removeEventListener("wheel", window._radialMenuWheelHandler, { capture: true });
@@ -478,7 +601,276 @@ function closeRadialMenu() {
     document.removeEventListener("click", radialMenuOutsideClickHandler);
     radialMenuOutsideClickHandler = null;
   }
+  
+  // Remove connection radial menu click-outside handler
+  if (connectionRadialMenuOutsideClickHandler) {
+    document.removeEventListener("click", connectionRadialMenuOutsideClickHandler);
+    connectionRadialMenuOutsideClickHandler = null;
+  }
+  
+  // Remove color submenu if open
+  hideColorSubmenu();
 }
+
+/**
+ * Show color submenu around the radial menu
+ * @param {number} pinIndex - Index of the pin
+ * @param {number} centerOffset - Center offset of the main menu
+ * @param {number} mainRadius - Radius of the main menu
+ * @param {number} itemAngle - Angle of the color item
+ */
+function showColorSubmenu(pinIndex, centerOffset, mainRadius, itemAngle) {
+  // Remove existing submenu
+  hideColorSubmenu();
+  
+  // Get colors from schema
+  const colors = window.schemaManager?.getPalette() || [];
+  if (colors.length === 0) return;
+  
+  // Create submenu container
+  const submenuEl = document.createElement("div");
+  submenuEl.id = "color-submenu";
+  submenuEl.className = "color-submenu";
+  
+  // Position colors in an arc around the color item
+  const colorRadius = mainRadius + 50; // Further out from main menu
+  const arcSpread = Math.PI * 0.8; // Spread colors across ~144 degrees
+  const startAngle = itemAngle - arcSpread / 2;
+  
+  colors.forEach((colorObj, i) => {
+    const colorAngle = startAngle + (i / (colors.length - 1 || 1)) * arcSpread;
+    
+    // Position relative to menu center
+    const x = centerOffset + colorRadius * Math.cos(colorAngle - Math.PI / 2) - 18;
+    const y = centerOffset + colorRadius * Math.sin(colorAngle - Math.PI / 2) - 18;
+    
+    const colorEl = document.createElement("div");
+    colorEl.className = "color-submenu-item";
+    colorEl.style.cssText = `
+      position: absolute;
+      left: ${x}px;
+      top: ${y}px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: ${colorObj.value};
+      border: 3px solid rgba(255,255,255,0.3);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      z-index: 10001;
+    `;
+    colorEl.title = `${colorObj.name}\n${colorObj.value}`;
+    
+    // Find the slot for this color
+    const slot = Object.entries(window.schemaManager.currentTheme.colorSlots)
+      .find(([, s]) => s.value === colorObj.value)?.[0];
+    
+    colorEl.onmouseenter = () => {
+      colorEl.style.transform = 'scale(1.2)';
+      colorEl.style.borderColor = '#ffffff';
+      colorEl.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)';
+    };
+    
+    colorEl.onmouseleave = () => {
+      colorEl.style.transform = 'scale(1)';
+      colorEl.style.borderColor = 'rgba(255,255,255,0.3)';
+      colorEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+    };
+    
+    colorEl.onclick = (e) => {
+      e.stopPropagation();
+      applyColorToPin(pinIndex, colorObj.value, slot);
+      closeRadialMenu();
+    };
+    
+    submenuEl.appendChild(colorEl);
+  });
+  
+  // Add submenu to the radial menu element
+  radialMenuEl.appendChild(submenuEl);
+  
+  // Animate in
+  submenuEl.style.opacity = '0';
+  requestAnimationFrame(() => {
+    submenuEl.style.transition = 'opacity 0.15s ease';
+    submenuEl.style.opacity = '1';
+  });
+}
+
+/**
+ * Hide color submenu
+ */
+function hideColorSubmenu() {
+  const submenu = document.getElementById("color-submenu");
+  if (submenu) {
+    submenu.remove();
+  }
+}
+
+/**
+ * Apply color to a pin
+ * @param {number} pinIndex - Index of the pin
+ * @param {string} color - Color value (hex)
+ * @param {string} slot - Color slot (c1-c8)
+ */
+function applyColorToPin(pinIndex, color, slot) {
+  if (!window.app?.appState?.pins) return;
+  
+  const pin = window.app.appState.pins[pinIndex];
+  if (!pin) return;
+  
+  // Update pin color
+  pin.color = color;
+  if (slot) {
+    pin.colorSlot = slot;
+  }
+  
+  // Save state
+  window.app.appState.saveHistory();
+  if (window.app.saveState) {
+    window.app.saveState();
+  }
+  
+  // Redraw
+  if (window.draw) {
+    window.draw();
+  }
+  
+  console.log(`🎨 Applied color ${color} (${slot || 'custom'}) to pin ${pinIndex}`);
+}
+
+/**
+ * Open a standalone color radial picker for a pin (triggered by keyboard shortcut)
+ * @param {number} pinIndex - Index of the pin
+ */
+function openColorRadialForPin(pinIndex) {
+  if (!window.app?.appState?.pins) return;
+  
+  const pin = window.app.appState.pins[pinIndex];
+  if (!pin) return;
+  
+  // Get colors from schema
+  const colors = window.schemaManager?.getPalette() || [];
+  if (colors.length === 0) return;
+  
+  // Close any existing radial menu
+  closeRadialMenu();
+  
+  // Calculate pin screen position
+  const canvas = document.getElementById("canvas");
+  if (!canvas) return;
+  
+  const rect = canvas.getBoundingClientRect();
+  const appState = window.app.appState;
+  
+  // Transform pin world coordinates to screen coordinates
+  const screenX = rect.left + (pin.x - appState.offsetX) * appState.scale;
+  const screenY = rect.top + (pin.y - appState.offsetY) * appState.scale;
+  
+  // Create radial menu element if needed
+  if (!radialMenuEl) {
+    radialMenuEl = document.createElement("div");
+    radialMenuEl.id = "radial-menu";
+    radialMenuEl.className = "radial-menu";
+    radialMenuEl.tabIndex = -1;
+    document.body.appendChild(radialMenuEl);
+  }
+  
+  // Set up menu
+  const menuSize = 200;
+  const centerOffset = menuSize / 2;
+  
+  radialMenuEl.style.width = menuSize + "px";
+  radialMenuEl.style.height = menuSize + "px";
+  radialMenuEl.style.left = (screenX - centerOffset) + "px";
+  radialMenuEl.style.top = (screenY - centerOffset) + "px";
+  radialMenuEl.innerHTML = "";
+  radialMenuEl.style.display = "block";
+  
+  window.isRadialMenuOpen = true;
+  window.currentRadialPinIndex = pinIndex;
+  
+  // Create color ring
+  const radius = 70;
+  colors.forEach((colorObj, i) => {
+    const angle = (i / colors.length) * Math.PI * 2;
+    const x = centerOffset + radius * Math.cos(angle - Math.PI / 2) - 20;
+    const y = centerOffset + radius * Math.sin(angle - Math.PI / 2) - 20;
+    
+    // Find the slot for this color
+    const slot = Object.entries(window.schemaManager.currentTheme.colorSlots)
+      .find(([, s]) => s.value === colorObj.value)?.[0];
+    
+    const colorEl = document.createElement("div");
+    colorEl.className = "color-radial-item";
+    colorEl.style.cssText = `
+      position: absolute;
+      left: ${x}px;
+      top: ${y}px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: ${colorObj.value};
+      border: 3px solid ${pin.color === colorObj.value ? '#fff' : 'rgba(255,255,255,0.3)'};
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    colorEl.title = `${colorObj.name}\n${colorObj.value}`;
+    
+    colorEl.onmouseenter = () => {
+      colorEl.style.transform = 'scale(1.15)';
+      colorEl.style.borderColor = '#ffffff';
+      colorEl.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)';
+    };
+    
+    colorEl.onmouseleave = () => {
+      colorEl.style.transform = 'scale(1)';
+      colorEl.style.borderColor = pin.color === colorObj.value ? '#fff' : 'rgba(255,255,255,0.3)';
+      colorEl.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+    };
+    
+    colorEl.onclick = (e) => {
+      e.stopPropagation();
+      applyColorToPin(pinIndex, colorObj.value, slot);
+      closeRadialMenu();
+    };
+    
+    radialMenuEl.appendChild(colorEl);
+  });
+  
+  // Add center indicator showing current color
+  const centerEl = document.createElement("div");
+  centerEl.style.cssText = `
+    position: absolute;
+    left: ${centerOffset - 15}px;
+    top: ${centerOffset - 15}px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: ${pin.color};
+    border: 2px solid rgba(255,255,255,0.5);
+    pointer-events: none;
+  `;
+  radialMenuEl.appendChild(centerEl);
+  
+  // Click outside to close
+  radialMenuOutsideClickHandler = (e) => {
+    if (!radialMenuEl.contains(e.target)) {
+      closeRadialMenu();
+    }
+  };
+  
+  setTimeout(() => {
+    document.addEventListener("click", radialMenuOutsideClickHandler);
+  }, 10);
+  
+  console.log(`🎨 Opened color picker for pin ${pinIndex}`);
+}
+
+// Export for action system
+window.openColorRadialForPin = openColorRadialForPin;
 
 /**
  * Execute a radial menu action
@@ -486,39 +878,59 @@ function closeRadialMenu() {
  * @param {number} pinIndex - Index of the pin
  */
 function executeRadialAction(action, pinIndex) {
-  switch (action) {
-    case "connect":
-      window.app.appState.connectStartIndex = pinIndex;
-      window.app.appState.connectionMode = 'parent'; // Locked parent effect
-      // Force a redraw to ensure marquee shows immediately
-      window.draw();
-      break;
-    case "edit":
-      if (window.openPinModal) {
-        window.openPinModal(pinIndex);
-      }
-      break;
-    case "edit":
-      openPinModal(pinIndex);
-      break;
-    case "delete":
-      if (confirm("Delete this pin?")) {
-        // Delete the pin the radial menu was opened for
-        window.app.appState.pins.splice(pinIndex, 1);
-        window.app.setSelectedPin(null);
+  // Use centralized action system when available
+  if (window.executeAction) {
+    switch (action) {
+      case "connect":
+        window.executeAction("pin:setParent", pinIndex);
+        break;
+      case "edit":
+        window.executeAction("pin:edit", pinIndex);
+        break;
+      case "delete":
+        window.executeAction("pin:delete", pinIndex);
         closeRadialMenu();
-        window.app.saveState();
+        break;
+      case "focus":
+        window.executeAction("pin:focus", pinIndex);
+        break;
+      case "toggleConnectionType":
+        window.executeAction("pin:toggleConnectionType", pinIndex);
+        break;
+      case "color":
+        // Color action is handled via submenu hover, 
+        // but if selected via keyboard, do nothing (submenu should be shown)
+        break;
+    }
+  } else {
+    // Fallback if action system not loaded
+    switch (action) {
+      case "connect":
+        window.app.appState.connectStartIndex = pinIndex;
+        window.app.appState.connectionMode = 'parent';
         window.draw();
-      }
-      break;
-    case "focus":
-      // Focus on this pin and connected pins
-      focusOnPin(pinIndex);
-      break;
-    case "toggleConnectionType":
-      // Toggle connection type for all connections of this pin
-      togglePinConnectionType(pinIndex);
-      break;
+        break;
+      case "edit":
+        if (window.app?.modalManager?.openPinModal) {
+          window.app.modalManager.openPinModal(pinIndex);
+        }
+        break;
+      case "delete":
+        if (confirm("Delete this pin?")) {
+          window.app.appState.pins.splice(pinIndex, 1);
+          window.app.setSelectedPin(null);
+          closeRadialMenu();
+          window.app.saveState();
+          window.draw();
+        }
+        break;
+      case "focus":
+        focusOnPin(pinIndex);
+        break;
+      case "toggleConnectionType":
+        togglePinConnectionType(pinIndex);
+        break;
+    }
   }
 }
 
@@ -614,44 +1026,54 @@ function renderAddColorPicker() {
 
   container.innerHTML = "";
 
-  // Get current theme colors from app state
-  const appState = window.app?.appState;
-  if (!appState) return;
-
-  const currentTheme = window.themeManager?.getCurrentTheme();
+  // Get current theme colors from schemaManager
+  const currentTheme = window.schemaManager?.getCurrentTheme();
   const themeColors = currentTheme?.colors || [];
 
   if (themeColors.length === 0) return;
 
-  themeColors.forEach((colorObj) => {
+  // Display current palette colors
+  themeColors.forEach((colorObj, index) => {
     const colorBox = document.createElement("div");
-    colorBox.className = "card-color-box";
-    colorBox.style.width = "50px";
-    colorBox.style.height = "50px";
-    colorBox.style.borderRadius = "8px";
-    colorBox.style.backgroundColor = colorObj.value;
-    colorBox.style.cursor = "pointer";
-    colorBox.style.border = "2px solid #444";
-    colorBox.style.margin = "5px";
-    colorBox.style.display = "inline-block";
-    colorBox.title = colorObj.name || colorObj.value;
+    colorBox.className = "color-picker-box";
+    colorBox.style.cssText = `
+      width: 45px;
+      height: 45px;
+      border-radius: 8px;
+      background-color: ${colorObj.value};
+      cursor: pointer;
+      border: 2px solid #30363d;
+      margin: 4px;
+      display: inline-block;
+      transition: all 0.15s ease;
+    `;
+    colorBox.title = `${colorObj.name || 'Color ' + (index + 1)}\n${colorObj.value}`;
 
+    // Highlight on hover
+    colorBox.onmouseenter = () => {
+      colorBox.style.transform = 'scale(1.1)';
+      colorBox.style.borderColor = '#58a6ff';
+    };
+    colorBox.onmouseleave = () => {
+      colorBox.style.transform = 'scale(1)';
+      colorBox.style.borderColor = '#30363d';
+    };
+
+    // Click to select this color
     colorBox.onclick = () => {
-      // Add this color to the palette
-      if (!appState.palette.find((c) => c.value === colorObj.value)) {
-        appState.palette.push({
-          name: colorObj.name || `Color ${appState.palette.length + 1}`,
-          value: colorObj.value,
-        });
-        appState.saveHistory();
-        if (window.app && window.app.saveState) {
-          window.app.saveState();
+      if (window.app?.appState) {
+        window.app.appState.selectedColor = colorObj.value;
+        // Find the slot for this color
+        const slot = Object.entries(window.schemaManager.currentTheme.colorSlots)
+          .find(([, s]) => s.value === colorObj.value)?.[0];
+        if (slot) {
+          window.app.appState.selectedColorSlot = slot;
         }
-        if (window.app && window.app.toolbarManager) {
-          window.app.toolbarManager.render();
-        }
-        closeAddColorModal();
       }
+      if (window.app?.toolbarManager) {
+        window.app.toolbarManager.render();
+      }
+      closeAddColorModal();
     };
 
     container.appendChild(colorBox);
@@ -804,6 +1226,30 @@ function setupUIHandlers() {
   addColorModalBackdrop.addEventListener("click", (e) => {
     if (e.target === addColorModalBackdrop) closeAddColorModal();
   });
+  
+  // Add color button handler
+  const addColorBtn = document.getElementById("add-color-btn");
+  const newColorPicker = document.getElementById("new-color-picker");
+  if (addColorBtn && newColorPicker) {
+    addColorBtn.onclick = () => {
+      const colorValue = newColorPicker.value;
+      if (colorValue && window.themeManager) {
+        // Add color to palette
+        window.themeManager.addColorToPalette({
+          name: colorValue,
+          value: colorValue
+        });
+        
+        // Update toolbar
+        if (window.app?.toolbarManager) {
+          window.app.toolbarManager.updateColorPalette(window.DEFAULT_COLORS);
+        }
+        
+        console.log(`🎨 Added custom color: ${colorValue}`);
+        closeAddColorModal();
+      }
+    };
+  }
 
   // Card modal handlers
   cardModalClose.onclick = closeCardModal;
@@ -979,6 +1425,376 @@ function setupUIHandlers() {
 
   // Load modal handlers
   // Note: Load modal uses file input and example buttons, no submit button
+
+  // Initialize connection modal
+  initConnectionModal();
+}
+
+// ============================================================================
+// CONNECTION MODAL
+// ============================================================================
+
+let connectionModalBackdrop = null;
+let connectionModalIndex = null;
+
+/**
+ * Open the connection edit modal
+ * @param {number} connectionIndex - Index of the connection to edit
+ */
+function openConnectionModal(connectionIndex) {
+  connectionModalBackdrop = document.getElementById("connection-modal-backdrop");
+  if (!connectionModalBackdrop) {
+    console.error("❌ Connection modal backdrop not found");
+    return;
+  }
+
+  const connection = window.app?.appState?.connections[connectionIndex];
+  if (!connection) {
+    console.error("❌ Connection not found at index:", connectionIndex);
+    return;
+  }
+
+  connectionModalIndex = connectionIndex;
+
+  // Populate form fields
+  const labelInput = document.getElementById("conn-label");
+  const descriptionInput = document.getElementById("conn-description");
+  const colorInput = document.getElementById("conn-color");
+  const typeSelect = document.getElementById("conn-type");
+  const gradientCheckbox = document.getElementById("conn-gradient");
+  const gradientHint = document.getElementById("conn-gradient-hint");
+  const relationshipSelect = document.getElementById("conn-relationship");
+  const confidenceSlider = document.getElementById("conn-confidence");
+  const confidenceValue = document.getElementById("conn-confidence-value");
+  const validationSlider = document.getElementById("conn-validation");
+  const validationValue = document.getElementById("conn-validation-value");
+
+  if (labelInput) labelInput.value = connection.label || "";
+  if (descriptionInput) descriptionInput.value = connection.description || "";
+  if (colorInput) colorInput.value = connection.color || "#666666";
+  if (typeSelect) typeSelect.value = connection.type || window.app.appState.connectionType || "straight";
+  if (gradientCheckbox) gradientCheckbox.checked = connection.useGradient || false;
+
+  // Populate relationship type dropdown
+  if (relationshipSelect) {
+    relationshipSelect.innerHTML = "";
+    const relationshipTypes = window.RELATIONSHIP_TYPES || [];
+    relationshipTypes.forEach(rt => {
+      const option = document.createElement("option");
+      option.value = rt.id;
+      option.textContent = `${rt.icon} ${rt.label}`;
+      option.title = rt.description;
+      relationshipSelect.appendChild(option);
+    });
+    relationshipSelect.value = connection.relationshipType || "none";
+  }
+
+  // Set confidence and validation sliders
+  const confidence = connection.confidenceScore ?? 50;
+  const validation = connection.validationPercent ?? 0;
+  
+  if (confidenceSlider) {
+    confidenceSlider.value = confidence;
+    if (confidenceValue) confidenceValue.textContent = confidence;
+  }
+  if (validationSlider) {
+    validationSlider.value = validation;
+    if (validationValue) validationValue.textContent = validation;
+  }
+
+  // Update gradient hint based on pin colors
+  if (gradientHint) {
+    const fromPin = window.app.appState.pins[connection.from];
+    const toPin = window.app.appState.pins[connection.to];
+    const fromColor = fromPin?.color || "#666666";
+    const toColor = toPin?.color || "#666666";
+    
+    if (fromColor.toLowerCase() === toColor.toLowerCase()) {
+      gradientHint.textContent = "Pin colors are the same - gradient won't be visible";
+      gradientHint.style.color = "#f0883e"; // Warning orange
+    } else {
+      gradientHint.textContent = `Gradient: ${fromColor} → ${toColor}`;
+      gradientHint.style.color = "#8b949e"; // Normal gray
+    }
+  }
+
+  // Show modal
+  connectionModalBackdrop.style.display = "flex";
+
+  // Focus on label input
+  if (labelInput) labelInput.focus();
+
+  console.log("🔗 Opened connection modal for connection:", connectionIndex);
+}
+
+/**
+ * Close the connection modal
+ */
+function closeConnectionModal() {
+  if (connectionModalBackdrop) {
+    connectionModalBackdrop.style.display = "none";
+  }
+  connectionModalIndex = null;
+}
+
+/**
+ * Save connection modal data
+ */
+function saveConnectionModal() {
+  if (connectionModalIndex === null) return;
+
+  const connection = window.app?.appState?.connections[connectionModalIndex];
+  if (!connection) return;
+
+  // Get form values
+  const labelInput = document.getElementById("conn-label");
+  const descriptionInput = document.getElementById("conn-description");
+  const colorInput = document.getElementById("conn-color");
+  const typeSelect = document.getElementById("conn-type");
+  const gradientCheckbox = document.getElementById("conn-gradient");
+  const relationshipSelect = document.getElementById("conn-relationship");
+  const confidenceSlider = document.getElementById("conn-confidence");
+  const validationSlider = document.getElementById("conn-validation");
+
+  // Update connection
+  if (labelInput) connection.label = labelInput.value;
+  if (descriptionInput) connection.description = descriptionInput.value;
+  if (colorInput) connection.color = colorInput.value;
+  if (typeSelect) connection.type = typeSelect.value;
+  if (gradientCheckbox) connection.useGradient = gradientCheckbox.checked;
+  if (relationshipSelect) connection.relationshipType = relationshipSelect.value;
+  if (confidenceSlider) connection.confidenceScore = parseInt(confidenceSlider.value, 10);
+  if (validationSlider) connection.validationPercent = parseInt(validationSlider.value, 10);
+
+  // Save state
+  window.app.appState.saveHistory();
+  window.app.saveState();
+  window.draw();
+
+  closeConnectionModal();
+  console.log("🔗 Saved connection:", connectionModalIndex);
+}
+
+/**
+ * Delete connection from modal
+ */
+function deleteConnectionFromModal() {
+  if (connectionModalIndex === null) return;
+
+  if (confirm("Delete this connection?")) {
+    window.app.appState.connections.splice(connectionModalIndex, 1);
+    window.app.appState.clearConnectionSelection();
+    window.app.appState.saveHistory();
+    window.app.saveState();
+    window.draw();
+    closeConnectionModal();
+  }
+}
+
+/**
+ * Initialize connection modal event handlers
+ */
+function initConnectionModal() {
+  const closeBtn = document.getElementById("connection-modal-close");
+  const saveBtn = document.getElementById("conn-save");
+  const deleteBtn = document.getElementById("conn-delete");
+  const backdrop = document.getElementById("connection-modal-backdrop");
+  const confidenceSlider = document.getElementById("conn-confidence");
+  const confidenceValue = document.getElementById("conn-confidence-value");
+  const validationSlider = document.getElementById("conn-validation");
+  const validationValue = document.getElementById("conn-validation-value");
+
+  if (closeBtn) {
+    closeBtn.onclick = closeConnectionModal;
+  }
+
+  if (saveBtn) {
+    saveBtn.onclick = saveConnectionModal;
+  }
+
+  if (deleteBtn) {
+    deleteBtn.onclick = deleteConnectionFromModal;
+    deleteBtn.classList.add("delete"); // Add delete class for styling
+  }
+
+  // Close on backdrop click
+  if (backdrop) {
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) {
+        closeConnectionModal();
+      }
+    };
+  }
+
+  // Slider value display updates
+  if (confidenceSlider && confidenceValue) {
+    confidenceSlider.oninput = () => {
+      confidenceValue.textContent = confidenceSlider.value;
+    };
+  }
+
+  if (validationSlider && validationValue) {
+    validationSlider.oninput = () => {
+      validationValue.textContent = validationSlider.value;
+    };
+  }
+
+  // Close on Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && connectionModalBackdrop?.style.display === "flex") {
+      closeConnectionModal();
+    }
+  });
+}
+
+// ============================================================================
+// CONNECTION RADIAL MENU
+// ============================================================================
+
+// Connection radial menu element (reuses radialMenuEl)
+let connectionRadialMenuEl = null;
+let connectionRadialMenuOutsideClickHandler = null;
+
+/**
+ * Open the radial context menu for a connection
+ * @param {number} connectionIndex - Index of the connection to show menu for
+ * @param {number} screenX - Screen X coordinate
+ * @param {number} screenY - Screen Y coordinate
+ */
+function openConnectionRadialMenu(connectionIndex, screenX, screenY) {
+  console.log("🔗 openConnectionRadialMenu called with connectionIndex:", connectionIndex);
+
+  // Set global flag that menu is open
+  window.isRadialMenuOpen = true;
+  window.isConnectionRadialMenuOpen = true;
+
+  // Check if app is available
+  if (!window.app) {
+    console.error("❌ window.app not available - app not initialized yet");
+    return;
+  }
+
+  // Reuse the radial menu element or create a new one
+  if (!radialMenuEl) {
+    radialMenuEl = document.createElement("div");
+    radialMenuEl.id = "radial-menu";
+    radialMenuEl.className = "radial-menu";
+    radialMenuEl.tabIndex = -1;
+
+    radialMenuEl.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    });
+
+    document.body.appendChild(radialMenuEl);
+  }
+
+  closeRadialMenu();
+
+  const connection = window.app.appState.connections[connectionIndex];
+  if (!connection) {
+    console.error("❌ Connection not found at index:", connectionIndex);
+    return;
+  }
+
+  // Store the connection index for wheel selection
+  window.currentRadialConnectionIndex = connectionIndex;
+  window.currentRadialPinIndex = null; // Clear pin index
+
+  console.log("🔗 Opening radial menu for connection:", connection);
+
+  // Position the menu
+  const menuSize = 200;
+  const centerOffset = menuSize / 2;
+
+  radialMenuEl.style.width = menuSize + "px";
+  radialMenuEl.style.height = menuSize + "px";
+  const leftPos = screenX - centerOffset;
+  const topPos = screenY - centerOffset;
+  radialMenuEl.style.left = leftPos + "px";
+  radialMenuEl.style.top = topPos + "px";
+
+  const radius = 70;
+  const connType = connection.type || window.app.appState.connectionType;
+
+  // Connection menu items
+  const items = [
+    { icon: "✏️", action: "edit", title: "Edit Connection" },
+    { icon: "🗑️", action: "delete", title: "Delete Connection", className: "delete" },
+    { 
+      icon: connType === "curved" ? "📏" : "📈", 
+      action: "toggleType", 
+      title: connType === "curved" ? "Make Straight" : "Make Curved" 
+    },
+  ];
+
+  // Store items globally for wheel selection
+  window.currentRadialItems = items;
+  window.currentRadialSelection = 0;
+
+  radialMenuEl.style.display = "block";
+  radialMenuEl.focus();
+
+  items.forEach((item, i) => {
+    const angle = (i / items.length) * Math.PI * 2;
+    const x = centerOffset + radius * Math.cos(angle - Math.PI / 2) - 24;
+    const y = centerOffset + radius * Math.sin(angle - Math.PI / 2) - 24;
+
+    const itemEl = document.createElement("div");
+    itemEl.className = "radial-item" + (item.className ? " " + item.className : "");
+    if (i === window.currentRadialSelection) {
+      itemEl.className += " selected";
+    }
+    itemEl.innerHTML = item.icon;
+    itemEl.style.left = x + "px";
+    itemEl.style.top = y + "px";
+    itemEl.title = item.title;
+    itemEl.onclick = (e) => {
+      e.stopPropagation();
+      closeRadialMenu();
+      executeConnectionRadialAction(item.action, connectionIndex);
+    };
+    radialMenuEl.appendChild(itemEl);
+  });
+
+  radialMenuEl.onclick = (e) => e.stopPropagation();
+
+  // Add click-outside-to-close functionality
+  connectionRadialMenuOutsideClickHandler = (e) => {
+    if (!radialMenuEl.contains(e.target)) {
+      closeRadialMenu();
+    }
+  };
+
+  setTimeout(() => {
+    document.addEventListener("click", connectionRadialMenuOutsideClickHandler);
+  }, 10);
+}
+
+/**
+ * Execute a connection radial menu action
+ * @param {string} action - The action to execute
+ * @param {number} connectionIndex - Index of the connection
+ */
+function executeConnectionRadialAction(action, connectionIndex) {
+  const connection = window.app.appState.connections[connectionIndex];
+  if (!connection) return;
+
+  // Use centralized action system
+  if (window.executeAction) {
+    switch (action) {
+      case "edit":
+        window.executeAction("connection:edit", connectionIndex);
+        break;
+      case "delete":
+        window.executeAction("connection:delete", connectionIndex);
+        break;
+      case "toggleType":
+        window.executeAction("connection:toggleType", connectionIndex);
+        break;
+    }
+  }
 }
 
 // ============================================================================
@@ -996,3 +1812,9 @@ window.openPinModal = (index) => window.app?.modalManager?.openPinModal(index);
 window.closePinModal = closePinModal;
 window.openAddColorModal = openAddColorModal;
 window.closeAddColorModal = closeAddColorModal;
+window.openConnectionRadialMenu = openConnectionRadialMenu;
+window.executeConnectionRadialAction = executeConnectionRadialAction;
+window.openConnectionModal = openConnectionModal;
+window.closeConnectionModal = closeConnectionModal;
+window.saveConnectionModal = saveConnectionModal;
+window.initConnectionModal = initConnectionModal;

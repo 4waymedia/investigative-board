@@ -167,23 +167,7 @@ class ModalManager {
       pmTitle.value = pin.label || ""; // Text pins use label for main text
     }
 
-    // Populate settings tab fields
-    if (pin.typeId) {
-      let selectorValue;
-      if (pin.typeId.startsWith("pin:")) {
-        selectorValue = pin.typeId.replace("pin:", "");
-      } else if (pin.typeId.startsWith("card:")) {
-        selectorValue = pin.typeId.replace("card:", "");
-      } else if (pin.typeId.startsWith("area:")) {
-        selectorValue = pin.typeId.replace("area:", "area-");
-      }
-      if (selectorValue && pmPinSelector) {
-        pmPinSelector.value = selectorValue;
-      }
-    }
-    pmScale.value = pin.pinScale || 1;
-
-    // Handle area pins - show area scale slider
+    // Handle area pins - show area scale slider and hide area options in shape selector
     const isArea = pin.typeId && pin.typeId.startsWith("area:");
     const areaScaleContainer = document.getElementById("area-scale-container");
     if (areaScaleContainer) {
@@ -192,6 +176,22 @@ class ModalManager {
     if (pmAreaScale) {
       pmAreaScale.value = pin.areaScale || 1;
     }
+    
+    // Hide area type options in the shape selector when editing an area pin
+    // (since we're only changing the center shape, not the area type)
+    if (pmPinSelector) {
+      const areaOptions = pmPinSelector.querySelectorAll('option[value^="area-"]');
+      areaOptions.forEach(option => {
+        option.style.display = isArea ? "none" : "";
+      });
+    }
+    
+    // Handle hide shape toggle
+    const pmHideShape = document.getElementById("pm-hide-shape");
+    if (pmHideShape) {
+      pmHideShape.checked = pin.hideShape || false;
+    }
+    
     const pmSave = document.getElementById("pm-save");
     const pmDelete = document.getElementById("pm-delete");
 
@@ -204,17 +204,32 @@ class ModalManager {
     pmTextColor.value = pin.textColor || "#ffffff";
     pmScale.value = pin.pinScale || 1;
 
-    // Set up pin type selector
-    if (pin.typeId) {
+    // Set up shape selector
+    // For area pins: show the center shape (pinType), NOT the area type
+    // For other pins: show the typeId
+    if (pmPinSelector) {
       let selectorValue;
-      if (pin.typeId.startsWith("pin:")) {
-        selectorValue = pin.typeId.replace("pin:", "");
-      } else if (pin.typeId.startsWith("card:")) {
-        selectorValue = pin.typeId.replace("card:", "");
-      } else if (pin.typeId.startsWith("area:")) {
-        selectorValue = pin.typeId.replace("area:", "area-");
+      if (isArea) {
+        // Area pins: use pinType for the center shape selector
+        const centerShape = pin.pinType || "card:card";
+        if (centerShape.startsWith("pin:")) {
+          selectorValue = centerShape.replace("pin:", "");
+        } else if (centerShape.startsWith("card:")) {
+          selectorValue = centerShape.replace("card:", "");
+        } else {
+          selectorValue = "card"; // fallback
+        }
+      } else if (pin.typeId) {
+        // Non-area pins: use typeId
+        if (pin.typeId.startsWith("pin:")) {
+          selectorValue = pin.typeId.replace("pin:", "");
+        } else if (pin.typeId.startsWith("card:")) {
+          selectorValue = pin.typeId.replace("card:", "");
+        } else if (pin.typeId.startsWith("area:")) {
+          selectorValue = pin.typeId.replace("area:", "area-");
+        }
       }
-      if (selectorValue && pmPinSelector) {
+      if (selectorValue) {
         pmPinSelector.value = selectorValue;
       }
     }
@@ -272,22 +287,30 @@ class ModalManager {
 
     const textColorHandler = createAutoSaveHandler('textColor', () => pmTextColor.value);
     const pinTypeHandler = () => {
-      let typeId;
       const selectedValue = pmPinSelector.value;
 
-      // Determine the family based on the selected value
-      if (selectedValue.startsWith('area-')) {
-        // Area types
-        typeId = selectedValue.replace('area-', 'area:');
-      } else if (['card', 'doc', 'folder'].includes(selectedValue)) {
-        // Card types
-        typeId = 'card:' + selectedValue;
+      // For area pins: change the center shape (pinType), NOT the area type (typeId)
+      if (isArea) {
+        let centerShapeType;
+        if (['card', 'doc', 'folder'].includes(selectedValue)) {
+          centerShapeType = 'card:' + selectedValue;
+        } else {
+          centerShapeType = 'pin:' + selectedValue;
+        }
+        pin.pinType = centerShapeType;
       } else {
-        // Pin types (default)
-        typeId = 'pin:' + selectedValue;
+        // For non-area pins: change the typeId as before
+        let typeId;
+        if (selectedValue.startsWith('area-')) {
+          typeId = selectedValue.replace('area-', 'area:');
+        } else if (['card', 'doc', 'folder'].includes(selectedValue)) {
+          typeId = 'card:' + selectedValue;
+        } else {
+          typeId = 'pin:' + selectedValue;
+        }
+        pin.typeId = typeId;
       }
 
-      pin.typeId = typeId;
       this.appState.saveHistory();
       this.saveAppState(this.appState);
       this.draw();
@@ -301,6 +324,13 @@ class ModalManager {
 
     const areaScaleHandler = () => {
       pin.areaScale = parseFloat(pmAreaScale.value);
+      this.appState.saveHistory();
+      this.saveAppState(this.appState);
+      this.draw();
+    };
+
+    const hideShapeHandler = () => {
+      pin.hideShape = pmHideShape.checked;
       this.appState.saveHistory();
       this.saveAppState(this.appState);
       this.draw();
@@ -332,6 +362,9 @@ class ModalManager {
     if (pmAreaScale) {
       this.addModalListener(() => pmAreaScale.removeEventListener("input", areaScaleHandler));
     }
+    if (pmHideShape) {
+      this.addModalListener(() => pmHideShape.removeEventListener("change", hideShapeHandler));
+    }
     this.addModalListener(() => pmSave.removeEventListener("click", saveHandler));
     this.addModalListener(() => pmDelete.removeEventListener("click", deleteHandler));
 
@@ -345,6 +378,9 @@ class ModalManager {
     pmScale.addEventListener("input", scaleHandler);
     if (pmAreaScale) {
       pmAreaScale.addEventListener("input", areaScaleHandler);
+    }
+    if (pmHideShape) {
+      pmHideShape.addEventListener("change", hideShapeHandler);
     }
     pmSave.addEventListener("click", saveHandler);
     pmDelete.addEventListener("click", deleteHandler);

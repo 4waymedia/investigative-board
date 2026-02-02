@@ -218,6 +218,30 @@ class SystemMenuManager {
       </div>
       <div class="file-menu-separator"></div>
       <div class="file-menu-section">
+        <div class="file-menu-header">Themes</div>
+        <div class="file-menu-item" data-action="theme-builder">
+          <span class="file-menu-icon">🎨</span>
+          <span class="file-menu-label">Theme Builder</span>
+        </div>
+        <div class="file-menu-item" data-action="theme-export">
+          <span class="file-menu-icon">📤</span>
+          <span class="file-menu-label">Export Theme...</span>
+        </div>
+        <div class="file-menu-item" data-action="theme-import">
+          <span class="file-menu-icon">📥</span>
+          <span class="file-menu-label">Import Theme...</span>
+        </div>
+      </div>
+      <div class="file-menu-separator"></div>
+      <div class="file-menu-section">
+        <div class="file-menu-header">Settings</div>
+        <div class="file-menu-item" data-action="keyboard-shortcuts">
+          <span class="file-menu-icon">⌨️</span>
+          <span class="file-menu-label">Keyboard Shortcuts</span>
+        </div>
+      </div>
+      <div class="file-menu-separator"></div>
+      <div class="file-menu-section">
         <div class="file-menu-header">Help</div>
         <div class="file-menu-item" data-action="help-instructions">
           <span class="file-menu-icon">📖</span>
@@ -291,6 +315,18 @@ class SystemMenuManager {
       case "load-assets":
         this.handleLoadAssets();
         break;
+      case "theme-builder":
+        this.handleThemeBuilder();
+        break;
+      case "theme-export":
+        this.handleThemeExport();
+        break;
+      case "theme-import":
+        this.handleThemeImport();
+        break;
+      case "keyboard-shortcuts":
+        this.handleKeyboardShortcuts();
+        break;
       case "help-instructions":
         this.handleHelpInstructions();
         break;
@@ -321,21 +357,47 @@ class SystemMenuManager {
       return;
     }
 
-    const title = prompt("Enter board name:", "Untitled Board");
-    if (title === null) return; // Cancelled
+    // Open new board modal
+    if (window.openNewBoardModal) {
+      window.openNewBoardModal((boardData) => {
+        // Save current board first
+        if (this.appState.meta?.id) {
+          this.boardManager.saveBoard();
+        }
 
-    // Save current board first
-    if (this.appState.meta?.id) {
-      this.boardManager.saveBoard();
-    }
-
-    const boardId = this.boardManager.createBoard(title.trim() || "Untitled Board");
-    if (boardId) {
-      this.boardManager.loadBoard(boardId);
-      this._notifyBoardChange();
-      this.showToast(`Created "${title}"`, "success");
+        const boardId = this.boardManager.createBoard(boardData.name);
+        if (boardId) {
+          this.boardManager.loadBoard(boardId);
+          this.appState.meta.description = boardData.description;
+          
+          // Apply selected theme
+          if (window.schemaManager) {
+            window.schemaManager.setTheme(boardData.themeId, false);
+          }
+          
+          this._notifyBoardChange();
+          this.showToast(`Created "${boardData.name}"`, "success");
+        } else {
+          this.showToast("Failed to create board", "error");
+        }
+      });
     } else {
-      this.showToast("Failed to create board", "error");
+      // Fallback to prompt
+      const title = prompt("Enter board name:", "Untitled Board");
+      if (title === null) return;
+
+      if (this.appState.meta?.id) {
+        this.boardManager.saveBoard();
+      }
+
+      const boardId = this.boardManager.createBoard(title.trim() || "Untitled Board");
+      if (boardId) {
+        this.boardManager.loadBoard(boardId);
+        this._notifyBoardChange();
+        this.showToast(`Created "${title}"`, "success");
+      } else {
+        this.showToast("Failed to create board", "error");
+      }
     }
   }
 
@@ -442,6 +504,73 @@ class SystemMenuManager {
     // Re-render tray with cards
     if (this.app && this.app.trayManager) {
       this.app.trayManager.render();
+    }
+  }
+
+  handleThemeBuilder() {
+    if (window.openThemeBuilderModal) {
+      window.openThemeBuilderModal();
+    } else {
+      this.showToast("Theme builder not available", "error");
+    }
+  }
+
+  handleThemeExport() {
+    if (!window.schemaManager) {
+      this.showToast("Schema manager not available", "error");
+      return;
+    }
+    
+    const currentTheme = window.schemaManager.currentTheme;
+    const json = window.schemaManager.exportTheme(currentTheme.id);
+    
+    if (json) {
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `theme-${currentTheme.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showToast(`Exported "${currentTheme.name}"`, "success");
+    }
+  }
+
+  async handleThemeImport() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        const themeId = window.schemaManager.importTheme(text);
+        
+        if (themeId) {
+          this.showToast("Theme imported successfully!", "success");
+          // Optionally open theme builder to show it
+          if (window.openThemeBuilderModal) {
+            window.openThemeBuilderModal();
+          }
+        } else {
+          this.showToast("Failed to import theme", "error");
+        }
+      } catch (err) {
+        this.showToast("Failed to read theme file: " + err.message, "error");
+      }
+    };
+    
+    input.click();
+  }
+
+  handleKeyboardShortcuts() {
+    if (window.openKeyboardShortcutsModal) {
+      window.openKeyboardShortcutsModal();
+    } else {
+      this.showToast("Keyboard shortcuts panel not available", "error");
     }
   }
 

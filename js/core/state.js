@@ -64,6 +64,7 @@ class AppState {
     this.session = {
       // Selection State
       selectedPins: [], // Primary selection array (replaces selectedPinIndex)
+      selectedConnectionIndex: null, // Currently selected connection for editing
       selectedTextIndex: null,
       connectStartIndex: null,
       connectMousePos: null,
@@ -84,6 +85,7 @@ class AppState {
       currentFamily: "pin",
       currentTypeId: "pin:circle",
       selectedColor: "#58a6ff",
+      selectedColorSlot: "c2", // Color slot identifier for theme switching
       connectionType: "straight",
 
       // Additional tool state
@@ -160,6 +162,9 @@ class AppState {
   get selectedTextIndex() { return this.session.selectedTextIndex; }
   set selectedTextIndex(value) { this.session.selectedTextIndex = value; }
 
+  get selectedConnectionIndex() { return this.session.selectedConnectionIndex; }
+  set selectedConnectionIndex(value) { this.session.selectedConnectionIndex = value; }
+
   get connectStartIndex() { return this.session.connectStartIndex; }
   set connectStartIndex(value) { this.session.connectStartIndex = value; }
 
@@ -199,6 +204,9 @@ class AppState {
   get selectedColor() { return this.session.selectedColor; }
   set selectedColor(value) { this.session.selectedColor = value; }
 
+  get selectedColorSlot() { return this.session.selectedColorSlot; }
+  set selectedColorSlot(value) { this.session.selectedColorSlot = value; }
+
   get connectionType() { return this.session.connectionType; }
   set connectionType(value) { this.session.connectionType = value; }
 
@@ -235,6 +243,7 @@ class AppState {
       y: y,
       typeId: properties.typeId || this.session.currentTypeId,
       color: properties.color || this.session.selectedColor,
+      colorSlot: properties.colorSlot || this.session.selectedColorSlot, // Color slot for theme switching
       label: properties.label || '',
       note: properties.note || '',
       date: properties.date || '',
@@ -259,7 +268,12 @@ class AppState {
    */
   addTextPin(x, y, description = '', properties = {}) {
     const bubbleColor = properties.color || this.session.selectedColor;
+    const bubbleColorSlot = properties.colorSlot || this.session.selectedColorSlot;
     const textColor = properties.textColor || this.calculateTextColor(bubbleColor);
+    
+    // Default border color to a slightly darker version of the bubble color
+    // This creates a cohesive look rather than harsh black outlines
+    const borderColor = properties.borderColor || this.darkenColor(bubbleColor, 20);
 
     // Always create a fresh tailPosition object to avoid shared references
     const defaultTailPosition = { angle: 270, distance: 0.8 };
@@ -276,7 +290,7 @@ class AppState {
       shape: properties.shape || 'bubble', // Default to comic bubble
       tailType: properties.tailType || 'curved', // Default tail type (classic comic style)
       textColor: textColor,
-      borderColor: properties.borderColor,
+      borderColor: borderColor,
       fontSize: properties.fontSize || 16,
       width: properties.width || 200,
       height: properties.height || 50,
@@ -303,6 +317,21 @@ class AppState {
 
     // Return light text for dark backgrounds, dark text for light backgrounds
     return brightness > 128 ? '#000000' : '#ffffff';
+  }
+
+  /**
+   * Darken a hex color by a percentage
+   * @param {string} hexColor - Hex color to darken
+   * @param {number} percent - Percentage to darken (0-100)
+   * @returns {string} Darkened hex color
+   */
+  darkenColor(hexColor, percent) {
+    if (!hexColor) return '#000000';
+    const hex = hexColor.replace('#', '');
+    const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - Math.round(255 * percent / 100));
+    const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - Math.round(255 * percent / 100));
+    const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - Math.round(255 * percent / 100));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
   /**
@@ -536,6 +565,7 @@ class AppState {
    */
   clearSelection() {
     this.session.selectedPins = [];
+    this.session.selectedConnectionIndex = null;
     this.session.selectedTextIndex = null;
     this.session.connectStartIndex = null;
     this.session.marqueeStart = null;
@@ -570,6 +600,49 @@ class AppState {
     } else {
       this.addToSelection(index);
     }
+  }
+
+  // ============================================================================
+  // CONNECTION SELECTION MANAGEMENT
+  // ============================================================================
+
+  /**
+   * Select a connection
+   * @param {number|null} index - Connection index to select, or null to clear
+   */
+  setSelectedConnection(index) {
+    this.session.selectedConnectionIndex = index;
+    // Clear pin selection when selecting a connection (mutual exclusivity)
+    if (index !== null) {
+      this.session.selectedPins = [];
+    }
+  }
+
+  /**
+   * Clear connection selection
+   */
+  clearConnectionSelection() {
+    this.session.selectedConnectionIndex = null;
+  }
+
+  /**
+   * Check if a connection is selected
+   * @param {number} index - Connection index to check
+   * @returns {boolean} True if the connection is selected
+   */
+  isConnectionSelected(index) {
+    return this.session.selectedConnectionIndex === index;
+  }
+
+  /**
+   * Get the currently selected connection object
+   * @returns {Object|null} Selected connection or null
+   */
+  getSelectedConnection() {
+    const index = this.session.selectedConnectionIndex;
+    return index !== null && this.document.connections[index]
+      ? this.document.connections[index]
+      : null;
   }
 
   // ============================================================================
@@ -625,6 +698,7 @@ class AppState {
     // Reset session state and history
     this.session = {
       selectedPins: [],
+      selectedConnectionIndex: null,
       selectedTextIndex: null,
       connectStartIndex: null,
       connectMousePos: null,
@@ -759,6 +833,7 @@ class AppState {
     // Reset session state (transient)
     this.session = {
       selectedPins: [],
+      selectedConnectionIndex: null,
       selectedTextIndex: null,
       connectStartIndex: null,
       connectMousePos: null,
@@ -838,6 +913,7 @@ class AppState {
     // Reset session but preserve some preferences
     this.session = {
       selectedPins: [],
+      selectedConnectionIndex: null,
       selectedTextIndex: null,
       connectStartIndex: null,
       connectMousePos: null,

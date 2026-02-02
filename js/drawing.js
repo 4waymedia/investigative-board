@@ -343,6 +343,11 @@ function drawCenterPin(ctx, areaPin, centerPos) {
     return;
   }
 
+  // Skip drawing the center shape if hideShape is enabled
+  if (areaPin.hideShape) {
+    return;
+  }
+
   // Use pinType if available, otherwise determine from icon for backward compatibility
   let cardTypeId = areaPin.pinType || "card:card";
   if (!areaPin.pinType && areaPin.icon) {
@@ -569,34 +574,66 @@ function defaultDrawSelection(
 ) {
   if (!isSelected && !isMarquee) return;
 
-  ctx.save();
-  ctx.strokeStyle = isMarquee ? "#f90" : "rgba(255,255,255,0.9)";
-  ctx.lineWidth = isMarquee ? 4 / s : 2.5;
-
   const m = metrics;
 
-  if (m.shape === "circle" || m.shape === "area-circle") {
-    const r = (m.radius || 24) * s;
-    ctx.beginPath();
-    ctx.arc(scr.x, scr.y, r + 6 * s, 0, Math.PI * 2);
-    ctx.stroke();
-  } else {
-    const w = m.width * s,
-      h = m.height * s;
-    const x = scr.x - w / 2,
-      y = scr.y - h / 2;
-    const r = m.baseRadius * s || 6 * s;
-    window.DrawingUtils.roundRectPath(
-      ctx,
-      x - 6 * s,
-      y - 6 * s,
-      w + 12 * s,
-      h + 12 * s,
-      r + 4 * s
-    );
-    ctx.stroke();
+  // For marquee only (not selected), use simple orange indicator
+  if (isMarquee && !isSelected) {
+    ctx.save();
+    ctx.strokeStyle = "#f90";
+    ctx.lineWidth = 3;
+
+    if (m.shape === "circle" || m.shape === "area-circle") {
+      const r = (m.radius || 24) * s;
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, r + 6 * s, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      const w = m.width * s,
+        h = m.height * s;
+      const r = m.baseRadius * s || 6 * s;
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        scr.x - w / 2 - 6 * s,
+        scr.y - h / 2 - 6 * s,
+        w + 12 * s,
+        h + 12 * s,
+        r + 4 * s
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
   }
-  ctx.restore();
+
+  // Use animated selection for selected items
+  if (window.selectionAnimator && isSelected) {
+    const selectionCount = window.app?.getSelectionCount?.() || 1;
+    
+    if (m.shape === "circle" || m.shape === "area-circle") {
+      const r = (m.radius || 24) * s;
+      window.selectionAnimator.drawSelection(
+        ctx, 
+        scr.x, 
+        scr.y, 
+        r,
+        pin.color,
+        selectionCount,
+        { shape: m.shape, colorSlot: pin.colorSlot }
+      );
+    } else {
+      const w = m.width * s;
+      const h = m.height * s;
+      window.selectionAnimator.drawSelection(
+        ctx, 
+        scr.x, 
+        scr.y, 
+        Math.max(w, h) / 2,
+        pin.color,
+        selectionCount,
+        { shape: 'rect', width: w, height: h, colorSlot: pin.colorSlot }
+      );
+    }
+  }
 }
 
 function defaultDrawLabel(ctx, pin, metrics, scr, s, scale) {
@@ -800,26 +837,42 @@ registerShape("circle", {
   baseShape: "circle", // Use base circle shape
   drawShadow(ctx, pin, m, scr, s) {
     const r = m.radius * s;
-    ctx.fillStyle = "rgba(0,0,0,0.35)"; // Match default shadow opacity
+    // Use color-matched shadow if available
+    const colorData = window.schemaManager?.getPinColorData?.(pin);
+    const shadowColor = colorData?.shadow || "rgba(0,0,0,0.35)";
+    ctx.fillStyle = shadowColor + "80"; // Add some transparency
     ctx.beginPath();
-    ctx.arc(scr.x + 3 * s, scr.y + 4 * s, r * 1.05, 0, Math.PI * 2); // Match default offset and size
+    ctx.arc(scr.x + 3 * s, scr.y + 4 * s, r * 1.05, 0, Math.PI * 2);
     ctx.fill();
   },
   drawSelection(ctx, pin, m, scr, s, isSelected, isMarquee) {
     if (!isSelected && !isMarquee) return;
 
-    ctx.save();
-    // Prioritize selection (white) over marquee (orange)
-    ctx.strokeStyle = isSelected ? "rgba(255,255,255,0.5)" : "#f90";
-    ctx.lineWidth = isSelected ? 4 : 4 / s; // Thicker for selection
+    // For marquee, use simple orange indicator
+    if (isMarquee && !isSelected) {
+      ctx.save();
+      ctx.strokeStyle = "#f90";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, m.radius * s * 1.1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
 
-    // Circle selection - on top of the circle, not outside
-    const circleRadius = m.radius * s; // Same radius as the circle
-
-    ctx.beginPath();
-    ctx.arc(scr.x, scr.y, circleRadius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    // Use animated selection for selected pins
+    if (window.selectionAnimator && isSelected) {
+      const selectionCount = window.app?.getSelectionCount?.() || 1;
+      window.selectionAnimator.drawSelection(
+        ctx, 
+        scr.x, 
+        scr.y, 
+        m.radius * s, 
+        pin.color,
+        selectionCount,
+        { shape: 'circle', colorSlot: pin.colorSlot }
+      );
+    }
   },
 });
 
@@ -1934,15 +1987,22 @@ function drawCurvedArrowTail(ctx, attachX, attachY, angle, length) {
 }
 
 /**
- * Draw a comic book style speech bubble tail
- * This creates a smooth, curved tail that looks natural coming from an oval bubble
+ * Draw a comic book style speech bubble with integrated tail
+ * Based on classic comic conventions - tail is a simple pointed shape
+ * seamlessly integrated into the bubble outline
  */
 function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth) {
-  let tailPos = pin.tailPosition || { angle: 225, distance: 0.9 }; // Default: bottom-left
+  // For thought bubbles, draw cloud shape with trailing circles
+  if (tailType === 'thought') {
+    drawThoughtBubble(ctx, pin, scr, width, height, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth);
+    return;
+  }
+
+  let tailPos = pin.tailPosition || { angle: 225, distance: 0.8 };
   
   // Auto-point to first connection if enabled
   if (pin.tailAutoPoint && window.app && window.app.appState) {
-    const connections = window.app.appState.document.connections || [];
+    const connections = window.app.appState.connections || [];
     const firstConnection = connections.find(c => c.from === pin.id || c.to === pin.id);
     
     if (firstConnection) {
@@ -1950,133 +2010,112 @@ function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, 
       const otherPin = window.app.appState.pins.find(p => p.id === otherPinId);
       
       if (otherPin) {
-        // Calculate angle from this pin to the connected pin
         const dx = otherPin.x - pin.x;
         const dy = otherPin.y - pin.y;
-        const angleRad = Math.atan2(dy, dx);
-        const angleDeg = (angleRad * 180) / Math.PI;
-        tailPos = { angle: angleDeg, distance: tailPos.distance };
+        tailPos = { angle: Math.atan2(dy, dx) * 180 / Math.PI, distance: tailPos.distance };
       }
     }
   }
   
-  const tailAngle = (tailPos.angle * Math.PI) / 180;
+  const tailAngle = tailPos.angle * Math.PI / 180;
+  const rx = width / 2;
+  const ry = height / 2;
   
-  // Calculate where the tail attaches to the ellipse
-  // For an ellipse, we need to find the point on the perimeter at the given angle
-  const rx = width / 2;  // x radius
-  const ry = height / 2; // y radius
+  // Classic comic tail: small, pointed, elegant
+  // Tail base is narrow (~15 degrees arc on the ellipse)
+  const tailBaseArc = 12 * Math.PI / 180;
   
-  // Point on ellipse perimeter
-  const attachX = scr.x + rx * Math.cos(tailAngle) * 0.85;
-  const attachY = scr.y + ry * Math.sin(tailAngle) * 0.85;
+  // Tail length - proportional but not too long
+  const tailLength = Math.min(width, height) * 0.35;
   
-  // Tail length based on bubble size
-  const tailLength = Math.min(width, height) * 0.5;
+  // Calculate where tail attaches to ellipse
+  const tailStartAngle = tailAngle - tailBaseArc;
+  const tailEndAngle = tailAngle + tailBaseArc;
   
-  // Tip of the tail (pointing away from bubble)
-  const tipX = scr.x + rx * Math.cos(tailAngle) * 1.8;
-  const tipY = scr.y + ry * Math.sin(tailAngle) * 1.8;
+  // Tip of tail - pointed end
+  const tipX = scr.x + (Math.max(rx, ry) + tailLength) * Math.cos(tailAngle);
+  const tipY = scr.y + (Math.max(rx, ry) * 0.7 + tailLength) * Math.sin(tailAngle);
+
+  ctx.save();
+  ctx.fillStyle = hexToRgba(fillColor, fillAlpha);
+  ctx.strokeStyle = hexToRgba(strokeColor, strokeAlpha);
+  ctx.lineWidth = strokeWidth;
+  ctx.lineJoin = 'miter'; // Sharp corners for the tail point
+  ctx.miterLimit = 10;
   
-  // Width of tail at base (wider for better connection appearance)
-  const baseWidth = Math.min(width, height) * 0.4;
+  // Draw bubble + tail as ONE unified path
+  ctx.beginPath();
   
-  // Calculate perpendicular direction for tail width
-  const perpAngle = tailAngle + Math.PI / 2;
+  // Draw the ellipse arc, leaving a gap where the tail attaches
+  // Start just after where tail ends, go all the way around to where tail starts
+  ctx.ellipse(scr.x, scr.y, rx, ry, 0, tailEndAngle, tailStartAngle + Math.PI * 2);
+  
+  // Now draw the tail - straight lines to create classic pointed tail
+  ctx.lineTo(tipX, tipY);
+  
+  // Close back to where we started (the ellipse path will close it)
+  ctx.closePath();
+  
+  ctx.fill();
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
+/**
+ * Draw a thought bubble - cloud shape with trailing small circles
+ */
+function drawThoughtBubble(ctx, pin, scr, width, height, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth) {
+  let tailPos = pin.tailPosition || { angle: 225, distance: 0.8 };
+  const tailAngle = tailPos.angle * Math.PI / 180;
+  const rx = width / 2;
+  const ry = height / 2;
   
   ctx.save();
   ctx.fillStyle = hexToRgba(fillColor, fillAlpha);
   ctx.strokeStyle = hexToRgba(strokeColor, strokeAlpha);
   ctx.lineWidth = strokeWidth;
   
-  switch (tailType) {
-    case 'curved':
-      // Classic comic book curved tail with wider base
-      const cp1x = attachX + Math.cos(tailAngle) * tailLength * 0.3 + Math.cos(perpAngle) * baseWidth * 0.6;
-      const cp1y = attachY + Math.sin(tailAngle) * tailLength * 0.3 + Math.sin(perpAngle) * baseWidth * 0.6;
-      const cp2x = attachX + Math.cos(tailAngle) * tailLength * 0.3 - Math.cos(perpAngle) * baseWidth * 0.4;
-      const cp2y = attachY + Math.sin(tailAngle) * tailLength * 0.3 - Math.sin(perpAngle) * baseWidth * 0.4;
-      
-      ctx.beginPath();
-      // Left side of tail base (wider connection)
-      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.5, attachY + Math.sin(perpAngle) * baseWidth * 0.5);
-      // Curve to tip
-      ctx.quadraticCurveTo(cp1x, cp1y, tipX, tipY);
-      // Curve back to right side of tail base
-      ctx.quadraticCurveTo(cp2x, cp2y, attachX - Math.cos(perpAngle) * baseWidth * 0.5, attachY - Math.sin(perpAngle) * baseWidth * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      break;
-      
-    case 'triangle':
-      // Simple triangular tail with wider base
-      ctx.beginPath();
-      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.5, attachY + Math.sin(perpAngle) * baseWidth * 0.5);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(attachX - Math.cos(perpAngle) * baseWidth * 0.5, attachY - Math.sin(perpAngle) * baseWidth * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      break;
-      
-    case 'thought':
-      // Thought bubble style (small circles leading away)
-      const numCircles = 3;
-      for (let i = 0; i < numCircles; i++) {
-        const t = (i + 1) / (numCircles + 1);
-        const cx = attachX + (tipX - attachX) * t;
-        const cy = attachY + (tipY - attachY) * t;
-        const radius = baseWidth * 0.3 * (1 - t * 0.5);
-        
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-      break;
-      
-    case 'wavy':
-      // Wavy/squiggly tail for excited speech with wider base
-      ctx.beginPath();
-      ctx.moveTo(attachX + Math.cos(perpAngle) * baseWidth * 0.5, attachY + Math.sin(perpAngle) * baseWidth * 0.5);
-      
-      const segments = 4;
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        const x = attachX + (tipX - attachX) * t;
-        const y = attachY + (tipY - attachY) * t;
-        const wave = Math.sin(t * Math.PI * 2) * baseWidth * 0.2 * (1 - t);
-        const wx = x + Math.cos(perpAngle) * wave;
-        const wy = y + Math.sin(perpAngle) * wave;
-        
-        if (i === 0) {
-          ctx.lineTo(wx, wy);
-        } else {
-          ctx.lineTo(wx, wy);
-        }
-      }
-      
-      // Come back on the other side with wider base
-      for (let i = segments; i >= 0; i--) {
-        const t = i / segments;
-        const x = attachX + (tipX - attachX) * t;
-        const y = attachY + (tipY - attachY) * t;
-        const wave = Math.sin(t * Math.PI * 2) * baseWidth * 0.25 * (1 - t);
-        const wx = x - Math.cos(perpAngle) * (wave + baseWidth * 0.35 * (1 - t));
-        const wy = y - Math.sin(perpAngle) * (wave + baseWidth * 0.35 * (1 - t));
-        ctx.lineTo(wx, wy);
-      }
-      
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      break;
-      
-    default:
-      // Default to curved
-      drawComicBubbleTail(ctx, pin, scr, width, height, 'curved', fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth);
-      return;
+  // Draw cloud-like main bubble using overlapping circles
+  ctx.beginPath();
+  
+  // Create cloud shape with bumpy edges
+  const numBumps = 12;
+  const bumpSize = Math.min(rx, ry) * 0.3;
+  
+  for (let i = 0; i < numBumps; i++) {
+    const angle = (i / numBumps) * Math.PI * 2;
+    const bumpX = scr.x + (rx - bumpSize * 0.3) * Math.cos(angle);
+    const bumpY = scr.y + (ry - bumpSize * 0.3) * Math.sin(angle);
+    
+    if (i === 0) {
+      ctx.moveTo(bumpX + bumpSize, bumpY);
+    }
+    
+    // Draw arc for each bump
+    ctx.arc(bumpX, bumpY, bumpSize, angle - Math.PI/numBumps, angle + Math.PI/numBumps);
+  }
+  
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  
+  // Draw trailing circles (thought tail)
+  const numTrailingCircles = 3;
+  const startDist = Math.max(rx, ry) * 0.9;
+  
+  for (let i = 0; i < numTrailingCircles; i++) {
+    const t = (i + 1) / (numTrailingCircles + 0.5);
+    const dist = startDist + t * Math.min(width, height) * 0.5;
+    const cx = scr.x + dist * Math.cos(tailAngle);
+    const cy = scr.y + dist * Math.sin(tailAngle);
+    // Circles get smaller as they trail away
+    const radius = Math.min(width, height) * 0.1 * (1 - t * 0.6);
+    
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(radius, 3), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
   }
   
   ctx.restore();
@@ -2098,6 +2137,8 @@ registerShape("bubble", {
     };
   },
   drawPhase: {
+    // Empty shadow - bubble draws its own shadow if needed
+    shadow: function() {},
     background: function(ctx, pin, metrics, scr, pinScale) {
       const bubbleColor = pin.color || "#ffffff";
       const bubbleColorAlpha = pin.colorAlpha !== undefined ? pin.colorAlpha : 1;
@@ -2108,7 +2149,6 @@ registerShape("bubble", {
       const borderWidth = pin.borderWidth || 2;
       const dropShadow = pin.dropShadow || false;
 
-      // Save context
       ctx.save();
 
       // Apply drop shadow if enabled
@@ -2119,27 +2159,30 @@ registerShape("bubble", {
         ctx.shadowOffsetY = 3;
       }
 
-      // Apply colors with alpha
-      ctx.fillStyle = hexToRgba(bubbleColor, bubbleColorAlpha);
-      ctx.strokeStyle = hexToRgba(borderColor, borderColorAlpha);
-      ctx.lineWidth = borderWidth;
-
-      // Draw oval/ellipse shape (comic book style)
-      ctx.beginPath();
-      ctx.ellipse(scr.x, scr.y, width/2, height/2, 0, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Add tail/pointer based on tailPosition and tailType
       const tailType = pin.tailType || 'curved';
-      if (tailType !== 'none') {
+      
+      if (tailType === 'none') {
+        // No tail - just draw the ellipse
+        ctx.fillStyle = hexToRgba(bubbleColor, bubbleColorAlpha);
+        ctx.strokeStyle = hexToRgba(borderColor, borderColorAlpha);
+        ctx.lineWidth = borderWidth;
+        
+        ctx.beginPath();
+        ctx.ellipse(scr.x, scr.y, width/2, height/2, 0, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Draw bubble WITH tail as ONE unified shape (no seam)
         drawComicBubbleTail(ctx, pin, scr, width, height, tailType, bubbleColor, bubbleColorAlpha, borderColor, borderColorAlpha, borderWidth);
       }
 
-      // Restore context
       ctx.restore();
     },
+    // Empty main phase - bubble draws everything in background phase
+    main: function() {},
+    // Empty decoration phase
+    decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
       // Separate colors for title and description (with backwards compatibility)
       const defaultTextColor = pin.textColor || "#000000";
@@ -2217,6 +2260,8 @@ registerShape("rectangle", {
     };
   },
   drawPhase: {
+    // Empty shadow - rectangle draws its own shadow if needed
+    shadow: function() {},
     background: function(ctx, pin, metrics, scr, pinScale) {
       const bubbleColor = pin.color || "#ffffff";
       const bubbleColorAlpha = pin.colorAlpha !== undefined ? pin.colorAlpha : 1;
@@ -2259,6 +2304,10 @@ registerShape("rectangle", {
       // Restore context
       ctx.restore();
     },
+    // Empty main phase - rectangle draws everything in background phase
+    main: function() {},
+    // Empty decoration phase
+    decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
       // Separate colors for title and description (with backwards compatibility)
       const defaultTextColor = pin.textColor || "#000000";
@@ -2318,6 +2367,161 @@ registerShape("rectangle", {
       }
 
       // Restore context
+      ctx.restore();
+    }
+  }
+});
+
+// Register thought bubble shape (cloud with trailing circles)
+registerShape("thought", {
+  getMetrics: function(pin) {
+    const width = pin.width || 140;
+    const height = pin.height || 90;
+    return {
+      shape: pin.shape || "thought",
+      width: width,
+      height: height,
+      radius: Math.min(width, height) / 2,
+      labelOffsetY: 0
+    };
+  },
+  drawPhase: {
+    shadow: function() {},
+    background: function(ctx, pin, metrics, scr, pinScale) {
+      const bubbleColor = pin.color || "#ffffff";
+      const bubbleColorAlpha = pin.colorAlpha !== undefined ? pin.colorAlpha : 1;
+      const borderColor = pin.borderColor || "#000000";
+      const borderColorAlpha = pin.borderColorAlpha !== undefined ? pin.borderColorAlpha : 1;
+      const width = pin.width || 140;
+      const height = pin.height || 90;
+      const borderWidth = pin.borderWidth || 2;
+
+      ctx.save();
+      ctx.fillStyle = hexToRgba(bubbleColor, bubbleColorAlpha);
+      ctx.strokeStyle = hexToRgba(borderColor, borderColorAlpha);
+      ctx.lineWidth = borderWidth;
+
+      const rx = width / 2;
+      const ry = height / 2;
+
+      // Draw cloud shape using overlapping circles
+      // First, fill the interior with overlapping circles
+      const cloudBumps = [
+        // Top bumps
+        { x: -0.5, y: -0.7, r: 0.45 },
+        { x: 0.1, y: -0.8, r: 0.4 },
+        { x: 0.55, y: -0.6, r: 0.42 },
+        // Right bumps
+        { x: 0.8, y: -0.2, r: 0.38 },
+        { x: 0.75, y: 0.35, r: 0.4 },
+        // Bottom bumps
+        { x: 0.4, y: 0.7, r: 0.38 },
+        { x: -0.2, y: 0.75, r: 0.42 },
+        // Left bumps
+        { x: -0.7, y: 0.4, r: 0.38 },
+        { x: -0.8, y: -0.15, r: 0.4 },
+        // Center fill
+        { x: 0, y: 0, r: 0.6 },
+        { x: -0.25, y: -0.2, r: 0.5 },
+        { x: 0.25, y: 0.15, r: 0.48 },
+      ];
+
+      // Draw all cloud bumps as fills first (to create solid interior)
+      ctx.beginPath();
+      cloudBumps.forEach((bump, i) => {
+        const cx = scr.x + bump.x * rx;
+        const cy = scr.y + bump.y * ry;
+        const cr = bump.r * Math.min(rx, ry);
+        
+        ctx.moveTo(cx + cr, cy);
+        ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      });
+      ctx.fill();
+
+      // Now draw the outline - only the outer edges of the bumps
+      // Draw each bump's arc that faces outward
+      cloudBumps.slice(0, 9).forEach((bump) => {
+        const cx = scr.x + bump.x * rx;
+        const cy = scr.y + bump.y * ry;
+        const cr = bump.r * Math.min(rx, ry);
+        
+        // Calculate angle from center to this bump
+        const angleToCenter = Math.atan2(-bump.y, -bump.x);
+        // Draw arc facing away from center (roughly 180 degrees)
+        const startAngle = angleToCenter - Math.PI * 0.6;
+        const endAngle = angleToCenter + Math.PI * 0.6;
+        
+        ctx.beginPath();
+        ctx.arc(cx, cy, cr, startAngle, endAngle);
+        ctx.stroke();
+      });
+
+      // Draw trailing thought circles (drops)
+      let tailPos = pin.tailPosition || { angle: 225, distance: 0.8 };
+      const tailAngle = tailPos.angle * Math.PI / 180;
+      
+      // 3 circular drops, decreasing in size
+      const drops = [
+        { dist: 1.15, size: 0.18 },
+        { dist: 1.35, size: 0.12 },
+        { dist: 1.5, size: 0.07 }
+      ];
+      
+      drops.forEach((drop) => {
+        const dist = Math.max(rx, ry) * drop.dist;
+        const cx = scr.x + dist * Math.cos(tailAngle);
+        const cy = scr.y + dist * Math.sin(tailAngle);
+        const radius = Math.min(width, height) * drop.size;
+        
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(radius, 3), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+
+      ctx.restore();
+    },
+    main: function() {},
+    decoration: function() {},
+    label: function(ctx, pin, metrics, scr, pinScale, appScale) {
+      const defaultTextColor = pin.textColor || "#000000";
+      const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
+      const fontSize = pin.fontSize || 14;
+      const width = pin.width || 140;
+      const height = pin.height || 90;
+
+      ctx.save();
+
+      // Draw text inside thought bubble (centered)
+      if (pin.description) {
+        ctx.fillStyle = hexToRgba(defaultTextColor, defaultTextAlpha);
+        ctx.font = `italic ${fontSize}px system-ui`; // Italic for thoughts
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        if (window.calculateTextDimensions) {
+          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 16, 60, 30, width * 0.7);
+          const lineHeight = fontSize * 1.3;
+          const startY = scr.y - (dims.lines.length - 1) * lineHeight / 2;
+          
+          dims.lines.forEach((line, index) => {
+            ctx.fillText(line, scr.x, startY + index * lineHeight);
+          });
+        } else {
+          ctx.fillText(pin.description, scr.x, scr.y);
+        }
+      }
+
+      // Draw label/title below bubble
+      if (pin.label) {
+        const titleFontSize = Math.round(fontSize * 1.1);
+        ctx.fillStyle = hexToRgba(defaultTextColor, defaultTextAlpha);
+        ctx.font = `${titleFontSize}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(pin.label, scr.x, scr.y + height/2 + 15);
+      }
+
       ctx.restore();
     }
   }

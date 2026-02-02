@@ -708,11 +708,24 @@ class BoardManager {
   // ============================================================================
 
   /**
-   * Check if legacy data exists
+   * Check if legacy data exists and should be migrated
    * @private
-   * @returns {boolean} True if legacy data found
+   * @returns {boolean} True if legacy data found AND no boards exist yet
    */
   _hasLegacyData() {
+    // Only consider migration if there are no existing boards
+    // This prevents accidental re-migration from stale legacy data
+    const index = this._loadIndex();
+    if (index && index.boards && index.boards.length > 0) {
+      // Boards already exist - ignore any legacy data
+      // Clean up legacy key if it exists
+      if (localStorage.getItem(this.LEGACY_KEY)) {
+        console.log("🧹 Cleaning up stale legacy data (boards already exist)");
+        localStorage.removeItem(this.LEGACY_KEY);
+      }
+      return false;
+    }
+    
     return localStorage.getItem(this.LEGACY_KEY) !== null;
   }
 

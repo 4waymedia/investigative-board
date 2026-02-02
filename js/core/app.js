@@ -1,6 +1,218 @@
 // Main Application Module
 // Handles application initialization and coordination
 
+// ============================================================================
+// SELECTION ANIMATOR
+// ============================================================================
+// Handles animated selection indicators with performance optimization
+
+class SelectionAnimator {
+  constructor() {
+    this.phase = 0;           // Current animation phase (0-1)
+    this.lastUpdate = 0;      // Last update timestamp
+    this.cycleDuration = 2000; // Full cycle in ms
+    this.isRunning = false;
+    this.animationId = null;
+    
+    // Ring configuration
+    this.maxRings = 3;        // Max expanding rings for single selection
+    this.ringSpacing = 0.33;  // Phase offset between rings
+  }
+
+  /**
+   * Start the animation loop
+   */
+  start() {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    this.lastUpdate = performance.now();
+    this.tick();
+  }
+
+  /**
+   * Stop the animation loop
+   */
+  stop() {
+    this.isRunning = false;
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+  }
+
+  /**
+   * Animation tick - updates phase
+   */
+  tick() {
+    if (!this.isRunning) return;
+    
+    // Auto-stop if nothing is selected
+    const selectionCount = window.app?.getSelectionCount?.() || 0;
+    if (selectionCount === 0) {
+      this.stop();
+      return;
+    }
+    
+    const now = performance.now();
+    const delta = now - this.lastUpdate;
+    this.lastUpdate = now;
+    
+    // Update phase (0-1 over cycleDuration)
+    this.phase = (this.phase + delta / this.cycleDuration) % 1;
+    
+    // Request redraw if app exists
+    if (window.app?.requestRedraw) {
+      window.app.requestRedraw();
+    }
+    
+    // Continue loop at 30fps for selection animation
+    this.animationId = setTimeout(() => {
+      requestAnimationFrame(() => this.tick());
+    }, 33); // ~30fps
+  }
+
+  /**
+   * Draw selection indicator for a pin
+   * @param {CanvasRenderingContext2D} ctx - Canvas context
+   * @param {number} x - Screen X position
+   * @param {number} y - Screen Y position
+   * @param {number} radius - Pin radius
+   * @param {string} color - Base color of the pin
+   * @param {number} selectionCount - Total number of selected items
+   * @param {Object} options - Additional options
+   */
+  drawSelection(ctx, x, y, radius, color, selectionCount = 1, options = {}) {
+    const { shape = 'circle', width = 0, height = 0 } = options;
+    
+    // Get color data with variants
+    const colorData = window.schemaManager?.getPinColorData?.({ color, colorSlot: options.colorSlot }) 
+      || { selected: ColorUtils?.lighten?.(color, 20) || '#ffffff' };
+    
+    const selectedColor = colorData.selected || '#ffffff';
+    
+    if (selectionCount === 1) {
+      // Full expanding rings animation
+      this.drawExpandingRings(ctx, x, y, radius, selectedColor, shape, width, height);
+    } else if (selectionCount <= 10) {
+      // Pulsing ring (shared phase)
+      this.drawPulsingRing(ctx, x, y, radius, selectedColor, shape, width, height);
+    } else {
+      // Static highlight for many selections
+      this.drawStaticSelection(ctx, x, y, radius, selectedColor, shape, width, height);
+    }
+  }
+
+  /**
+   * Draw expanding rings (for single selection)
+   */
+  drawExpandingRings(ctx, x, y, radius, color, shape, width, height) {
+    ctx.save();
+    
+    for (let i = 0; i < this.maxRings; i++) {
+      // Stagger ring phases
+      const ringPhase = (this.phase + i * this.ringSpacing) % 1;
+      
+      // Ring expands from 1x to 2x radius
+      const expansion = 1 + ringPhase * 0.8;
+      
+      // Opacity fades as ring expands
+      const opacity = 1 - ringPhase;
+      
+      // Ring thickness decreases as it expands
+      const lineWidth = Math.max(1, 3 * (1 - ringPhase * 0.5));
+      
+      ctx.strokeStyle = this.hexToRgba(color, opacity * 0.7);
+      ctx.lineWidth = lineWidth;
+      
+      if (shape === 'circle' || shape === 'area-circle') {
+        ctx.beginPath();
+        ctx.arc(x, y, radius * expansion, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        // Rectangle/card shapes
+        const w = (width || radius * 2) * expansion;
+        const h = (height || radius * 2) * expansion;
+        ctx.beginPath();
+        ctx.roundRect(x - w/2, y - h/2, w, h, 8 * expansion);
+        ctx.stroke();
+      }
+    }
+    
+    ctx.restore();
+  }
+
+  /**
+   * Draw pulsing ring (for multi-selection, shared phase)
+   */
+  drawPulsingRing(ctx, x, y, radius, color, shape, width, height) {
+    ctx.save();
+    
+    // Gentle pulse: scale oscillates between 1.0 and 1.15
+    const pulse = 1 + Math.sin(this.phase * Math.PI * 2) * 0.08;
+    
+    // Opacity oscillates between 0.4 and 0.8
+    const opacity = 0.5 + Math.sin(this.phase * Math.PI * 2) * 0.3;
+    
+    ctx.strokeStyle = this.hexToRgba(color, opacity);
+    ctx.lineWidth = 2.5;
+    
+    if (shape === 'circle' || shape === 'area-circle') {
+      ctx.beginPath();
+      ctx.arc(x, y, radius * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      const w = (width || radius * 2) * pulse;
+      const h = (height || radius * 2) * pulse;
+      ctx.beginPath();
+      ctx.roundRect(x - w/2, y - h/2, w, h, 6);
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+
+  /**
+   * Draw static selection (for many selections, no animation)
+   */
+  drawStaticSelection(ctx, x, y, radius, color, shape, width, height) {
+    ctx.save();
+    
+    ctx.strokeStyle = this.hexToRgba(color, 0.6);
+    ctx.lineWidth = 2;
+    
+    if (shape === 'circle' || shape === 'area-circle') {
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 1.1, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      const w = (width || radius * 2) * 1.05;
+      const h = (height || radius * 2) * 1.05;
+      ctx.beginPath();
+      ctx.roundRect(x - w/2, y - h/2, w, h, 6);
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+
+  /**
+   * Convert hex to rgba
+   */
+  hexToRgba(hex, alpha) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!result) return `rgba(255, 255, 255, ${alpha})`;
+    return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
+  }
+}
+
+// Create global instance
+const selectionAnimator = new SelectionAnimator();
+window.selectionAnimator = selectionAnimator;
+
+// ============================================================================
+// APPLICATION CLASS
+// ============================================================================
+
 class Application {
   constructor(deps = {}) {
     // Store dependencies (with defaults to window objects for backward compatibility)
@@ -500,8 +712,22 @@ class Application {
     return (
       (eh && eh.isMarqueeSelecting && eh.marqueeStart && eh.marqueeEnd) || // Marquee selection
       (eh && eh.isDraggingArea) || // Area creation marquee
-      (this.appState.connectStartIndex !== null && this.appState.connectMousePos) // Connection preview
+      (eh && eh.isDraggingTextBubble) || // Text bubble creation preview
+      (this.appState.connectStartIndex !== null && this.appState.connectMousePos) || // Connection preview
+      (this.appState.selectedConnectionIndex !== null) || // Selected connection (marching ants)
+      (selectionAnimator && selectionAnimator.isRunning) // Selection animation
     );
+  }
+
+  /**
+   * Request a redraw on the next frame
+   * Used by SelectionAnimator and other animation systems
+   */
+  requestRedraw() {
+    this.needsRedraw = true;
+    if (!this.isAnimating) {
+      this.startAnimationLoop();
+    }
   }
 
   // Animation loop using requestAnimationFrame
@@ -533,13 +759,6 @@ class Application {
       return;
     }
 
-    console.log(`🎨 Draw call #${window._drawCallCount || 0} - Canvas: ${this.canvas.width}x${this.canvas.height}, Pins: ${this.appState.pins?.length || 0}, Connections: ${this.appState.connections?.length || 0}`);
-
-    // Debug: Track draw calls to detect loops
-    if (!window._drawCallCount) window._drawCallCount = 0;
-    window._drawCallCount++;
-    const startTime = Date.now();
-
     // Clear canvas first
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -547,12 +766,6 @@ class Application {
     this.drawWorldSpaceElements();
     this.drawScreenSpaceElements();
     this.drawUIElements();
-
-    // Debug: Log excessive draw calls
-    const drawTime = Date.now() - startTime;
-    if (window._drawCallCount % 100 === 0 || drawTime > 50) {
-      console.log(`🎨 Draw call #${window._drawCallCount} took ${drawTime}ms`);
-    }
   }
 
   // Draw world-space elements (scaled and translated)
@@ -567,6 +780,9 @@ class Application {
     // LAYERING FIX: Draw connections BEFORE pins so pins sit on top and mask line ends
     // This creates clean center-to-center connections with pins covering any line overlap
     this.drawConnections(this.ctx);
+
+    // Draw selected connection highlight (marching ants) on top of connections
+    this.drawSelectedConnectionHighlight(this.ctx);
 
     // Draw timeline if active
     this.drawTimeline(this.ctx);
@@ -750,8 +966,6 @@ class Application {
   drawConnections(ctx) {
     if (!this.appState.connections || !this.appState.pins) return;
 
-    console.log(`🔗 Drawing ${this.appState.connections.length} connections between ${this.appState.pins.length} pins`);
-
     // Note: Connection preview is drawn in main draw() method with animation
 
     // Group connections by endpoint for fan-out calculations
@@ -767,11 +981,6 @@ class Application {
       // Handle both property name formats: from/to and startIndex/endIndex
       const startIndex = connection.from !== undefined ? connection.from : connection.startIndex;
       const endIndex = connection.to !== undefined ? connection.to : connection.endIndex;
-      console.log(`🔗 Drawing connection ${idx}: ${startIndex} → ${endIndex} (${connection.color || "#666"})`);
-      ctx.strokeStyle = connection.color || "#666";
-      ctx.lineWidth = 2; // World-space line width (context is already scaled)
-      ctx.setLineDash([]); // Ensure solid line (not dashed)
-      ctx.beginPath();
 
       // All connections are now pin-to-pin
       const startPin = this.appState.pins[startIndex];
@@ -793,6 +1002,39 @@ class Application {
       const startY = Math.round(startAnchor.y);
       const endX = Math.round(endAnchor.x);
       const endY = Math.round(endAnchor.y);
+
+      // Determine stroke style (gradient or solid color)
+      const fromColor = startPin.color || "#666666";
+      const toColor = endPin.color || "#666666";
+      const useGradient = connection.useGradient && fromColor.toLowerCase() !== toColor.toLowerCase();
+
+      if (useGradient) {
+        // Create gradient from start pin to end pin
+        const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+        gradient.addColorStop(0, fromColor);
+        gradient.addColorStop(1, toColor);
+        ctx.strokeStyle = gradient;
+      } else {
+        ctx.strokeStyle = connection.color || "#666";
+      }
+
+      // Line width varies based on confidence score (1.5 to 4px)
+      const confidence = connection.confidenceScore ?? 50;
+      const baseLineWidth = 1.5 + (confidence / 100) * 2.5; // 1.5px at 0%, 4px at 100%
+      ctx.lineWidth = baseLineWidth;
+
+      // Glow effect based on validation percent
+      const validation = connection.validationPercent ?? 0;
+      if (validation > 0) {
+        ctx.shadowColor = connection.color || "#58a6ff";
+        ctx.shadowBlur = (validation / 100) * 10; // 0 to 10px blur
+      } else {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.setLineDash([]); // Ensure solid line (not dashed)
+      ctx.beginPath();
 
       // VERIFICATION: All connections to a pin use identical coordinates
       if (window.DEBUG_PIN_CENTERS) {
@@ -854,7 +1096,144 @@ class Application {
       }
 
       ctx.stroke();
+
+      // Reset shadow
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+
+      // Draw label at midpoint if exists
+      if (connection.label) {
+        const connType = connection.type || this.appState.connectionType;
+        let labelX, labelY;
+
+        if (connType === "curved") {
+          // For curved lines, calculate point at t=0.5 on the Bezier curve
+          const dx = endX - startX;
+          const dy = endY - startY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 0) {
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            const perpX = -dy / dist;
+            const perpY = dx / dist;
+            const curveAmount = 40;
+            const ctrlX = midX + perpX * curveAmount;
+            const ctrlY = midY + perpY * curveAmount;
+            // Quadratic Bezier at t=0.5
+            labelX = 0.25 * startX + 0.5 * ctrlX + 0.25 * endX;
+            labelY = 0.25 * startY + 0.5 * ctrlY + 0.25 * endY;
+          } else {
+            labelX = (startX + endX) / 2;
+            labelY = (startY + endY) / 2;
+          }
+        } else {
+          // For straight lines, use midpoint
+          labelX = (startX + endX) / 2;
+          labelY = (startY + endY) / 2;
+        }
+
+        // Draw label background
+        ctx.font = "12px -apple-system, BlinkMacSystemFont, sans-serif";
+        const textMetrics = ctx.measureText(connection.label);
+        const padding = 4;
+        const bgWidth = textMetrics.width + padding * 2;
+        const bgHeight = 16;
+
+        ctx.fillStyle = "rgba(22, 27, 34, 0.9)";
+        ctx.fillRect(labelX - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight);
+
+        // Draw label text
+        ctx.fillStyle = "#e6edf3";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(connection.label, labelX, labelY);
+      }
     });
+  }
+
+  // Draw selected connection highlight with marching ants effect
+  drawSelectedConnectionHighlight(ctx) {
+    const selectedIndex = this.appState.selectedConnectionIndex;
+    if (selectedIndex === null || selectedIndex === undefined) return;
+
+    const connection = this.appState.connections[selectedIndex];
+    if (!connection) return;
+
+    const startIndex = connection.from !== undefined ? connection.from : connection.startIndex;
+    const endIndex = connection.to !== undefined ? connection.to : connection.endIndex;
+
+    const startPin = this.appState.pins[startIndex];
+    const endPin = this.appState.pins[endIndex];
+
+    if (!startPin || !endPin) return;
+
+    // Get pin centers
+    const startAnchor = this.getPinCenter(startPin);
+    const endAnchor = this.getPinCenter(endPin);
+
+    if (!startAnchor || !endAnchor) return;
+
+    const startX = Math.round(startAnchor.x);
+    const startY = Math.round(startAnchor.y);
+    const endX = Math.round(endAnchor.x);
+    const endY = Math.round(endAnchor.y);
+
+    // Get connection type
+    const connType = connection.type || this.appState.connectionType;
+
+    // Calculate control point for curved lines
+    let controlX, controlY;
+    if (connType === "curved") {
+      const dx = endX - startX;
+      const dy = endY - startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 0) {
+        const midX = (startX + endX) / 2;
+        const midY = (startY + endY) / 2;
+        const perpX = -dy / dist;
+        const perpY = dx / dist;
+        const curveAmount = 40;
+        controlX = midX + perpX * curveAmount;
+        controlY = midY + perpY * curveAmount;
+      }
+    }
+
+    // Animated marching ants offset (uses time from appState or performance.now)
+    const time = performance.now() / 1000;
+    const dashOffset = (time * 20) % 16; // Animate at 20 pixels per second
+
+    // Draw two passes for black and white marching ants effect
+    // First pass: white dashes (background)
+    ctx.save();
+    ctx.lineWidth = 4; // Slightly thicker than normal connection
+    ctx.strokeStyle = '#ffffff';
+    ctx.setLineDash([8, 8]);
+    ctx.lineDashOffset = -dashOffset;
+    ctx.beginPath();
+    if (connType === "curved" && controlX !== undefined) {
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+    } else {
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+    }
+    ctx.stroke();
+
+    // Second pass: black dashes (offset by half to create marching effect)
+    ctx.strokeStyle = '#000000';
+    ctx.lineDashOffset = -dashOffset - 8; // Offset by dash length
+    ctx.beginPath();
+    if (connType === "curved" && controlX !== undefined) {
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+    } else {
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+    }
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   // Draw timeline if active
@@ -1027,7 +1406,6 @@ class Application {
         // Circular marquee
         const radius = Math.max(Math.sqrt(dx * dx + dy * dy), 10);
         ctx.arc(startScreen.x, startScreen.y, radius, 0, Math.PI * 2);
-        console.log(`🎨 Circle marquee: center(${startScreen.x}, ${startScreen.y}), radius=${radius}`);
       } else {
         // Rectangular marquee - show the actual area bounds
         const halfWidth = Math.max(dx, 25);
@@ -1038,12 +1416,224 @@ class Application {
           halfWidth * 2,
           halfHeight * 2
         );
-        console.log(`🎨 Rectangle marquee: center(${startScreen.x}, ${startScreen.y}), width=${halfWidth * 2}, height=${halfHeight * 2}`);
       }
 
       ctx.stroke();
       ctx.setLineDash([]); // Reset
     }
+
+    // Draw bubble/thought preview with tail positioning
+    if (window.app && window.app.eventHandlers && window.app.eventHandlers.isDraggingTextBubble &&
+        window.app.eventHandlers.textBubbleDragStart && window.app.eventHandlers.textBubbleDragCurrent) {
+      const eh = window.app.eventHandlers;
+      const textTypeConfig = eh.getTextTypeConfig ? eh.getTextTypeConfig() : { shape: 'bubble' };
+      
+      // Show preview for bubble or thought shapes
+      if (textTypeConfig.shape === 'bubble') {
+        this.drawBubblePreview(ctx, eh);
+      } else if (textTypeConfig.shape === 'thought') {
+        this.drawThoughtPreview(ctx, eh);
+      }
+    }
+  }
+
+  /**
+   * Draw a preview of a speech bubble with tail following mouse
+   * Uses animated marching ants and shows classic comic-style pointed tail
+   */
+  drawBubblePreview(ctx, eventHandlers) {
+    const startScreen = this.worldToScreen(
+      eventHandlers.textBubbleDragStart.x, 
+      eventHandlers.textBubbleDragStart.y
+    );
+    const currentScreen = this.worldToScreen(
+      eventHandlers.textBubbleDragCurrent.x, 
+      eventHandlers.textBubbleDragCurrent.y
+    );
+
+    // Default bubble size (scaled)
+    const width = 140 * this.appState.scale;
+    const height = 80 * this.appState.scale;
+    const rx = width / 2;
+    const ry = height / 2;
+
+    // Calculate tail angle from bubble center to mouse
+    const worldDx = eventHandlers.textBubbleDragCurrent.x - eventHandlers.textBubbleDragStart.x;
+    const worldDy = eventHandlers.textBubbleDragCurrent.y - eventHandlers.textBubbleDragStart.y;
+    const tailAngle = Math.atan2(worldDy, worldDx);
+    const worldDragDistance = Math.sqrt(worldDx * worldDx + worldDy * worldDy);
+    
+    // Show tail if dragged more than 10 world units
+    const showTail = worldDragDistance > 10;
+
+    ctx.save();
+
+    const bubbleColor = this.appState.selectedColor || "#58a6ff";
+    
+    // Animated marching ants
+    const time = Date.now();
+    ctx.lineDashOffset = -((time * 0.5) % 16);
+    ctx.fillStyle = bubbleColor + "30";
+    ctx.strokeStyle = bubbleColor;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+
+    if (showTail) {
+      // Draw bubble + tail as ONE shape (like the final result)
+      // Classic comic tail: narrow base, pointed tip
+      const tailBaseArc = 12 * Math.PI / 180;
+      const tailLength = Math.min(width, height) * 0.35;
+      
+      const tailStartAngle = tailAngle - tailBaseArc;
+      const tailEndAngle = tailAngle + tailBaseArc;
+      
+      const tipX = startScreen.x + (Math.max(rx, ry) + tailLength) * Math.cos(tailAngle);
+      const tipY = startScreen.y + (Math.max(rx, ry) * 0.7 + tailLength) * Math.sin(tailAngle);
+      
+      ctx.beginPath();
+      // Draw ellipse arc, leaving gap for tail
+      ctx.ellipse(startScreen.x, startScreen.y, rx, ry, 0, tailEndAngle, tailStartAngle + Math.PI * 2);
+      // Draw pointed tail
+      ctx.lineTo(tipX, tipY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      
+      // Draw dot at tail tip
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = bubbleColor;
+      ctx.fill();
+    } else {
+      // No tail yet - just draw ellipse
+      ctx.beginPath();
+      ctx.ellipse(startScreen.x, startScreen.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.setLineDash([]);
+
+    // Helper text
+    ctx.fillStyle = bubbleColor;
+    ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      showTail ? "Release to place" : "Drag to position tail",
+      startScreen.x,
+      startScreen.y + ry + 25
+    );
+
+    ctx.restore();
+  }
+
+  /**
+   * Draw a preview of a thought bubble with cloud shape and trailing circles
+   */
+  drawThoughtPreview(ctx, eventHandlers) {
+    const startScreen = this.worldToScreen(
+      eventHandlers.textBubbleDragStart.x, 
+      eventHandlers.textBubbleDragStart.y
+    );
+
+    // Default thought bubble size (scaled)
+    const width = 140 * this.appState.scale;
+    const height = 90 * this.appState.scale;
+    const rx = width / 2;
+    const ry = height / 2;
+
+    // Calculate tail angle from drag
+    const worldDx = eventHandlers.textBubbleDragCurrent.x - eventHandlers.textBubbleDragStart.x;
+    const worldDy = eventHandlers.textBubbleDragCurrent.y - eventHandlers.textBubbleDragStart.y;
+    const tailAngle = Math.atan2(worldDy, worldDx);
+    const worldDragDistance = Math.sqrt(worldDx * worldDx + worldDy * worldDy);
+    const showTail = worldDragDistance > 10;
+
+    ctx.save();
+
+    const bubbleColor = this.appState.selectedColor || "#58a6ff";
+    
+    // Animated marching ants
+    const time = Date.now();
+    ctx.lineDashOffset = -((time * 0.5) % 16);
+    ctx.fillStyle = bubbleColor + "30";
+    ctx.strokeStyle = bubbleColor;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+
+    // Draw cloud shape using overlapping circles
+    const cloudBumps = [
+      { x: -0.5, y: -0.7, r: 0.45 },
+      { x: 0.1, y: -0.8, r: 0.4 },
+      { x: 0.55, y: -0.6, r: 0.42 },
+      { x: 0.8, y: -0.2, r: 0.38 },
+      { x: 0.75, y: 0.35, r: 0.4 },
+      { x: 0.4, y: 0.7, r: 0.38 },
+      { x: -0.2, y: 0.75, r: 0.42 },
+      { x: -0.7, y: 0.4, r: 0.38 },
+      { x: -0.8, y: -0.15, r: 0.4 },
+      { x: 0, y: 0, r: 0.6 },
+    ];
+
+    // Fill all bumps
+    ctx.beginPath();
+    cloudBumps.forEach((bump) => {
+      const cx = startScreen.x + bump.x * rx;
+      const cy = startScreen.y + bump.y * ry;
+      const cr = bump.r * Math.min(rx, ry);
+      ctx.moveTo(cx + cr, cy);
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+    });
+    ctx.fill();
+
+    // Stroke outer bumps
+    cloudBumps.slice(0, 9).forEach((bump) => {
+      const cx = startScreen.x + bump.x * rx;
+      const cy = startScreen.y + bump.y * ry;
+      const cr = bump.r * Math.min(rx, ry);
+      const angleToCenter = Math.atan2(-bump.y, -bump.x);
+      
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, angleToCenter - Math.PI * 0.6, angleToCenter + Math.PI * 0.6);
+      ctx.stroke();
+    });
+
+    // Draw trailing circular drops
+    if (showTail) {
+      ctx.setLineDash([]);
+      const drops = [
+        { dist: 1.15, size: 0.18 },
+        { dist: 1.35, size: 0.12 },
+        { dist: 1.5, size: 0.07 }
+      ];
+      
+      drops.forEach((drop) => {
+        const dist = Math.max(rx, ry) * drop.dist;
+        const cx = startScreen.x + dist * Math.cos(tailAngle);
+        const cy = startScreen.y + dist * Math.sin(tailAngle);
+        const radius = Math.min(width, height) * drop.size;
+        
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(radius, 3), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    ctx.setLineDash([]);
+
+    // Helper text
+    ctx.fillStyle = bubbleColor;
+    ctx.font = "12px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      showTail ? "Release to place" : "Drag to position circles",
+      startScreen.x,
+      startScreen.y + ry + 25
+    );
+
+    ctx.restore();
   }
 
   // Draw UI elements
@@ -1139,16 +1729,80 @@ class Application {
 
       if (!startPin || !endPin) continue;
 
-      // Check if point is near the line segment
-      const distance = this.pointToLineDistance(wx, wy, startPin.x, startPin.y, endPin.x, endPin.y);
+      // Get pin centers
+      const startAnchor = this.getPinCenter(startPin);
+      const endAnchor = this.getPinCenter(endPin);
+      
+      if (!startAnchor || !endAnchor) continue;
+
+      const startX = startAnchor.x;
+      const startY = startAnchor.y;
+      const endX = endAnchor.x;
+      const endY = endAnchor.y;
+
+      // Check connection type
+      const connType = conn.type || this.appState.connectionType;
+      let distance;
+
+      if (connType === "curved") {
+        // For curved connections, calculate distance to the quadratic Bezier curve
+        distance = this.pointToCurvedConnectionDistance(wx, wy, startX, startY, endX, endY);
+      } else {
+        // For straight connections, use line distance
+        distance = this.pointToLineDistance(wx, wy, startX, startY, endX, endY);
+      }
+
       if (distance <= hitDistance && distance < closestDistance) {
         closestConnection = i;
         closestDistance = distance;
       }
     }
 
-
     return closestConnection;
+  }
+
+  // Calculate distance from a point to a quadratic Bezier curve by sampling
+  pointToCurvedConnectionDistance(px, py, x1, y1, x2, y2) {
+    // Calculate the control point (same as in drawConnections)
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist === 0) {
+      return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+    }
+
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+
+    // Perpendicular vector
+    const perpX = -dy / dist;
+    const perpY = dx / dist;
+
+    // Control point with same curve amount as rendering
+    const curveAmount = 40;
+    const ctrlX = midX + perpX * curveAmount;
+    const ctrlY = midY + perpY * curveAmount;
+
+    // Sample points along the Bezier curve and find minimum distance
+    let minDistance = Infinity;
+    const numSamples = 20; // More samples = more accurate but slower
+
+    for (let i = 0; i <= numSamples; i++) {
+      const t = i / numSamples;
+      
+      // Quadratic Bezier formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+      const oneMinusT = 1 - t;
+      const bx = oneMinusT * oneMinusT * x1 + 2 * oneMinusT * t * ctrlX + t * t * x2;
+      const by = oneMinusT * oneMinusT * y1 + 2 * oneMinusT * t * ctrlY + t * t * y2;
+
+      const distance = Math.sqrt((px - bx) ** 2 + (py - by) ** 2);
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    return minDistance;
   }
 
   pointToLineDistance(px, py, x1, y1, x2, y2) {
@@ -1174,6 +1828,34 @@ class Application {
     this.syncGlobalVariables();
     this.updatePinInfo();
     this.notifyStateChange({ selectedPinIndex: { old: oldIndex, new: index } });
+    
+    // Manage selection animation
+    this.updateSelectionAnimation();
+  }
+
+  /**
+   * Get total count of selected items (pins + connections)
+   */
+  getSelectionCount() {
+    let count = 0;
+    if (this.appState.selectedPinIndex !== null) count++;
+    if (this.appState.selectedPins?.length > 0) count += this.appState.selectedPins.length;
+    if (this.appState.selectedConnectionIndex !== null) count++;
+    return count;
+  }
+
+  /**
+   * Start or stop selection animation based on selection state
+   */
+  updateSelectionAnimation() {
+    const count = this.getSelectionCount();
+    if (count > 0) {
+      if (!selectionAnimator.isRunning) {
+        selectionAnimator.start();
+      }
+    } else {
+      selectionAnimator.stop();
+    }
   }
 
   updatePinInfo() {
@@ -1281,8 +1963,12 @@ class Application {
     if (this.boardManager && this.appState.meta?.id) {
       // Use BoardManager for multi-board system
       this.boardManager.saveBoard();
+    } else if (this.boardManager) {
+      // Multi-board system active but no board ID - don't save to legacy key
+      // This happens after clearBoard() - board needs to be created/selected first
+      console.log("⚠️ No active board to save (board was cleared or not created yet)");
     } else if (this.deps.saveAppState && this.appState) {
-      // Fallback to legacy save
+      // Fallback to legacy save (only when NOT using multi-board system)
       this.deps.saveAppState(this.appState);
     }
   }
@@ -1584,25 +2270,30 @@ class Application {
   }
 
 
-  // Reset the entire board
+  // Reset the entire board (clears contents but keeps the board)
   resetBoard() {
-    if (confirm("Are you sure you want to reset the entire board? This cannot be undone from local storage!")) {
-      // Clear localStorage
-      localStorage.removeItem(this.deps.STORAGE_KEY);
-
-      // Reset state
+    if (confirm("Are you sure you want to reset the entire board? This cannot be undone!")) {
+      // Preserve board identity
+      const boardMeta = this.appState.meta ? { ...this.appState.meta } : null;
+      
+      // Clear pins and connections
       this.appState.pins = [];
       this.appState.connections = [];
+      
+      // Clear selection state
       this.appState.selectedPinIndex = null;
       this.appState.selectedPins = [];
       this.appState.selectedTextIndex = null;
       this.appState.connectStartIndex = null;
       this.appState.connectMousePos = null;
       this.appState.connectionMode = null;
+      this.appState.clearConnectionSelection();
+      
+      // Reset view
       this.appState.scale = 1;
       this.appState.offsetX = 0;
       this.appState.offsetY = 0;
-
+      
       // Reset timeline state
       this.appState.timelineActive = false;
       this.appState.timelinePins = [];
@@ -1617,19 +2308,43 @@ class Application {
         });
       }
 
+      // Restore board identity (keep the same board, just cleared)
+      if (boardMeta) {
+        this.appState.meta = boardMeta;
+      }
+
       // Clear image cache
       if (window.imageCache) {
         window.imageCache.clear();
       }
 
-      // Save the reset state
-      this.deps.saveAppState(this.appState);
+      // Clear history
+      this.appState.history = [];
 
-      // Reload the page to fully reset
-      window.location.reload();
+      // Save the reset state
+      if (this.boardManager && this.appState.meta?.id) {
+        this.boardManager.saveBoard();
+        console.log("✅ Board reset and saved via BoardManager");
+      } else if (!this.boardManager) {
+        // Legacy mode - save to localStorage
+        this.deps.saveAppState(this.appState);
+      }
+
+      // Redraw
+      this.render();
+      
+      // Update tray if available
+      if (this.trayManager) {
+        this.trayManager.render();
+      }
+      
+      console.log("✅ Board reset complete");
     }
   }
 }
+
+// Export for global access
+window.Application = Application;
 
   // Export for global access
   window.Application = Application;

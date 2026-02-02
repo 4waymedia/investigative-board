@@ -92,9 +92,7 @@
 
 /* Types Section */
 .types-section {
-  border-right: 1px solid #444;
-  padding-right: 12px;
-  margin-right: 4px;
+  padding-right: 4px;
 }
 
 /* Base Tool Button Styling */
@@ -145,6 +143,16 @@
   opacity: 0.7;
   font-size: 12px;
   margin-left: 4px;
+}
+
+/* Icon-only tool buttons (minimal design) */
+.tool-btn-icon {
+  padding: 8px 10px;
+  min-height: auto;
+}
+
+.tool-btn-icon .icon {
+  font-size: 18px;
 }
 
 /* Separator */
@@ -237,19 +245,37 @@
   font-size: 13px;
 }
 
-.type-caret {
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.05);
-  transition: background 0.2s ease;
-  font-size: 12px;
-  color: #ccc;
+/* Compact Type Groups (minimal design) */
+.type-bar-compact {
+  gap: 4px;
 }
 
-.type-caret:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+.type-group-compact {
+  gap: 0;
+}
+
+.type-option-compact {
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+.type-option-compact .type-option-icon {
+  font-size: 18px;
+  margin-right: 0;
+}
+
+/* Clickable type option (opens dropdown) */
+.type-option-clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.type-option-clickable:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.type-option-clickable:active {
+  transform: scale(0.95);
 }
 
 /* Dropdown specific styling */
@@ -273,35 +299,38 @@
   text-align: center;
 }
 
-/* Connection Type Toggle */
-.connection-type-toggle {
-  padding: 6px 10px;
+/* Line Section */
+.line-section {
+  padding: 0 8px;
+}
+
+/* Line Toggle (compact icon-only design) */
+.line-toggle {
+  cursor: pointer;
+  padding: 8px 12px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.05);
-  font-size: 12px;
-  min-width: 80px;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
   justify-content: center;
 }
 
-.connection-type-toggle:hover {
+.line-toggle:hover {
   background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
 }
 
-/* Theme Selector */
-.theme-selector {
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid #444;
-  color: white;
-  font-size: 13px;
-  min-width: 100px;
+.line-toggle:active {
+  transform: translateY(0);
 }
 
-.theme-selector:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+.line-icon {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ccc;
+  font-family: monospace;
 }
 
 /* Responsive Design */

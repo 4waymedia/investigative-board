@@ -11,6 +11,9 @@
     <script src="js/utilities/imageUtils.js"></script>
     <script src="js/themes.js"></script>
     <script src="js/core/constants.js"></script>
+    <script src="js/core/actions.js"></script>
+    <script src="js/core/schema.js"></script>
+    <script src="js/core/backgroundBuilder.js"></script>
     <script src="js/core/utils.js"></script>
 
     <!-- Domain modules -->
@@ -23,6 +26,7 @@
     <script src="js/core/state.js"></script>
     <script src="js/core/boardManager.js"></script>
     <script src="js/core/dragManager.js"></script>
+    <script src="js/core/previewRenderer.js"></script>
     <script src="js/events/eventHandlers.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/ui/modal.js"></script>
@@ -145,7 +149,7 @@
           <!-- Settings Tab -->
           <div class="tab-content" id="settings-tab">
             <div class="form-group">
-              <label for="pm-pin-selector">Pin Type</label>
+              <label for="pm-pin-selector">Selected Shape</label>
               <select id="pm-pin-selector">
                 <!-- Pin Types -->
                 <option value="circle">Circle</option>
@@ -162,6 +166,15 @@
                 <option value="area-circle">Area Circle</option>
                 <option value="area-rect">Area Rectangle</option>
               </select>
+            </div>
+            <div class="form-group toggle-group">
+              <label class="toggle-label" for="pm-hide-shape">
+                <span>Hide Shape</span>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="pm-hide-shape" />
+                  <span class="toggle-slider"></span>
+                </div>
+              </label>
             </div>
             <div class="form-group">
               <label for="pm-scale">Icon Scale</label>
@@ -247,16 +260,44 @@
       </div>
     </div>
 
-    <!-- Color Picker Modal -->
+    <!-- Color & Theme Modal -->
     <div id="add-color-modal-backdrop">
-      <div id="add-color-modal">
+      <div id="add-color-modal" class="theme-modal">
         <div id="add-color-modal-header">
-          <div id="add-color-modal-title">Add Custom Color</div>
+          <div id="add-color-modal-title">Colors & Theme</div>
           <div id="add-color-modal-close">✕</div>
         </div>
         <div id="add-color-modal-content">
-          <input type="color" id="new-color-picker" />
-          <button id="add-color-btn">Add Color</button>
+          <!-- Theme Selection with Previews -->
+          <div class="modal-section">
+            <label class="modal-section-label">Theme</label>
+            <div id="theme-preview-grid" class="theme-preview-grid">
+              <!-- Populated dynamically with theme previews -->
+            </div>
+          </div>
+          
+          <!-- Theme Update Options -->
+          <div class="modal-section">
+            <div class="toggle-row">
+              <label class="toggle-label" for="theme-convert-toggle">
+                <span class="toggle-text">Update board colors with theme</span>
+                <span class="toggle-hint">When enabled, changing theme will update all pin and connection colors</span>
+              </label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="theme-convert-toggle" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          
+          <!-- Custom Color -->
+          <div class="modal-section">
+            <label class="modal-section-label">Add Custom Color</label>
+            <div class="custom-color-row">
+              <input type="color" id="new-color-picker" />
+              <button id="add-color-btn">Add</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -285,6 +326,290 @@
         <div id="card-modal-actions">
           <button id="cm-delete">Delete</button>
           <button id="cm-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connection Modal -->
+    <div id="connection-modal-backdrop">
+      <div id="connection-modal">
+        <div id="connection-modal-header">
+          <div id="connection-modal-title">Edit Connection</div>
+          <div id="connection-modal-close">✕</div>
+        </div>
+        <div id="connection-modal-content">
+          <div class="form-group">
+            <label for="conn-label">Label</label>
+            <input type="text" id="conn-label" placeholder="Connection label" />
+          </div>
+          <div class="form-group">
+            <label for="conn-description">Description</label>
+            <textarea id="conn-description" placeholder="Connection description/annotation"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="conn-relationship">Relationship</label>
+            <select id="conn-relationship">
+              <!-- Populated dynamically from RELATIONSHIP_TYPES -->
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label for="conn-color">Color</label>
+              <input type="color" id="conn-color" />
+            </div>
+            <div class="form-group half">
+              <label for="conn-type">Line Type</label>
+              <select id="conn-type">
+                <option value="straight">Straight</option>
+                <option value="curved">Curved</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group toggle-group">
+            <label class="toggle-label" for="conn-gradient">
+              <span>Color Gradient</span>
+              <div class="toggle-switch">
+                <input type="checkbox" id="conn-gradient" />
+                <span class="toggle-slider"></span>
+              </div>
+            </label>
+            <div class="form-hint" id="conn-gradient-hint">Uses pin colors when different</div>
+          </div>
+          <div class="form-divider"></div>
+          <div class="form-group">
+            <label for="conn-confidence">Confidence Score: <span id="conn-confidence-value">50</span>%</label>
+            <input type="range" id="conn-confidence" min="0" max="100" value="50" />
+          </div>
+          <div class="form-group">
+            <label for="conn-validation">Validation: <span id="conn-validation-value">0</span>%</label>
+            <input type="range" id="conn-validation" min="0" max="100" value="0" />
+          </div>
+        </div>
+        <div id="connection-modal-actions">
+          <button id="conn-delete">Delete</button>
+          <button id="conn-save">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Theme Builder Modal -->
+    <div id="theme-builder-backdrop">
+      <div id="theme-builder-modal">
+        <div id="theme-builder-header">
+          <div id="theme-builder-title">Theme Builder</div>
+          <div id="theme-builder-close">✕</div>
+        </div>
+        <div id="theme-builder-content">
+          <!-- Theme List -->
+          <div id="theme-builder-list">
+            <!-- Populated dynamically -->
+          </div>
+          
+          <!-- Theme Editor (shown when editing) -->
+          <div id="theme-editor" style="display: none;">
+            <!-- Tabs -->
+            <div class="theme-editor-tabs">
+              <button class="theme-tab active" data-tab="info">Info</button>
+              <button class="theme-tab" data-tab="colors">Colors</button>
+              <button class="theme-tab" data-tab="background">Background</button>
+            </div>
+            
+            <!-- Tab: Info -->
+            <div class="theme-tab-content active" id="tab-info">
+              <div class="form-group">
+                <label for="theme-edit-name">Theme Name</label>
+                <input type="text" id="theme-edit-name" placeholder="My Custom Theme" />
+              </div>
+              <div class="form-group">
+                <label for="theme-edit-description">Description</label>
+                <input type="text" id="theme-edit-description" placeholder="Optional description" />
+              </div>
+              <div class="form-group">
+                <label for="theme-edit-text-color">Text Color</label>
+                <div class="color-input-row">
+                  <input type="color" id="theme-edit-text-color" value="#ffffff" />
+                  <input type="text" id="theme-edit-text-color-hex" value="#ffffff" placeholder="#ffffff" />
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tab: Colors -->
+            <div class="theme-tab-content" id="tab-colors">
+              <!-- Prebuilt Palettes -->
+              <div class="color-palettes-section">
+                <label>Prebuilt Palettes</label>
+                <div id="color-palette-grid">
+                  <!-- Populated dynamically -->
+                </div>
+                <div class="palette-apply-options">
+                  <button type="button" id="palette-replace-btn" class="small-btn" disabled>Replace All</button>
+                  <button type="button" id="palette-append-btn" class="small-btn" disabled>Append Colors</button>
+                </div>
+              </div>
+              
+              <div class="color-slots-divider"></div>
+              
+              <div class="color-slots-header">
+                <label>Your Colors <span id="color-count-badge">(8)</span></label>
+                <div class="color-slots-actions">
+                  <button type="button" id="theme-colors-add-btn" class="small-btn">+ Add Color</button>
+                  <button type="button" id="theme-colors-paste-btn" class="small-btn">Paste Hex</button>
+                </div>
+              </div>
+              
+              <!-- Bulk Paste Area (hidden by default) -->
+              <div id="theme-colors-paste-area" style="display: none;">
+                <textarea id="theme-colors-paste-input" placeholder="Paste hex codes (one per line or comma separated)&#10;Example:&#10;#E5D9C6&#10;#B6A37A&#10;#4D3726"></textarea>
+                <div class="paste-actions">
+                  <button type="button" id="theme-colors-paste-replace" class="small-btn">Replace All</button>
+                  <button type="button" id="theme-colors-paste-append" class="small-btn primary">Append</button>
+                  <button type="button" id="theme-colors-paste-cancel" class="small-btn">Cancel</button>
+                </div>
+              </div>
+              
+              <div id="theme-color-slots">
+                <!-- Color slot editors populated dynamically -->
+              </div>
+            </div>
+            
+            <!-- Tab: Background -->
+            <div class="theme-tab-content" id="tab-background">
+              <div class="form-group">
+                <label>Background Preset</label>
+                <select id="theme-bg-preset">
+                  <option value="">Custom Layers</option>
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+              
+              <div id="theme-bg-layers">
+                <label>Layers <button type="button" id="theme-bg-add-layer" class="small-btn">+ Add</button></label>
+                <div id="theme-bg-layer-list">
+                  <!-- Layer editors populated dynamically -->
+                </div>
+              </div>
+              
+              <div class="form-group" id="theme-logo-section">
+                <label>Logo / Branding</label>
+                <div class="logo-settings">
+                  <div class="form-row">
+                    <div class="form-group half">
+                      <label for="theme-logo-url">Image URL</label>
+                      <input type="text" id="theme-logo-url" placeholder="https://... or data:..." />
+                    </div>
+                    <div class="form-group half">
+                      <label for="theme-logo-upload">Or Upload</label>
+                      <input type="file" id="theme-logo-upload" accept="image/*" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group quarter">
+                      <label for="theme-logo-position">Position</label>
+                      <select id="theme-logo-position">
+                        <option value="bottom-right">Bottom Right</option>
+                        <option value="bottom-left">Bottom Left</option>
+                        <option value="top-right">Top Right</option>
+                        <option value="top-left">Top Left</option>
+                        <option value="center">Center</option>
+                      </select>
+                    </div>
+                    <div class="form-group quarter">
+                      <label for="theme-logo-size">Size</label>
+                      <input type="text" id="theme-logo-size" value="80px" placeholder="80px" />
+                    </div>
+                    <div class="form-group quarter">
+                      <label for="theme-logo-opacity">Opacity</label>
+                      <input type="range" id="theme-logo-opacity" min="0" max="100" value="30" />
+                    </div>
+                    <div class="form-group quarter">
+                      <label for="theme-logo-animation">Animation</label>
+                      <select id="theme-logo-animation">
+                        <option value="none">None</option>
+                        <option value="pulse">Pulse</option>
+                        <option value="float">Float</option>
+                        <option value="glow">Glow</option>
+                        <option value="swing">Swing</option>
+                        <option value="bounce">Bounce</option>
+                        <option value="rotate">Rotate</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label>Preview</label>
+                <div id="theme-bg-preview"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="theme-builder-actions">
+          <button id="theme-builder-new">New Theme</button>
+          <button id="theme-builder-apply" style="display: none;">Apply Theme</button>
+          <button id="theme-builder-save" style="display: none;">Save</button>
+          <button id="theme-builder-cancel" style="display: none;">Cancel</button>
+          <button id="theme-builder-close-btn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Board Modal -->
+    <div id="new-board-modal-backdrop">
+      <div id="new-board-modal">
+        <div id="new-board-modal-header">
+          <div id="new-board-modal-title">Create New Board</div>
+          <div id="new-board-modal-close">✕</div>
+        </div>
+        <div id="new-board-modal-content">
+          <div class="form-group">
+            <label for="new-board-name">Board Name</label>
+            <input type="text" id="new-board-name" placeholder="My Investigation" />
+          </div>
+          <div class="form-group">
+            <label for="new-board-description">Description</label>
+            <textarea id="new-board-description" placeholder="What is this board about?"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="new-board-theme">Theme</label>
+            <select id="new-board-theme">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div id="new-board-theme-preview">
+            <!-- Theme preview -->
+          </div>
+        </div>
+        <div id="new-board-modal-actions">
+          <button id="new-board-cancel">Cancel</button>
+          <button id="new-board-create">Create Board</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="shortcuts-modal-backdrop">
+      <div id="shortcuts-modal">
+        <div id="shortcuts-modal-header">
+          <div id="shortcuts-modal-title">Keyboard Shortcuts</div>
+          <div id="shortcuts-modal-close">✕</div>
+        </div>
+        <div id="shortcuts-modal-content">
+          <div id="shortcuts-search-container">
+            <input type="text" id="shortcuts-search" placeholder="Search shortcuts..." />
+          </div>
+          <div id="shortcuts-list">
+            <!-- Populated dynamically -->
+          </div>
+          <div id="shortcuts-recording" style="display: none;">
+            <div class="recording-message">Press any key combination...</div>
+            <div class="recording-preview" id="recording-preview"></div>
+            <button id="recording-cancel">Cancel</button>
+          </div>
+        </div>
+        <div id="shortcuts-modal-actions">
+          <button id="shortcuts-reset">Reset to Defaults</button>
+          <button id="shortcuts-close">Close</button>
         </div>
       </div>
     </div>

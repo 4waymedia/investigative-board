@@ -96,19 +96,20 @@ class ToolbarManager {
     this.typesContainer.className = "toolbar-section types-section";
     this.typesContainer.id = "types-container";
 
+    // Line toggle container (between types and colors)
+    this.lineContainer = document.createElement("div");
+    this.lineContainer.className = "toolbar-section line-section";
+    this.lineContainer.id = "line-container";
+
     this.colorsContainer = document.createElement("div");
     this.colorsContainer.className = "toolbar-section colors-section";
     this.colorsContainer.id = "colors-container";
 
-    this.controlsContainer = document.createElement("div");
-    this.controlsContainer.className = "toolbar-section controls-section";
-    this.controlsContainer.id = "controls-container";
-
-    // Append containers to menu
+    // Append containers to menu in order: tools, types, line, colors
     this.menu.appendChild(this.toolset);
     this.menu.appendChild(this.typesContainer);
+    this.menu.appendChild(this.lineContainer);
     this.menu.appendChild(this.colorsContainer);
-    this.menu.appendChild(this.controlsContainer);
   }
 
   // Main render function - clears and rebuilds toolbar to prevent duplicates
@@ -130,11 +131,11 @@ class ToolbarManager {
     if (this.typesContainer && this.typesContainer.parentNode) {
       this.typesContainer.parentNode.removeChild(this.typesContainer);
     }
+    if (this.lineContainer && this.lineContainer.parentNode) {
+      this.lineContainer.parentNode.removeChild(this.lineContainer);
+    }
     if (this.colorsContainer && this.colorsContainer.parentNode) {
       this.colorsContainer.parentNode.removeChild(this.colorsContainer);
-    }
-    if (this.controlsContainer && this.controlsContainer.parentNode) {
-      this.controlsContainer.parentNode.removeChild(this.controlsContainer);
     }
 
     // Ensure system menu and toolset exist in the menu
@@ -145,27 +146,44 @@ class ToolbarManager {
       this.menu.appendChild(toolset);
     }
 
-    // Add the dynamic containers
+    // Add the dynamic containers in order: types, line, colors
     this.menu.appendChild(this.typesContainer);
+    this.menu.appendChild(this.lineContainer);
     this.menu.appendChild(this.colorsContainer);
-    this.menu.appendChild(this.controlsContainer);
 
     // Render each section
     this.renderTools();
     this.renderTypeGroups();
+    this.renderLineToggle();
     this.renderColorPalette();
-    this.renderControls();
   }
 
-  // Render controls section (connection toggle + theme selector)
-  renderControls() {
-    this.controlsContainer.innerHTML = "";
-    this.renderConnectionTypeToggle();
-    this.renderThemeSelector();
-    this.setupControlsEventDelegation();
+  // Render line toggle (icon-only, compact design)
+  renderLineToggle() {
+    if (!this.lineContainer) {
+      console.warn('⚠️ renderLineToggle: lineContainer not found');
+      return;
+    }
+    
+    this.lineContainer.innerHTML = "";
+    
+    const lineToggle = document.createElement("div");
+    lineToggle.className = "line-toggle";
+    lineToggle.dataset.action = "toggle-connection-type";
+    
+    const isCurved = this.appState.connectionType === "curved";
+    lineToggle.innerHTML = `<span class="line-icon">${isCurved ? "╭" : "─"}</span>`;
+    lineToggle.title = `Line: ${isCurved ? "Curved" : "Straight"} (Press L to toggle)`;
+    
+    console.log(`🔧 renderLineToggle: connectionType=${this.appState.connectionType}, isCurved=${isCurved}`);
+    
+    // Add click handler
+    lineToggle.addEventListener("click", () => this.toggleConnectionType());
+    
+    this.lineContainer.appendChild(lineToggle);
   }
 
-  // Render the tool buttons
+  // Render the tool buttons (icon-only, minimal design)
   renderTools() {
     if (!this.toolset) {
       console.warn('⚠️ renderTools: toolset element not found');
@@ -176,43 +194,24 @@ class ToolbarManager {
 
     this.mainTools.forEach((tool) => {
       const btn = document.createElement("div");
-      btn.className = `tool-btn ${this.appState.currentTool === tool.id ? "active" : ""}`;
+      btn.className = `tool-btn tool-btn-icon ${this.appState.currentTool === tool.id ? "active" : ""}`;
 
-      // Key change: Store the ID in the DOM itself for event delegation
+      // Store the ID in the DOM for event delegation
       btn.dataset.toolAction = tool.id;
+      
+      // Tooltip shows label and keyboard shortcut
+      btn.title = `${tool.label} (${tool.key})`;
 
-      btn.innerHTML = `
-        <span class="icon">${tool.icon}</span>
-        <span>${tool.label}</span>
-        <span class="key">${tool.key}</span>
-      `;
+      btn.innerHTML = `<span class="icon">${tool.icon}</span>`;
       this.toolset.appendChild(btn);
     });
 
-    // Functional Separator
-    const separator = document.createElement("div");
-    separator.className = "tool-separator";
-    this.toolset.appendChild(separator);
-
-    // Example of adding specialized action buttons (like Load)
-    this.createActionButton("📁", "Load");
-
-    // Attach a single listener to the parent (using addEventListener for reliability)
-    // Remove existing listener first to prevent duplicates
+    // Attach a single listener to the parent
     this.toolset.removeEventListener('click', this._toolsetClickHandler);
     this._toolsetClickHandler = (e) => this.handleToolbarClick(e);
     this.toolset.addEventListener('click', this._toolsetClickHandler);
     
-    console.log(`🔧 renderTools: ${this.mainTools.length} tools rendered, click handler attached`);
-  }
-
-  // Helper method to keep renderTools clean
-  createActionButton(icon, label) {
-    const btn = document.createElement("div");
-    btn.className = "tool-btn";
-    btn.dataset.specialAction = "load"; // Use consistent naming
-    btn.innerHTML = `<span class="icon">${icon}</span><span>${label}</span>`;
-    this.toolset.appendChild(btn);
+    console.log(`🔧 renderTools: ${this.mainTools.length} tools rendered (icon-only mode)`);
   }
 
   // The Centralized Click Handler - replaces dozens of individual functions
@@ -226,9 +225,6 @@ class ToolbarManager {
 
     if (toolId) {
       this.setTool(toolId);
-    } else if (btn.dataset.specialAction === "load") {
-      // Handle non-tool buttons here
-      this.handleLoadAction();
     }
   }
 
@@ -238,15 +234,6 @@ class ToolbarManager {
       btn.classList.toggle('active', btn.dataset.toolAction === toolId);
     });
     console.log(`🔧 Tool activated: ${toolId}`);
-  }
-
-  // Handle load action
-  handleLoadAction() {
-    // Open load modal
-    if (window.app && window.app.modalManager) {
-      // For now, just show an alert
-      alert("Load functionality - modal not implemented yet");
-    }
   }
 
   // Set the current tool
@@ -323,15 +310,15 @@ class ToolbarManager {
     return typeBar;
   }
 
-  // Render type groups (original prototype structure)
+  // Render type groups (compact icon-only design, click to open dropdown)
   renderTypeGroups() {
     this.typesContainer.innerHTML = "";
     const typeBar = document.createElement("div");
-    typeBar.className = "type-bar";
+    typeBar.className = "type-bar type-bar-compact";
 
     this.families.forEach((family) => {
       const typeGroup = document.createElement("div");
-      typeGroup.className = "type-group";
+      typeGroup.className = "type-group type-group-compact";
       typeGroup.dataset.familyId = family.id;
 
       // Get current type for this family
@@ -345,26 +332,18 @@ class ToolbarManager {
         label: family.name,
       };
 
-      // Create type option (shows current selection)
+      // Create compact type option (icon only, click to open dropdown)
       const typeOption = document.createElement("div");
-      typeOption.className = "type-option";
+      typeOption.className = "type-option type-option-compact type-option-clickable";
       typeOption.dataset.familyId = family.id;
       if (this.appState.currentFamily === family.id) {
         typeOption.classList.add("active");
       }
-      typeOption.innerHTML = `
-        <div class="type-option-icon">${currentType.icon}</div>
-        <div class="label">${currentType.label || family.name}</div>
-      `;
-
-      // Create dropdown caret
-      const caret = document.createElement("button");
-      caret.className = "type-caret";
-      caret.dataset.familyId = family.id;
-      caret.innerHTML = "▾";
+      // Tooltip shows the current type name and hint
+      typeOption.title = `${currentType.label || family.name} (click to change)`;
+      typeOption.innerHTML = `<div class="type-option-icon">${currentType.icon}</div>`;
 
       typeGroup.appendChild(typeOption);
-      typeGroup.appendChild(caret);
       typeBar.appendChild(typeGroup);
     });
 
@@ -382,24 +361,15 @@ class ToolbarManager {
     }
 
     this.typesContainer._typesListener = (e) => {
-      const target = e.target.closest(".type-option, .type-caret");
+      const target = e.target.closest(".type-option");
       if (!target) return;
 
       e.stopPropagation();
       const familyId = target.dataset.familyId;
 
-      if (target.classList.contains("type-option")) {
-        // Type option clicked - select family and tool
-        this.appState.currentTool = familyId;
-        this.appState.currentFamily = familyId;
-        this.updateCurrentTypeId();
-        this.updateActiveToolUI(familyId);
-        this.updateTypeGroupsUI();
-      } else if (target.classList.contains("type-caret")) {
-        // Caret clicked - show dropdown
-        const types = this.nodeTypes.filter((t) => t.family === familyId);
-        this.showTypeDropdown(familyId, target, types);
-      }
+      // Click on type option - show dropdown menu
+      const types = this.nodeTypes.filter((t) => t.family === familyId);
+      this.showTypeDropdown(familyId, target, types);
     };
 
     this.typesContainer.addEventListener("click", this.typesContainer._typesListener);
@@ -413,27 +383,32 @@ class ToolbarManager {
         // Update active state
         typeOption.classList.toggle("active", this.appState.currentFamily === family.id);
         
-        // Update the icon and label to reflect current type selection
+        // Update the icon and tooltip to reflect current type selection
         const types = this.nodeTypes.filter((t) => t.family === family.id);
         const selectedIndex = (this.appState.selectedTypeByFamily && 
           this.appState.selectedTypeByFamily[family.id]) || 0;
         const currentType = types[selectedIndex] || { icon: family.defaultIcon, label: family.name };
         
         const iconEl = typeOption.querySelector('.type-option-icon');
-        const labelEl = typeOption.querySelector('.label');
         if (iconEl) iconEl.textContent = currentType.icon;
-        if (labelEl) labelEl.textContent = currentType.label || family.name;
+        
+        // Update tooltip (for compact mode)
+        typeOption.title = currentType.label || family.name;
       }
     });
   }
 
   // Show dropdown for type selection
-  showTypeDropdown(familyId, caretElement, types) {
+  showTypeDropdown(familyId, triggerElement, types) {
     this.removeExistingDropdown();
 
     const dropdown = document.createElement("div");
     dropdown.className = "type-dropdown";
-    dropdown.style.cssText = `position: absolute; left: ${caretElement.getBoundingClientRect().left}px; top: ${caretElement.getBoundingClientRect().bottom + 5}px; z-index: 1000;`;
+    dropdown.id = "active-type-dropdown";
+    
+    // Position below the trigger element
+    const rect = triggerElement.getBoundingClientRect();
+    dropdown.style.cssText = `position: absolute; left: ${rect.left}px; top: ${rect.bottom + 5}px; z-index: 1000;`;
 
     // Build HTML string for efficiency, using data-index
     dropdown.innerHTML = types.map((type, index) => `
@@ -443,7 +418,7 @@ class ToolbarManager {
       </div>
     `).join('');
 
-    // Single listener for all options
+    // Click handler for options
     dropdown.onclick = (e) => {
       const option = e.target.closest(".type-dropdown-option");
       if (!option) return;
@@ -455,25 +430,61 @@ class ToolbarManager {
       this.appState.currentTool = familyId;
 
       this.updateCurrentTypeId();
-      dropdown.remove();
+      this.closeTypeDropdown();
       this.updateTypeGroupsUI();
       this.updateActiveToolUI(familyId);
     };
 
     document.body.appendChild(dropdown);
 
-    // Use { once: true } for automatic cleanup of the document listener
+    // Close on click outside (including canvas)
+    const closeOnClickOutside = (e) => {
+      if (!dropdown.contains(e.target) && !triggerElement.contains(e.target)) {
+        this.closeTypeDropdown();
+      }
+    };
+
+    // Close on ESC key
+    const closeOnEscape = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeTypeDropdown();
+      }
+    };
+
+    // Store listeners for cleanup
+    this._dropdownCloseListener = closeOnClickOutside;
+    this._dropdownEscapeListener = closeOnEscape;
+
+    // Add listeners after a brief delay to avoid immediate close
     setTimeout(() => {
-      document.addEventListener("click", (e) => {
-        if (!dropdown.contains(e.target)) dropdown.remove();
-      }, { once: true });
-    }, 0);
+      document.addEventListener("click", closeOnClickOutside);
+      document.addEventListener("keydown", closeOnEscape);
+    }, 10);
+  }
+
+  // Close the type dropdown and clean up listeners
+  closeTypeDropdown() {
+    const dropdown = document.getElementById("active-type-dropdown");
+    if (dropdown) {
+      dropdown.remove();
+    }
+    
+    // Remove event listeners
+    if (this._dropdownCloseListener) {
+      document.removeEventListener("click", this._dropdownCloseListener);
+      this._dropdownCloseListener = null;
+    }
+    if (this._dropdownEscapeListener) {
+      document.removeEventListener("keydown", this._dropdownEscapeListener);
+      this._dropdownEscapeListener = null;
+    }
   }
 
   // Helper method for dropdown cleanup
   removeExistingDropdown() {
-    const existing = document.querySelector(".type-dropdown");
-    if (existing) existing.remove();
+    this.closeTypeDropdown();
   }
 
   // Render color palette
@@ -491,9 +502,10 @@ class ToolbarManager {
     this.defaultColors.forEach((col) => {
       const el = document.createElement("div");
       el.className = "color-option" + (col.value === this.appState.selectedColor ? " active" : "");
-      // Store the color value in a data attribute
+      // Store both color value and slot in data attributes
       el.dataset.colorValue = col.value;
-      el.innerHTML = `<div class="swatch" style="background:${col.value}"></div>`;
+      el.dataset.colorSlot = col.slot || ""; // Color slot for theme switching
+      el.innerHTML = `<div class="swatch" style="background:${col.value}" title="${col.name} (${col.slot || 'custom'})"></div>`;
       colorContainer.appendChild(el);
     });
 
@@ -514,18 +526,20 @@ class ToolbarManager {
     if (!option) return;
 
     const colorValue = option.dataset.colorValue;
+    const colorSlot = option.dataset.colorSlot;
     const action = option.dataset.action;
 
     if (colorValue) {
-      this.selectColor(colorValue);
+      this.selectColor(colorValue, colorSlot);
     } else if (action === "add-color") {
       this.handleAddColorAction();
     }
   }
 
   // Select a color and update UI
-  selectColor(colorValue) {
+  selectColor(colorValue, colorSlot = null) {
     this.appState.selectedColor = colorValue;
+    this.appState.selectedColorSlot = colorSlot || null; // null for custom colors without slot
     this.saveAppState(this.appState);
     this.updateActiveColorUI(colorValue);
     this.draw();
@@ -552,62 +566,6 @@ class ToolbarManager {
     }
   }
 
-  // Render connection type toggle
-  renderConnectionTypeToggle() {
-    const connTypeDiv = document.createElement("div");
-    connTypeDiv.className = "connection-type-toggle";
-    connTypeDiv.dataset.action = "toggle-connection-type";
-    connTypeDiv.innerHTML = `<div class="label" style="font-size:11px;opacity:0.9">Line</div><div style="font-size:20px;margin-top:4px">${
-      this.appState.connectionType === "curved" ? "📈" : "📏"
-    }</div>`;
-    connTypeDiv.title = `Connection Type: ${this.appState.connectionType} (Press 'L' to toggle)`;
-    this.controlsContainer.appendChild(connTypeDiv);
-  }
-
-  // Render theme selector
-  renderThemeSelector() {
-    const themeSelector = document.createElement("select");
-    themeSelector.id = "theme-selector";
-    themeSelector.className = "theme-selector";
-
-    console.log('🎨 Toolbar renderThemeSelector called, found', this.themes.length, 'themes:', this.themes.map(t => t.name));
-
-    this.themes.forEach((theme) => {
-      const option = document.createElement("option");
-      option.value = theme.id;
-      option.textContent = theme.name;
-      if (theme.id === this.appState.currentThemeId) {
-        option.selected = true;
-      }
-      themeSelector.appendChild(option);
-    });
-
-    // Set up change handler
-    themeSelector.onchange = (e) => {
-      if (window.applyTheme) {
-        // Apply theme (updates colors and background)
-        window.applyTheme(e.target.value);
-        this.appState.currentThemeId = e.target.value;
-
-        // Ensure selectedColor is valid for the new theme
-        if (
-          this.defaultColors.length > 0 &&
-          !this.defaultColors.find((c) => c.value === this.appState.selectedColor)
-        ) {
-          this.appState.selectedColor = this.defaultColors[0].value;
-          this.updateActiveColorUI(this.appState.selectedColor);
-        }
-
-        if (this.saveAppState) {
-          this.saveAppState(this.appState);
-        }
-        // Only re-render controls section instead of full render
-        this.renderControls();
-      }
-    };
-
-    this.controlsContainer.appendChild(themeSelector);
-  }
 
   // Update current type ID based on selections with validation
   updateCurrentTypeId() {
@@ -634,26 +592,6 @@ class ToolbarManager {
     }
   }
 
-  // Set up event delegation for controls section
-  setupControlsEventDelegation() {
-    // Remove existing listener if any
-    if (this.controlsContainer._controlsListener) {
-      this.controlsContainer.removeEventListener("click", this.controlsContainer._controlsListener);
-    }
-
-    this.controlsContainer._controlsListener = (e) => {
-      const target = e.target.closest(".connection-type-toggle");
-      if (!target) return;
-
-      const action = target.dataset.action;
-
-      if (action === "toggle-connection-type") {
-        this.toggleConnectionType();
-      }
-    };
-
-    this.controlsContainer.addEventListener("click", this.controlsContainer._controlsListener);
-  }
 
   // Toggle connection type
   toggleConnectionType() {
@@ -666,7 +604,7 @@ class ToolbarManager {
     }
 
     this.saveAppState(this.appState);
-    this.renderControls(); // Only re-render controls section
+    this.renderLineToggle(); // Re-render line toggle
     this.draw();
   }
 }
