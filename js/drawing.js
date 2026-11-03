@@ -839,8 +839,12 @@ registerShape("circle", {
     const r = m.radius * s;
     // Use color-matched shadow if available
     const colorData = window.schemaManager?.getPinColorData?.(pin);
-    const shadowColor = colorData?.shadow || "rgba(0,0,0,0.35)";
-    ctx.fillStyle = shadowColor + "80"; // Add some transparency
+    const shadowColor = colorData?.shadow;
+    if (shadowColor && shadowColor.startsWith("#")) {
+      ctx.fillStyle = typeof hexToRgba === "function" ? hexToRgba(shadowColor, 0.5) : (shadowColor + "80");
+    } else {
+      ctx.fillStyle = shadowColor || "rgba(0,0,0,0.35)";
+    }
     ctx.beginPath();
     ctx.arc(scr.x + 3 * s, scr.y + 4 * s, r * 1.05, 0, Math.PI * 2);
     ctx.fill();
@@ -1366,30 +1370,34 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
       // Draw all phases in order
       ctx.save();
 
+      // Check if shape should be drawn (honor pin.hideShape)
+      const shouldDrawShape = !pin.hideShape;
+
       // 1. Shadow phase
-      if (renderer.drawPhase.shadow) {
+      if (shouldDrawShape && renderer.drawPhase.shadow) {
         renderer.drawPhase.shadow(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 2. Background phase
-      if (renderer.drawPhase.background) {
+      if (shouldDrawShape && renderer.drawPhase.background) {
         renderer.drawPhase.background(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 3. Main body phase
-      if (renderer.drawPhase.main) {
+      if (shouldDrawShape && renderer.drawPhase.main) {
         renderer.drawPhase.main(ctx, pin, finalMetrics, scr, pinScale);
       }
 
       // 4. Decoration phase
-      if (renderer.drawPhase.decoration) {
+      if (shouldDrawShape && renderer.drawPhase.decoration) {
         renderer.drawPhase.decoration(ctx, pin, finalMetrics, scr, pinScale);
       }
 
-      // 5. Selection phase (only if selected or marquee)
+      // 5. Selection phase (only if selected or marquee, and if no image or shape not hidden)
       if (
         renderer.drawPhase.selection &&
-        (finalMetrics.isSelected || finalMetrics.isMarquee)
+        (finalMetrics.isSelected || finalMetrics.isMarquee) &&
+        (!pin.image || !pin.image.dataUrl || shouldDrawShape)
       ) {
         renderer.drawPhase.selection(
           ctx,
@@ -1705,6 +1713,45 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   } else {
     // Draw rectangular image
     ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
+  }
+
+  // Draw selection / marquee highlight around the image if selected or marquee
+  if (metrics.isSelected || metrics.isMarquee) {
+    ctx.save();
+    ctx.lineWidth = Math.max(2, 3 * appScale);
+    ctx.strokeStyle = metrics.isMarquee && !metrics.isSelected ? "#f59e0b" : "#38bdf8";
+    if (imageStyle === "circular") {
+      const clipCenterX = scr.x + positionOffsetX;
+      const clipCenterY = scr.y + positionOffsetY;
+      ctx.beginPath();
+      ctx.arc(clipCenterX, clipCenterY, (imageSize / 2) + 3 * appScale, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (imageStyle === "oval") {
+      const clipCenterX = scr.x + positionOffsetX;
+      const clipCenterY = scr.y + positionOffsetY;
+      ctx.beginPath();
+      ctx.ellipse(
+        clipCenterX,
+        clipCenterY,
+        imgWidth / 2 + 3 * appScale,
+        imgHeight / 2 + 3 * appScale,
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.stroke();
+    } else {
+      window.DrawingUtils.roundRectPath(
+        ctx,
+        imgX - 3 * appScale,
+        imgY - 3 * appScale,
+        imgWidth + 6 * appScale,
+        imgHeight + 6 * appScale,
+        (useRoundedCorners ? cornerRadius + 3 * appScale : 4 * appScale)
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   ctx.restore();

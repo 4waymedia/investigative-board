@@ -279,9 +279,36 @@ class DragManager {
 
     console.log(`🎯 Ending ${this.dragType} drag`);
 
-    // Save state for undo only if something actually moved
-    if (this.hasMoved && this.appState && this.appState.saveHistory) {
-      this.appState.saveHistory();
+    // Snap moved pins to grid if snapping is enabled
+    if (this.hasMoved && this.appState) {
+      if (this.appState.gridSnap !== false) {
+        const gridSize = this.appState.gridSize || 40;
+        if (this.dragType === 'pin') {
+          const snapPin = (pin) => {
+            if (!pin || this.isTimelinePin(pin)) return;
+            pin.x = Math.round(pin.x / gridSize) * gridSize;
+            pin.y = Math.round(pin.y / gridSize) * gridSize;
+          };
+          if (this.relativeOffsets && this.relativeOffsets.length > 1) {
+            this.relativeOffsets.forEach(({ index }) => {
+              snapPin(this.appState.pins[index]);
+            });
+          } else if (this.dragTarget !== null && this.appState.pins) {
+            snapPin(this.appState.pins[this.dragTarget]);
+          }
+        } else if (this.dragType === 'area') {
+          const area = this.appState.areas && this.appState.areas[this.dragTarget];
+          if (area) {
+            area.x = Math.round(area.x / gridSize) * gridSize;
+            area.y = Math.round(area.y / gridSize) * gridSize;
+          }
+        }
+      }
+
+      // Save state for undo only if something actually moved
+      if (this.appState.saveHistory) {
+        this.appState.saveHistory();
+      }
     }
 
     // Reset drag state

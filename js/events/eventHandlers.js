@@ -226,10 +226,16 @@ class TextTool extends BaseTool {
 
 class AreaTool extends BaseTool {
   onMouseDown(e, mousePos, clickedPinIndex) {
-    // Check if there's already a pin at this location
+    // If clicked on an existing pin, handle pin selection and connection instead of creating area
     if (clickedPinIndex !== null) {
-      console.log(`⚠️ Cannot start area creation: pin already exists at (${mousePos.world.x}, ${mousePos.world.y})`);
-      return; // Don't start area creation
+      if (this.eventHandlers.tools && this.eventHandlers.tools.pin && this.eventHandlers.tools.pin.handlePinInteraction) {
+        this.eventHandlers.tools.pin.handlePinInteraction(mousePos, clickedPinIndex);
+      } else {
+        this.eventHandlers.setSelectedPin(clickedPinIndex);
+        this.appState.connectStartIndex = clickedPinIndex;
+        this.appState.connectionMode = 'sequential';
+      }
+      return;
     }
 
     // Area tool - register center and start marquee preview
@@ -1314,7 +1320,8 @@ class EventHandlers {
 
     // Handle connection creation if connectStartIndex is set (when marquee is active)
     // BUT skip if connection was already created in mouseDown (shift+click case)
-    if (!this.didDrag && !this.isMarqueeSelecting && this.appState.connectStartIndex !== null && !this.connectionCreatedInMouseDown) {
+    // OR if area tool creation is in progress
+    if (!this.didDrag && !this.isMarqueeSelecting && !this.isDraggingArea && this.appState.connectStartIndex !== null && !this.connectionCreatedInMouseDown) {
       console.log(`🎯 Marquee active, connectStartIndex: ${this.appState.connectStartIndex}`);
       const clickedPinIndex = this.findPinAt(mouseWorld.x, mouseWorld.y);
       console.log(`🎯 Clicked pin index: ${clickedPinIndex}`);
@@ -1440,7 +1447,8 @@ class EventHandlers {
         x: centerX,
         y: centerY,
         areaType: this.appState.currentTypeId === "area:circle" ? "circle" : "square",
-      pinType: "card:card", // Default center pin type for areas
+        shape: this.appState.currentTypeId === "area:circle" ? "area-circle" : "area-rect",
+        pinType: "card:card", // Default center pin type for areas
         color: this.appState.selectedColor,
         label: "",
         note: "",
@@ -1476,6 +1484,28 @@ class EventHandlers {
       this.appState.pins.push(newPin);
       const newIndex = this.appState.pins.length - 1;
       this.setSelectedPin(newIndex);
+
+      // Connect to start pin if connection is active
+      if (this.appState.connectStartIndex !== null && this.appState.connectStartIndex !== newIndex) {
+        this.appState.addConnection(this.appState.connectStartIndex, newIndex, {
+          color: this.appState.selectedColor,
+          type: this.appState.connectionType
+        });
+        console.log(`🔗 Connected pin ${this.appState.connectStartIndex} to new area pin ${newIndex}`);
+
+        if (this.appState.connectionMode === 'sequential') {
+          this.appState.connectStartIndex = newIndex;
+        }
+      } else {
+        // Set as connection source for next sequential connection
+        this.appState.connectStartIndex = newIndex;
+        this.appState.connectionMode = 'sequential';
+      }
+
+      if (typeof window.updatePinScales === 'function') {
+        window.updatePinScales(this.appState.pins, this.appState.connections);
+      }
+
       this.appState.saveHistory();
       if (this.saveAppState) {
         this.saveAppState(this.appState);
@@ -1680,6 +1710,10 @@ class EventHandlers {
         // Add pin-specific properties based on type
         if (this.appState.currentTypeId.startsWith("area:")) {
           pinProperties.pinType = "card:card"; // Default center pin type for areas
+          pinProperties.shape = this.appState.currentTypeId === "area:circle" ? "area-circle" : "area-rect";
+          pinProperties.areaType = this.appState.currentTypeId === "area:circle" ? "circle" : "square";
+          pinProperties.areaSize = 50;
+          pinProperties.radius = 50;
           pinProperties.width = 100;
           pinProperties.height = 100;
           pinProperties.fillColor = this.appState.selectedColor + "40";
@@ -2108,13 +2142,29 @@ class EventHandlers {
       isElementVisible(document.getElementById("add-color-modal-backdrop")) ||
       isElementVisible(document.getElementById("load-modal-backdrop")) ||
       isElementVisible(document.getElementById("text-modal-backdrop")) ||
-      isElementVisible(document.getElementById("app-info-modal-backdrop"))
+      isElementVisible(document.getElementById("app-info-modal-backdrop")) ||
+      isElementVisible(document.getElementById("shortcuts-modal-backdrop")) ||
+      isElementVisible(document.getElementById("connection-modal-backdrop")) ||
+      isElementVisible(document.getElementById("theme-builder-backdrop")) ||
+      isElementVisible(document.getElementById("new-board-modal-backdrop")) ||
+      isElementVisible(document.getElementById("board-picker-backdrop"))
     );
 
     // Allow ESC key even in input fields or modals (it's a cancel action)
     if ((isInputField || isModalOpen) && e.key !== 'Escape') {
       // Allow normal typing behavior in input fields and modals for non-ESC keys
       return;
+    }
+
+    // Check user overrides from ActionSystem if defined
+    if (window.actionSystem && window.actionSystem.userOverrides?.keyboard) {
+      const normalized = window.actionSystem.normalizeKey(e);
+      const actionId = window.actionSystem.userOverrides.keyboard[normalized];
+      if (actionId) {
+        e.preventDefault();
+        window.actionSystem.execute(actionId);
+        return;
+      }
     }
 
     // Handle key commands using command map
@@ -2208,9 +2258,13 @@ class EventHandlers {
         
         console.log(`🗑️ Deleting ${sortedIndices.length} selected pin(s): [${sortedIndices.join(', ')}]`);
         
-        // Delete each pin from highest index to lowest
+        // Delete each pin from highest index to lowest and clean up connections
         sortedIndices.forEach(index => {
-          this.appState.pins.splice(index, 1);
+          if (typeof this.appState.removePin === "function") {
+            this.appState.removePin(index);
+          } else {
+            this.appState.pins.splice(index, 1);
+          }
         });
         
         // Clear selection
@@ -2224,7 +2278,11 @@ class EventHandlers {
         this.draw();
       } else if (this.appState.selectedPinIndex !== null) {
         // Fallback for single selection (backward compatibility)
-        this.appState.pins.splice(this.appState.selectedPinIndex, 1);
+        if (typeof this.appState.removePin === "function") {
+          this.appState.removePin(this.appState.selectedPinIndex);
+        } else {
+          this.appState.pins.splice(this.appState.selectedPinIndex, 1);
+        }
         this.setSelectedPin(null);
         this.appState.saveHistory();
         if (this.saveAppState) {

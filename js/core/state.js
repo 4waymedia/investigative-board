@@ -31,6 +31,9 @@ class AppState {
       offsetX: 0,
       offsetY: 0,
       isLayoutSimulating: false,
+      gridVisible: true,
+      gridSnap: true,
+      gridSize: 40,
     };
 
     // ============================================================================
@@ -119,6 +122,15 @@ class AppState {
 
   get isLayoutSimulating() { return this.view.isLayoutSimulating; }
   set isLayoutSimulating(value) { this.view.isLayoutSimulating = value; }
+
+  get gridVisible() { return this.view.gridVisible !== false; }
+  set gridVisible(value) { this.view.gridVisible = !!value; }
+
+  get gridSnap() { return this.view.gridSnap !== false; }
+  set gridSnap(value) { this.view.gridSnap = !!value; }
+
+  get gridSize() { return this.view.gridSize || 40; }
+  set gridSize(value) { this.view.gridSize = value; }
 
   // Document state backward compatibility
   get pins() { return this.document.pins; }
@@ -285,6 +297,8 @@ class AppState {
     const { tailPosition: _ignoredTailPos, ...restProperties } = properties;
 
     return this.addPin(x, y, {
+      color: bubbleColor,
+      colorSlot: bubbleColorSlot,
       description: description, // Description text (inside bubble)
       label: properties.label || '', // Title text (below bubble)
       shape: properties.shape || 'bubble', // Default to comic bubble
@@ -498,6 +512,9 @@ class AppState {
         offsetX: this.view.offsetX,
         offsetY: this.view.offsetY,
         isLayoutSimulating: this.view.isLayoutSimulating,
+        gridVisible: this.view.gridVisible !== false,
+        gridSnap: this.view.gridSnap !== false,
+        gridSize: this.view.gridSize || 40,
       }
     };
     this.history.push(snapshot);
@@ -764,6 +781,9 @@ class AppState {
         offsetX: this.view.offsetX,
         offsetY: this.view.offsetY,
         isLayoutSimulating: this.view.isLayoutSimulating,
+        gridVisible: this.view.gridVisible !== false,
+        gridSnap: this.view.gridSnap !== false,
+        gridSize: this.view.gridSize || 40,
       },
       history: this.history.map(snapshot => ({
         document: { ...snapshot.document },
@@ -824,6 +844,9 @@ class AppState {
         offsetX: boardData.view.offsetX || 0,
         offsetY: boardData.view.offsetY || 0,
         isLayoutSimulating: boardData.view.isLayoutSimulating || false,
+        gridVisible: boardData.view.gridVisible !== undefined ? !!boardData.view.gridVisible : true,
+        gridSnap: boardData.view.gridSnap !== undefined ? !!boardData.view.gridSnap : true,
+        gridSize: boardData.view.gridSize || 40,
       };
     }
 
@@ -848,6 +871,7 @@ class AppState {
       currentFamily: "pin",
       currentTypeId: "pin:circle",
       selectedColor: "#58a6ff",
+      selectedColorSlot: "c2",
       connectionType: "straight",
       selectedTypeByFamily: {
         pin: 0,
@@ -864,6 +888,7 @@ class AppState {
    */
   clearBoard() {
     const selectedColor = this.session.selectedColor;
+    const selectedColorSlot = this.session.selectedColorSlot || "c2";
     const connectionType = this.session.connectionType;
 
     // Reset meta to defaults
@@ -905,6 +930,9 @@ class AppState {
       offsetX: 0,
       offsetY: 0,
       isLayoutSimulating: false,
+      gridVisible: true,
+      gridSnap: true,
+      gridSize: 40,
     };
 
     // Clear history
@@ -928,6 +956,7 @@ class AppState {
       currentFamily: "pin",
       currentTypeId: "pin:circle",
       selectedColor: selectedColor,
+      selectedColorSlot: selectedColorSlot,
       connectionType: connectionType,
       selectedTypeByFamily: {
         pin: 0,

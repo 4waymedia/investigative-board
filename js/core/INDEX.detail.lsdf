@@ -1,0 +1,69 @@
+# L-SDF Detail: js/core
+# Signatures, Interfaces & Call Edges
+
+§ SIGNATURES [js/core]
+
+◈ Application
+├── λ constructor(deps = {})
+├── λ initialize() : Promise<void>
+├── λ setupCanvas() : void
+├── λ resizeCanvas() : void
+├── λ draw() : void
+├── λ drawWorldSpaceElements() : void
+├── λ drawCanvasGrid(ctx: CanvasRenderingContext2D) : void
+├── λ drawPins(ctx: CanvasRenderingContext2D) : void
+├── λ drawConnections(ctx: CanvasRenderingContext2D) : void
+├── λ drawSelectedConnectionHighlight(ctx: CanvasRenderingContext2D) : void
+├── λ drawTimeline(ctx: CanvasRenderingContext2D) : void
+├── λ getVisibleWorldBounds(padding: number = 100) : {left, top, right, bottom}
+├── λ centerViewOnPins(padding: number = 100) : void
+├── λ layoutGrid() : void
+├── λ layoutByGroup(groupBy: string = "family") : void
+├── λ layoutRadial() : void
+├── λ layoutForce() : void
+├── λ layoutClusters() : void
+├── λ layoutTimeline() : void
+├── λ findPinAt(wx: number, wy: number) : number|null
+├── λ getPinCenter(pin: Pin) : {x: number, y: number}
+└── λ saveState() : void
+
+◈ LayoutEngine
+├── ⚙ GRID_SIZE = 40
+├── ⚙ MAJOR_GRID_FACTOR = 4
+├── ⚙ SPACING_X = 240
+├── ⚙ SPACING_Y = 160
+├── λ snap(value: number, gridSize: number = 40) : number
+├── λ snapPoint(point: {x: number, y: number}, gridSize: number = 40) : {x: number, y: number}
+├── λ calculateOptimalGrid(count: number, options: Object) : {cols, rows, positions}
+├── λ getPinGroupKey(pin: Object, groupBy: string) : string
+├── λ applyDefaultGrid(pins: Array<Object>, options: Object) : {x: number, y: number}
+├── λ applyRadialLayout(pins: Array<Object>, connections: Array<Object>, rootIndex: number, options: Object) : {x: number, y: number}
+├── λ applyGroupLayout(pins: Array<Object>, options: Object) : {x: number, y: number}
+└── λ drawGrid(ctx: CanvasRenderingContext2D, viewport: Object, scale: number, theme: Object) : void
+
+◇ AppState
+├── ◇ meta : {id, title, description, userId, created, lastModified, thumbnail}
+├── ◇ view : {scale, offsetX, offsetY, isLayoutSimulating, gridVisible, gridSnap, gridSize}
+├── ◇ document : {pins, connections, cards, textElements, areas, currentThemeId, palette, timelineActive, timelinePins}
+├── ◇ session : {selectedPins, selectedConnectionIndex, connectStartIndex, currentTool, currentTypeId}
+├── ◇ history : Array<{document, view}>
+├── λ addPin(pin: Object) : number
+├── λ removePin(index: number) : boolean
+├── λ addConnection(from: number, to: number, props: Object) : number
+├── λ removeConnection(index: number) : boolean
+├── λ saveHistory() : void
+├── λ undo() : void
+└── λ toBoardData() : Object
+
+◈ BoardManager
+├── ⚙ BOARD_PREFIX = "board_"
+├── ⚙ INDEX_KEY = "investigative_boards_index"
+├── λ getIndex() : {activeId: string, boards: Array<Object>}
+├── λ getActiveBoardId() : string|null
+├── λ createBoard(title: string, desc: string) : string
+├── λ loadBoard(boardId: string) : boolean
+├── λ saveBoard(updateThumbnail: boolean = true) : boolean
+├── λ duplicateBoard(boardId: string) : string
+├── λ deleteBoard(boardId: string) : boolean
+├── λ exportBoard(boardId: string|null) : void
+└── λ importBoardFromFile() : Promise<string|null>

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://lsdf.dev/schema/v1.json",
+  "version": "1.0.0",
+  "project": "investigative-board",
+  "description": "Latent-Structured Documentation Format (L-SDF) Index for AI Assisted Development",
+  "format": "lsdf",
+  "indexes": [
+    "INDEX.lsdf",
+    "INDEX.detail.lsdf",
+    "js/core/INDEX.lsdf",
+    "js/core/INDEX.detail.lsdf",
+    "js/events/INDEX.lsdf",
+    "js/events/INDEX.detail.lsdf",
+    "js/ui/INDEX.lsdf",
+    "js/ui/INDEX.detail.lsdf",
+    "tests/INDEX.lsdf"
+  ],
+  "sigils": {
+    "§": "Namespace / Domain Context",
+    "◈": "Class / Architectural Entity",
+    "◇": "State Store / Model",
+    "λ": "Function / Method",
+    "⚙": "Configuration / Constants",
+    "→": "Outbound Call / Invocation Edge",
+    "←": "Event / Listener Trigger",
+    "⚡": "Action / Dispatch",
+    "⚖": "Invariant / Guard Condition",
+    "✓": "Test Coverage Reference"
+  }
+}

@@ -60,7 +60,9 @@ class ModalManager {
       return;
     }
 
-    // Check if modal elements exist
+    // Check if modal elements exist (re-query if not cached)
+    if (!this.pinModal) this.pinModal = document.getElementById("pin-modal");
+    if (!this.pinModalBackdrop) this.pinModalBackdrop = document.getElementById("pin-modal-backdrop");
     console.log(`🎯 Modal elements: pinModal=${!!this.pinModal}, backdrop=${!!this.pinModalBackdrop}`);
 
     // Show modal first
@@ -670,16 +672,16 @@ class ModalManager {
   // Close all modals
   closeAllModals() {
     // Hide all modals
-    this.pinModal.style.display = "none";
-    this.addColorModal.style.display = "none";
-    this.cardModal.style.display = "none";
-    this.loadModal.style.display = "none";
+    if (this.pinModal) this.pinModal.style.display = "none";
+    if (this.addColorModal) this.addColorModal.style.display = "none";
+    if (this.cardModal) this.cardModal.style.display = "none";
+    if (this.loadModal) this.loadModal.style.display = "none";
 
     // Hide all backdrops
-    this.pinModalBackdrop.style.display = "none";
-    this.addColorModalBackdrop.style.display = "none";
-    this.cardModalBackdrop.style.display = "none";
-    this.loadModalBackdrop.style.display = "none";
+    if (this.pinModalBackdrop) this.pinModalBackdrop.style.display = "none";
+    if (this.addColorModalBackdrop) this.addColorModalBackdrop.style.display = "none";
+    if (this.cardModalBackdrop) this.cardModalBackdrop.style.display = "none";
+    if (this.loadModalBackdrop) this.loadModalBackdrop.style.display = "none";
 
     this.cleanupModalListeners();
     this.modalPinIndex = null;

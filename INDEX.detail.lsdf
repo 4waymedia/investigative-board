@@ -1,0 +1,85 @@
+# ============================================================================
+# L-SDF: Latent-Structured Documentation Format (Detailed Schema & Signatures)
+# Project: investigative-board (BoardCraft Engine)
+# Topology: High-speed semantic navigation map for AI Agents
+# ============================================================================
+
+§ STATE_CONTRACTS [AppState]
+├── ◇ AppState.document              :: Persistent board document (saved to localStorage/JSON)
+│   ├── pins: Array<Pin>             :: [id, x, y, color, label, note, date, typeId, shape, pinScale, radius, width, height, image, cardId]
+│   ├── connections: Array<Conn>     :: [id, from, to, color, type, label, confidenceScore, validationPercent]
+│   ├── cards: Array<Card>           :: [id, title, subtitle, date, icon, color, used, x, y]
+│   ├── currentThemeId: string       :: 'dark' | 'light' | 'sepia' | 'nord' | 'midnight'
+│   ├── palette: Array<{name, value}>:: Dynamic active theme color swatches
+│   └── timelineActive: boolean      :: Timeline layout mode active state
+│
+├── ◇ AppState.view                  :: Camera & viewport state (transient)
+│   ├── scale: number                :: Viewport zoom level (0.2 to 5.0)
+│   ├── offsetX: number              :: Screen translation X in canvas pixels
+│   ├── offsetY: number              :: Screen translation Y in canvas pixels
+│   └── isLayoutSimulating: boolean  :: Active physics layout simulation flag
+│
+├── ◇ AppState.session               :: Transient interaction state (resets on load)
+│   ├── selectedPinIndex: number|null:: Primary selected pin index (legacy pointer)
+│   ├── selectedPins: Array<number>  :: Multi-selection pin indices
+│   ├── selectedConnectionIndex: num :: Selected connection for edit modal / marching ants
+│   ├── connectStartIndex: num|null  :: Pin index originating an in-progress line connection
+│   ├── currentTool: string          :: 'pin' | 'card' | 'area' | 'text' | 'pan'
+│   └── currentTypeId: string        :: 'pin:circle' | 'card:card' | 'area:circle' | 'text:bubble'
+│
+└── ◇ AppState.history               :: Undo/Redo snapshot ring buffer (MAX_HISTORY = 50)
+    └── snapshot: { document, view } :: Cloned deep state for Cmd+Z undo
+
+§ CORE_COMPONENTS [Engine Architecture]
+├── ◈ Application (js/core/app.js)
+│   ├── λ initialize()               :: Bootstraps canvas, theme, managers, and initial draw
+│   ├── λ draw()                     :: Clear & execute WorldSpace, ScreenSpace, UI layers
+│   ├── λ render()                   :: Request frame via requestAnimationFrame loop
+│   ├── λ getVisibleWorldBounds(pad) :: Viewport culling boundaries (left, top, right, bottom)
+│   ├── λ centerViewOnPins(pad, center) :: Safe auto-camera fit on all pins or focal target
+│   ├── λ layoutGrid()               :: Master 40px matrix grid layout with count-based aspect
+│   ├── λ layoutRadial()             :: Concentric ring starburst layout with root centering & 40px snap
+│   ├── λ layoutForce()              :: Physics spring-embedder layout with cooling schedule
+│   ├── λ layoutClusters()           :: Affinity clustering by color/slot in concentric rings
+│   ├── λ layoutTimeline()           :: Chronological date layout with object timestamp unwrapping
+│   └── λ findPinAt(wx, wy)          :: 2-pass spatial hit testing (pass 1: pins, pass 2: areas)
+│
+├── ◈ BoardManager (js/core/boardManager.js)
+│   ├── λ getIndex()                 :: Returns boards array and activeId metadata
+│   ├── λ createBoard(title, desc)   :: Creates new board ID and initializes default doc
+│   ├── λ loadBoard(boardId)         :: Deserializes board data into AppState
+│   ├── λ saveBoard(updateThumbnail) :: Serializes AppState to localStorage (`board_${id}`)
+│   ├── λ duplicateBoard(boardId)    :: Deep-clones board document with new UUIDs
+│   ├── λ deleteBoard(boardId)       :: Prunes board entry and updates active index
+│   └── λ exportBoard(boardId)       :: Generates downloadable `.json` board archive
+│
+├── ◈ EventHandlers (js/events/eventHandlers.js)
+│   ├── λ handleCanvasMouseDown(e)   :: Tool dispatch, hit testing, drag initialization
+│   ├── λ handleCanvasMouseMove(e)   :: Coordinate transforms, live marquee, connection preview
+│   ├── λ handleCanvasMouseUp(e)     :: Pin drop, area commit, connection completion
+│   ├── λ handleCanvasWheel(e)       :: Cursor-centered zoom (`appState.scale *= delta`)
+│   ├── λ handleKeyDown(e)           :: Shortcuts (`1`-`5`, `Cmd+Z`, `Backspace`, `Shift+1-9`)
+│   └── λ frameAllPins()             :: Camera fit all entities (now delegates to safe bounds)
+│
+└── ◈ DrawingEngine (js/drawing.js)
+    ├── λ registerShape(id, def)     :: Registers shape renderer with drawMain & drawDecoration
+    ├── λ drawPinShape(ctx, pin, m)  :: Renders base shape, custom icons, borders, and selection
+    ├── λ drawConnections(ctx)       :: Center-to-center straight or curved quadratic bezier lines
+    └── λ drawSelectedConnection()   :: Marching ants animated two-pass line dash offset
+
+§ CALL_EDGES [Critical Data & Control Flow]
+├── UI Click (Tool Selection)        → ToolbarManager.setTool() → AppState.session.currentTool
+├── Canvas Drag (Area Creation)      → EventHandlers.onMouseDown() → EventHandlers.areaDragStart
+├── Area Mouse Up (Commit)           → AppState.pins.push(areaPin) → AppState.addConnection()
+├── Right Click (Radial Menu)        → EventHandlers.openRadialMenu() → Actions.execute("pin:edit")
+├── Radial Edit (Pencil Action)      → ModalManager.openPinModal(index) → DOM auto-save listeners
+├── Layout Button Click (Dock)       → Application.layoutGrid/Radial/Force/Clusters/Timeline()
+│                                    → AppState.saveHistory() → App.centerViewOnPins() → App.draw()
+└── Save Trigger (Auto / Manual)     → Application.saveState() → BoardManager.saveBoard(false)
+
+§ CRITICAL_INVARIANTS [Guards]
+├── ⚖ Zero NaN Policy                :: Any write to pin.x, pin.y, scale, offsetX, offsetY MUST be finite
+├── ⚖ Two-Pass Hit Testing           :: Regular pins hit-tested first; Area shapes hit-tested second
+├── ⚖ Non-Destructive Theme Boot     :: `applyTheme(id, false)` prevents modifying custom pin colors
+├── ⚖ Non-Splicing Pin Removal       :: `appState.removePin(index)` cleans connection graph pointers
+└── ⚖ Container Viewport Authority   :: View calculations reference `#canvas-container` clientBounds

@@ -1,0 +1,27 @@
+{
+  "name": "investigative-board",
+  "version": "1.0.0",
+  "description": "Infinite canvas investigative corkboard, spatial mind map, and graph editor with AI Agent MCP and CLI tooling",
+  "main": "cli/index.js",
+  "bin": {
+    "ib": "./cli/index.js",
+    "investigative-board": "./cli/index.js",
+    "boardcraft": "./cli/index.js"
+  },
+  "scripts": {
+    "start": "node cli/server.js",
+    "mcp": "node cli/mcp-server.js",
+    "test": "node tests/run-all.js"
+  },
+  "keywords": [
+    "canvas",
+    "investigative-board",
+    "mindmap",
+    "graph",
+    "mcp",
+    "mcp-server",
+    "artcraft"
+  ],
+  "author": "4waymedia",
+  "license": "MIT"
+}

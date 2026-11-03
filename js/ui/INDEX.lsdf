@@ -1,0 +1,9 @@
+# L-SDF Index: js/ui
+# Subsystem: User Interface Components, Floating Docks, Modals & Navigation
+
+§ UI_SUBSYSTEM
+├── ◈ modal.js               :: ModalManager (unified pin, text, area, and connection dialogs)
+├── ◈ tray.js                :: TrayManager (bottom evidence card dock & tray slots)
+├── ◈ toolbar.js             :: ToolbarManager (top tool family bar, palette selector, themes)
+├── ◈ boardPicker.js         :: BoardPickerUI (board browser modal, thumbnail cards, search)
+└── ◈ systemMenu.js          :: SystemMenuManager (top-left board controls, new/open/export)

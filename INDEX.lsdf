@@ -1,0 +1,69 @@
+# ============================================================================
+# L-SDF: Latent-Structured Documentation Format (Root Map)
+# Project: investigative-board (BoardCraft Engine)
+# Topology: High-speed semantic navigation map for AI Agents
+# ============================================================================
+
+§ ROOT [investigative-board]
+│
+├── ⚙ index.html                     :: Single-page canvas DOM, Layout Dock, modals, app bootloader
+├── ⚙ package.json                   :: MCP server definition, zero-dependency node runtime
+├── ⚙ README.md                      :: Architecture summary, local running instructions
+├── ⚙ INDEX.detail.lsdf              :: Detailed structural contracts, state schemas & call edges
+│
+├── 📂 js/                           :: Client-side application source code
+│   ├── 📂 core/                     :: Core state, lifecycle, board persistence, and application engine
+│   │   ├── ◈ app.js                 :: Application coordinator, render loop, layout algorithms, camera
+│   │   ├── ◇ state.js               :: AppState singleton (document, view, session, history)
+│   │   ├── ◈ boardManager.js        :: Multi-board CRUD, local storage indexing, JSON import/export
+│   │   ├── ◈ dragManager.js         :: Spatial translation, pin drags, area containment updates
+│   │   ├── ◈ backgroundBuilder.js   :: Dynamic themed canvas patterns & canvas background styling
+│   │   ├── ◈ previewRenderer.js     :: Thumbnail generation for board picker cards
+│   │   ├── ◈ syncBridge.js          :: Bi-directional filesystem-to-memory synchronization bridge
+│   │   ├── ⚙ schema.js              :: Theme schemas, color definitions, board format specs
+│   │   ├── ⚙ constants.js           :: Numeric metrics, UI dimensions, default palette
+│   │   └── ⚡ actions.js             :: Centralized action registry, modal dispatch mappings
+│   │
+│   ├── 📂 events/                   :: Input handling, interaction lifecycle, and event dispatch
+│   │   └── ◈ eventHandlers.js       :: Canvas mouse/pointer, marquee selection, keyboard shortcuts
+│   │
+│   ├── 📂 ui/                       :: User interface modules, modals, docks, and toolbars
+│   │   ├── ◈ modal.js               :: ModalManager (pin modal, text modal, area modal, confirm)
+│   │   ├── ◈ tray.js                :: TrayManager (bottom card dock, drag-from-tray mechanics)
+│   │   ├── ◈ toolbar.js             :: ToolbarManager (tool mode selector, palette bar, themes)
+│   │   ├── ◈ boardPicker.js         :: BoardPickerUI (multi-board switcher modal & grid)
+│   │   └── ◈ systemMenu.js          :: SystemMenuManager (top navigation dropdown menu)
+│   │
+│   ├── 📂 domain/                   :: Domain entity models and connection graph
+│   │   ├── ◈ nodeTypes.js           :: Node type registry, shapes, categories, base radii
+│   │   ├── ◈ connections.js         :: Line connection engine, bezier math, endpoint resolution
+│   │   └── ◈ cards.js               :: Card domain model and data helpers
+│   │
+│   ├── 📂 utilities/                :: Utility helpers
+│   │   └── ◈ imageUtils.js          :: Canvas image downsampling, caching, aspect-ratio bounds
+│   │
+│   ├── ◈ drawing.js                 :: Canvas 2D renderers for 15+ pin shapes, connections, marching ants
+│   ├── ◈ tools.js                   :: Active tool states (pin, area, text, line, marquee)
+│   ├── ◈ themes.js                  :: Theme palette loader and background style bridge
+│   └── ◈ ui.js                      :: Legacy modal bindings and DOM auto-save hooks
+│
+├── 📂 cli/                          :: Standalone CLI & Headless agent tools
+│   └── ◈ mcp-server.js              :: JSON-RPC 2.0 Model Context Protocol tool runner (13 tools)
+│
+├── 📂 css/                          :: Modular stylesheets
+│   ├── board-styles.css             :: Core viewport styles, layout dock, modals, radial menu
+│   └── layout.css                   :: Responsive workspace positioning
+│
+├── 📂 tests/                        :: Automated regression & unit test suite (31 suites)
+│   ├── ◈ run-all.js                 :: Parallel test execution runner and summary reporter
+│   ├── ◈ test-layout-erasing-fix.js :: BUG-013 verification: safe layouts, finite coords, culling
+│   ├── ◈ test-area-connection.js    :: BUG-012 verification: area pin hit testing and line creation
+│   ├── ◈ test-layout-dock.js        :: BUG-011 verification: layout dock auto-centering
+│   ├── ◈ test-image-hit-testing.js  :: BUG-010 verification: image pin bounds & hidden shapes
+│   └── ⚙ INDEX.lsdf                 :: Complete test matrix catalog
+│
+└── 📂 docs/                         :: Developer & AI specifications
+    ├── ⚙ PROGRESS.md                :: Test matrix, bug logs (BUG-001 - BUG-013), refactor history
+    ├── ⚙ ARCHITECTURE.md            :: System design, state machine, rendering pipeline
+    ├── ⚙ ROADMAP.md                 :: Project phases (Phase 1-4)
+    └── ⚙ API_AND_AGENT_SPEC.md      :: CLI/MCP command specifications and schema definitions

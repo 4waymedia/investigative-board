@@ -1085,6 +1085,7 @@ function renderAddColorPicker() {
  */
 function renderCardColorPicker() {
   const container = document.getElementById("cm-color-picker");
+  if (!container) return;
   container.innerHTML = "";
 
   const theme = THEMES.find((t) => t.id === currentThemeId);

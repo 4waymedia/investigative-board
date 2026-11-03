@@ -431,9 +431,9 @@ class Application {
     this.render();
     console.log("✅ Initial render complete");
 
-    // Apply current theme
+    // Apply current theme without converting existing custom pin colors on startup
     if (this.deps.applyTheme && this.appState.currentThemeId) {
-      this.deps.applyTheme(this.appState.currentThemeId);
+      this.deps.applyTheme(this.appState.currentThemeId, false);
     }
 
     // Also render toolbar and tray
@@ -531,7 +531,7 @@ class Application {
     this.toolbarManager = new this.deps.ToolbarManager(this.appState, {
       nodeTypes: window.NODE_TYPES,
       defaultColors: window.DEFAULT_COLORS,
-      themes: window.THEMES || [{ id: "default", name: "Default" }],
+      themes: window.THEMES || (typeof window.getThemes === "function" ? window.getThemes() : null) || [{ id: "dark", name: "Dark" }],
       families: [
         { id: "pin", name: "Pin", defaultIcon: "●" },
         { id: "card", name: "Card", defaultIcon: "▤" },
@@ -622,27 +622,14 @@ class Application {
     // Remove any margin since canvas-container positions it correctly
     this.canvas.style.marginTop = "0px";
 
-    // Calculate content bounds to ensure canvas extends to show all content
-    const contentBounds = this.calculateContentBounds();
-    const minCanvasHeight = contentBounds ? contentBounds.bottom * this.appState.scale + 100 : 0;
+    // Keep canvas dimensions locked to true visible viewport
+    this.canvas.width = window.innerWidth || 1200;
+    const baseHeight = Math.max(300, (window.innerHeight - menuHeight - trayHeight) || 700);
+    this.canvas.height = baseHeight;
 
-    // Set canvas size to fill the container, but extend height if content goes below
-    this.canvas.width = window.innerWidth;
-    const baseHeight = window.innerHeight - menuHeight - trayHeight;
-    this.canvas.height = Math.max(baseHeight, minCanvasHeight);
-
-    // Adjust container height if canvas extends beyond viewport
     const container = document.getElementById('canvas-container');
     if (container) {
-      const currentBottom = parseInt(container.style.bottom) || 140;
-      const requiredHeight = this.canvas.height + currentBottom;
-      if (requiredHeight > window.innerHeight) {
-        // Content extends below viewport, adjust container
-        container.style.height = this.canvas.height + 'px';
-      } else {
-        // Reset to default if content fits
-        container.style.height = '';
-      }
+      container.style.height = ''; // Ensure CSS top:50px; bottom:140px governs viewport
     }
 
     this.render();
@@ -774,6 +761,11 @@ class Application {
     this.ctx.translate(this.appState.offsetX, this.appState.offsetY);
     this.ctx.scale(this.appState.scale, this.appState.scale);
 
+    // Draw canvas grid in world space behind all connections, areas, and pins
+    if (this.appState.gridVisible !== false) {
+      this.drawCanvasGrid(this.ctx);
+    }
+
     // Draw connection preview first (behind other elements)
     this.drawConnectionPreview();
 
@@ -791,6 +783,15 @@ class Application {
     this.drawPins(this.ctx);
 
     this.ctx.restore();
+  }
+
+  // Draw subtle world-space alignment grid
+  drawCanvasGrid(ctx) {
+    if (typeof LayoutEngine === 'undefined') return;
+    const viewport = this.getVisibleWorldBounds(100);
+    if (!viewport) return;
+    const theme = window.themeManager?.getCurrentTheme() || {};
+    LayoutEngine.drawGrid(ctx, viewport, this.appState.scale, theme);
   }
 
   // Draw screen-space elements (UI overlays, marquees, etc.)
@@ -966,7 +967,8 @@ class Application {
   drawConnections(ctx) {
     if (!this.appState.connections || !this.appState.pins) return;
 
-    // Note: Connection preview is drawn in main draw() method with animation
+    // Viewport bounds for culling offscreen connections
+    const viewport = this.getVisibleWorldBounds(100);
 
     // Group connections by endpoint for fan-out calculations
     const connectionsByEndpoint = {};
@@ -987,8 +989,19 @@ class Application {
       const endPin = this.appState.pins[endIndex];
 
       if (!startPin || !endPin) {
-        console.log(`❌ Missing pins for connection ${idx}: startIndex=${startIndex}, endIndex=${endIndex}, start=${!!startPin}, end=${!!endPin}`);
         return;
+      }
+
+      // Viewport culling: skip if both endpoints are offscreen on the same side
+      if (viewport) {
+        if (
+          (startPin.x < viewport.left && endPin.x < viewport.left) ||
+          (startPin.x > viewport.right && endPin.x > viewport.right) ||
+          (startPin.y < viewport.top && endPin.y < viewport.top) ||
+          (startPin.y > viewport.bottom && endPin.y > viewport.bottom)
+        ) {
+          return;
+        }
       }
 
       // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
@@ -1295,16 +1308,59 @@ class Application {
     });
   }
 
+  // Get visible world-space bounds with optional padding for viewport culling
+  getVisibleWorldBounds(padding = 100) {
+    if (!this.canvas) return null;
+    const scale = (Number.isFinite(this.appState?.scale) && this.appState.scale > 0) ? this.appState.scale : 1;
+    const ox = Number.isFinite(this.appState?.offsetX) ? this.appState.offsetX : 0;
+    const oy = Number.isFinite(this.appState?.offsetY) ? this.appState.offsetY : 0;
+    const container = document.getElementById("canvas-container");
+    const width = (container && container.clientWidth) ? container.clientWidth : (this.canvas.width || 1200);
+    const height = (container && container.clientHeight) ? container.clientHeight : (this.canvas.height || 700);
+
+    return {
+      left: (0 - ox) / scale - padding,
+      top: (0 - oy) / scale - padding,
+      right: (width - ox) / scale + padding,
+      bottom: (height - oy) / scale + padding
+    };
+  }
+
   // Draw all pins
   drawPins(ctx) {
     if (!this.appState.pins) {
       return;
     }
 
+    // Viewport bounds for culling offscreen pins
+    const viewport = this.getVisibleWorldBounds(200);
+
     // Initialize label collision tracking for this frame
     window._drawnLabels = [];
 
     this.appState.pins.forEach((pin, index) => {
+      if (!pin || !Number.isFinite(pin.x) || !Number.isFinite(pin.y)) return;
+
+      // Viewport culling optimization: skip rendering pins outside view
+      if (viewport) {
+        const size = Math.max(
+          Number(pin.width) || 0,
+          Number(pin.height) || 0,
+          Number(pin.radius) ? Number(pin.radius) * 2 : 0,
+          Number(pin.areaSize) ? Number(pin.areaSize) * 2 : 0,
+          pin.image?.size ? Number(pin.image.size) : 0,
+          60
+        );
+        const boundRadius = (size / 2) * (Number(pin.pinScale) || 1);
+        if (
+          pin.x + boundRadius < viewport.left ||
+          pin.x - boundRadius > viewport.right ||
+          pin.y + boundRadius < viewport.top ||
+          pin.y - boundRadius > viewport.bottom
+        ) {
+          return;
+        }
+      }
       // DEBUG: Add crosshair to first pin to check alignment
       if (index === 0 && window.DEBUG_CONNECTIONS) {
         ctx.save();
@@ -1661,17 +1717,94 @@ class Application {
   }
 
   findPinAt(wx, wy) {
-    // Find the topmost pin at the given world coordinates
-    for (let i = this.appState.pins.length - 1; i >= 0; i--) {
-      const pin = this.appState.pins[i];
-      if (!pin) continue;
+    // Helper to determine if a pin is an area pin
+    const isArea = (pin) => {
+      return Boolean(
+        (pin.typeId && pin.typeId.startsWith("area:")) ||
+        pin.shape === "area-circle" ||
+        pin.shape === "area-rect" ||
+        pin.areaType === "circle" ||
+        pin.areaType === "square"
+      );
+    };
 
-      // Text shapes that use rectangular hit detection
+    // Helper to test if world coordinate (wx, wy) hits a specific pin
+    const checkPinHit = (pin, checkAreaShape) => {
+      if (!pin) return false;
+
+      // 1. Check Image Hit Bounds (if pin has an image)
+      if (pin.image && pin.image.dataUrl) {
+        const imageSize = pin.image.size || 100;
+        const imagePosition = pin.image.position || "center";
+        let positionOffsetX = 0;
+        let positionOffsetY = 0;
+
+        switch (imagePosition) {
+          case "top": positionOffsetY = -imageSize / 2; break;
+          case "bottom": positionOffsetY = imageSize / 2; break;
+          case "left": positionOffsetX = -imageSize / 2; break;
+          case "right": positionOffsetX = imageSize / 2; break;
+          case "top-left": positionOffsetX = -imageSize / 2; positionOffsetY = -imageSize / 2; break;
+          case "top-right": positionOffsetX = imageSize / 2; positionOffsetY = -imageSize / 2; break;
+          case "bottom-left": positionOffsetX = -imageSize / 2; positionOffsetY = imageSize / 2; break;
+          case "bottom-right": positionOffsetX = imageSize / 2; positionOffsetY = imageSize / 2; break;
+        }
+
+        const imgCenterX = pin.x + positionOffsetX;
+        const imgCenterY = pin.y + positionOffsetY;
+
+        if (pin.image.style === "circular" || !pin.image.style) {
+          const dx = wx - imgCenterX;
+          const dy = wy - imgCenterY;
+          if (dx * dx + dy * dy <= (imageSize / 2) * (imageSize / 2)) {
+            return true;
+          }
+        } else {
+          // Oval, portrait, landscape, or rounded rectangle bounds
+          const halfSize = imageSize / 2;
+          if (wx >= imgCenterX - halfSize && wx <= imgCenterX + halfSize &&
+              wy >= imgCenterY - halfSize && wy <= imgCenterY + halfSize) {
+            return true;
+          }
+        }
+      }
+
+      // 2. Area shapes (Circle & Rectangle/Square)
+      if (checkAreaShape && isArea(pin)) {
+        const isCircleArea = pin.typeId === "area:circle" || pin.areaType === "circle" || pin.shape === "area-circle";
+        if (isCircleArea) {
+          const radius = (pin.areaSize || pin.radius || 50) * (pin.areaScale || 1);
+          const dx = wx - pin.x;
+          const dy = wy - pin.y;
+          if (dx * dx + dy * dy <= radius * radius) {
+            return true;
+          }
+        } else {
+          // Rectangular / square area
+          const scale = pin.areaScale || 1;
+          const w = (pin.width || (pin.areaSize ? pin.areaSize * 2 : 100)) * scale;
+          const h = (pin.height || (pin.areaSize ? pin.areaSize * 2 : 100)) * scale;
+          if (wx >= pin.x - w / 2 && wx <= pin.x + w / 2 && wy >= pin.y - h / 2 && wy <= pin.y + h / 2) {
+            return true;
+          }
+        }
+        // Center pin fallback
+        const dx = wx - pin.x;
+        const dy = wy - pin.y;
+        if (Math.sqrt(dx * dx + dy * dy) <= Math.max(16, (pin.pinScale || 1) * 20)) {
+          return true;
+        }
+        return false;
+      }
+
+      if (isArea(pin) && !checkAreaShape) {
+        // In non-area pass, skip area pins so smaller contained pins get priority
+        return false;
+      }
+
+      // 3. Text shapes that use rectangular hit detection
       const textShapes = ['bubble', 'rectangle', 'text-plain', 'text-title'];
-      
-      // Special handling for text pins (which have rectangular bounds)
       if (textShapes.includes(pin.shape)) {
-        // Get default dimensions based on shape
         const defaultDimensions = {
           'bubble': { width: 140, height: 70 },
           'rectangle': { width: 120, height: 60 },
@@ -1679,19 +1812,17 @@ class Application {
           'text-title': { width: 200, height: 40 }
         };
         const defaults = defaultDimensions[pin.shape] || { width: 120, height: 60 };
-        
         const width = pin.width || defaults.width;
         const height = pin.height || defaults.height;
         const titleHeight = pin.label ? (pin.fontSize || 14) * 1.1 + 16 : 0;
 
-        // Check if click is within the extended bounding box (text area + title)
         const left = pin.x - width/2;
         const right = pin.x + width/2;
         const top = pin.y - height/2;
-        const bottom = pin.y + height/2 + titleHeight; // Include title area below
+        const bottom = pin.y + height/2 + titleHeight;
 
         if (wx >= left && wx <= right && wy >= top && wy <= bottom) {
-          return i;
+          return true;
         }
       } else {
         // Standard circular hit detection for regular pins
@@ -1699,17 +1830,35 @@ class Application {
         const dy = wy - pin.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Use pin scale for hit detection
         const scale = pin.pinScale || 1;
         const baseRadius = this.deps.PIN_BASES?.[pin.typeId]?.baseRadius || 10;
-        // Make hit detection more generous (2x radius for easier clicking)
-        const hitRadius = baseRadius * scale * 2;
+        const hitRadius = Math.max(16, baseRadius * scale * 2);
 
         if (distance <= hitRadius) {
-          return i;
+          return true;
         }
       }
+
+      return false;
+    };
+
+    // Pass 1: Check standard (non-area) pins first from top to bottom
+    // so pins contained inside an area can be clicked/selected easily
+    for (let i = this.appState.pins.length - 1; i >= 0; i--) {
+      const pin = this.appState.pins[i];
+      if (pin && !isArea(pin) && checkPinHit(pin, false)) {
+        return i;
+      }
     }
+
+    // Pass 2: Check area pins from top to bottom
+    for (let i = this.appState.pins.length - 1; i >= 0; i--) {
+      const pin = this.appState.pins[i];
+      if (pin && isArea(pin) && checkPinHit(pin, true)) {
+        return i;
+      }
+    }
+
     return null;
   }
 
@@ -1961,8 +2110,8 @@ class Application {
   // Save application state
   saveState() {
     if (this.boardManager && this.appState.meta?.id) {
-      // Use BoardManager for multi-board system
-      this.boardManager.saveBoard();
+      // Use BoardManager for multi-board system (skip synchronous thumbnail generation for performance)
+      this.boardManager.saveBoard(false);
     } else if (this.boardManager) {
       // Multi-board system active but no board ID - don't save to legacy key
       // This happens after clearBoard() - board needs to be created/selected first
@@ -2149,45 +2298,511 @@ class Application {
   // Set up control button event handlers
   setupControlHandlers() {
     // Reset button
-    const resetBtn = document.getElementById("reset");
-    if (resetBtn) {
-      resetBtn.onclick = () => this.resetBoard();
-    }
-
-    // Magic button (force layout toggle)
-    const magicBtn = document.getElementById("magic");
-    if (magicBtn) {
-      magicBtn.onclick = () => {
-        // TODO: Implement force layout functionality
-        alert("Force layout functionality not yet implemented");
+    // Layout Dock controls
+    const layoutDock = document.getElementById("layout-dock");
+    const layoutDockToggle = document.getElementById("layout-dock-toggle");
+    if (layoutDockToggle && layoutDock) {
+      layoutDockToggle.onclick = () => {
+        layoutDock.classList.toggle("collapsed");
       };
     }
 
-    // Radial button
+    const gridBtn = document.getElementById("btn-layout-grid");
+    if (gridBtn) {
+      gridBtn.onclick = () => this.layoutGrid();
+    }
+
+    // Radial layout button
     const radialBtn = document.getElementById("radial");
     if (radialBtn) {
-      radialBtn.onclick = () => {
-        // TODO: Implement radial layout functionality
-        alert("Radial layout functionality not yet implemented");
-      };
+      radialBtn.onclick = () => this.layoutRadial();
     }
 
-    // Clusters button
-    const clustersBtn = document.getElementById("clusters");
-    if (clustersBtn) {
-      clustersBtn.onclick = () => {
-        // TODO: Implement clusters layout functionality
-        alert("Clusters layout functionality not yet implemented");
-      };
+    // Force-directed physics layout button
+    const magicBtn = document.getElementById("magic");
+    if (magicBtn) {
+      magicBtn.onclick = () => this.layoutForce();
     }
 
     // Timeline button
     const timelineBtn = document.getElementById("timeline");
     if (timelineBtn) {
-      timelineBtn.onclick = () => {
-        this.layoutTimeline();
+      timelineBtn.onclick = () => this.layoutTimeline();
+    }
+
+    // Clusters layout button
+    const clustersBtn = document.getElementById("clusters");
+    if (clustersBtn) {
+      clustersBtn.onclick = () => this.layoutClusters();
+    }
+
+    // Group layout button (Organize by group/family)
+    const groupsBtn = document.getElementById("btn-layout-groups");
+    if (groupsBtn) {
+      groupsBtn.onclick = () => this.layoutByGroup("family");
+    }
+
+    // Canvas grid toggle button
+    const toggleGridBtn = document.getElementById("btn-toggle-grid");
+    if (toggleGridBtn) {
+      if (this.appState.gridVisible !== false) {
+        toggleGridBtn.classList.add("active");
+      }
+      toggleGridBtn.onclick = () => {
+        this.appState.gridVisible = !this.appState.gridVisible;
+        toggleGridBtn.classList.toggle("active", this.appState.gridVisible);
+        this.draw();
       };
     }
+
+    const resetBtn = document.getElementById("reset");
+    if (resetBtn) {
+      resetBtn.onclick = () => this.resetBoard();
+    }
+  }
+
+  // Center and fit canvas camera on all pins
+  centerViewOnPins(padding = 100, targetCenter = null) {
+    if (!this.appState.pins || this.appState.pins.length === 0) return;
+
+    if (typeof this.resizeCanvas === 'function') {
+      this.resizeCanvas();
+    }
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let validCount = 0;
+
+    this.appState.pins.forEach(pin => {
+      const px = Number(pin.x);
+      const py = Number(pin.y);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return;
+
+      validCount++;
+      const w = Number.isFinite(Number(pin.width)) ? Number(pin.width) : 0;
+      const h = Number.isFinite(Number(pin.height)) ? Number(pin.height) : 0;
+      const r = Number.isFinite(Number(pin.radius)) ? Number(pin.radius) * 2 : 0;
+      const a = Number.isFinite(Number(pin.areaSize)) ? Number(pin.areaSize) * 2 : 0;
+      const rawImgSize = pin.image?.size;
+      const imgSize = Number.isFinite(Number(rawImgSize)) ? Number(rawImgSize) : (parseFloat(rawImgSize) || 0);
+      const size = Math.max(w, h, r, a, imgSize, 60);
+
+      const halfSize = (Number.isFinite(size) ? size : 60) / 2;
+      minX = Math.min(minX, px - halfSize);
+      maxX = Math.max(maxX, px + halfSize);
+      minY = Math.min(minY, py - halfSize);
+      maxY = Math.max(maxY, py + halfSize);
+    });
+
+    if (validCount === 0 || !Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+      return;
+    }
+
+    const centerX = (targetCenter && Number.isFinite(targetCenter.x)) ? targetCenter.x : (minX + maxX) / 2;
+    const centerY = (targetCenter && Number.isFinite(targetCenter.y)) ? targetCenter.y : (minY + maxY) / 2;
+
+    const maxExtentX = Math.max(Math.abs(maxX - centerX), Math.abs(centerX - minX));
+    const maxExtentY = Math.max(Math.abs(maxY - centerY), Math.abs(centerY - minY));
+    const contentWidth = Math.max(80, maxExtentX * 2 + padding * 2);
+    const contentHeight = Math.max(80, maxExtentY * 2 + padding * 2);
+
+    const container = document.getElementById("canvas-container");
+    const menuHeight = this.deps?.MENU_HEIGHT || 50;
+    const trayHeight = this.deps?.TRAY_HEIGHT || 140;
+    const viewWidth = (container && container.clientWidth) ? container.clientWidth : (this.canvas ? this.canvas.width : (window.innerWidth || 1200));
+    const viewHeight = (container && container.clientHeight && !container.style.height)
+      ? container.clientHeight
+      : Math.max(300, (window.innerHeight - menuHeight - trayHeight) || 700);
+
+    const scaleX = viewWidth / contentWidth;
+    const scaleY = viewHeight / contentHeight;
+    const newScale = Math.max(0.2, Math.min(scaleX, scaleY, 1.0));
+
+    if (Number.isFinite(newScale) && Number.isFinite(centerX) && Number.isFinite(centerY)) {
+      this.appState.scale = newScale;
+      this.appState.offsetX = Math.round(viewWidth / 2 - centerX * newScale);
+      this.appState.offsetY = Math.round(viewHeight / 2 - centerY * newScale);
+    }
+
+    if (typeof this.syncGlobalVariables === "function") {
+      this.syncGlobalVariables();
+    }
+  }
+
+  // Grid layout - arrange pins in a neat, balanced matrix and center view
+  layoutGrid() {
+    if (!this.appState.pins || this.appState.pins.length === 0) return;
+    this.appState.timelineActive = false;
+    if (typeof this.appState.saveHistory === "function") {
+      this.appState.saveHistory();
+    }
+    this.saveState();
+
+    let center = null;
+    if (typeof LayoutEngine !== "undefined") {
+      center = LayoutEngine.applyDefaultGrid(this.appState.pins);
+    } else {
+      const pins = this.appState.pins;
+      const count = pins.length;
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+
+      const spacingX = 220;
+      const spacingY = 160;
+
+      let currentCenterX = 0;
+      let currentCenterY = 0;
+      let validCount = 0;
+      pins.forEach(p => {
+        const px = Number(p.x);
+        const py = Number(p.y);
+        if (Number.isFinite(px) && Number.isFinite(py)) {
+          currentCenterX += px;
+          currentCenterY += py;
+          validCount++;
+        }
+      });
+
+      if (validCount > 0) {
+        currentCenterX = Math.round(currentCenterX / validCount);
+        currentCenterY = Math.round(currentCenterY / validCount);
+      } else {
+        const container = document.getElementById("canvas-container");
+        currentCenterX = Math.round((container?.clientWidth || window.innerWidth || 1200) / 2);
+        currentCenterY = Math.round(((container?.clientHeight || window.innerHeight - 190) || 700) / 2);
+      }
+
+      center = { x: currentCenterX, y: currentCenterY };
+      const totalWidth = (cols - 1) * spacingX;
+      const totalHeight = (rows - 1) * spacingY;
+      const startX = currentCenterX - totalWidth / 2;
+      const startY = currentCenterY - totalHeight / 2;
+
+      pins.forEach((pin, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        pin.x = Math.round(startX + col * spacingX);
+        pin.y = Math.round(startY + row * spacingY);
+      });
+    }
+
+    this.centerViewOnPins(100, center);
+    this.saveState();
+    this.draw();
+    this.render();
+  }
+
+  // Group layout - organize pins by family, color, or type into aligned sub-grids on a macro-grid
+  layoutByGroup(groupBy = "family") {
+    if (!this.appState.pins || this.appState.pins.length === 0) return;
+    this.appState.timelineActive = false;
+    if (typeof this.appState.saveHistory === "function") {
+      this.appState.saveHistory();
+    }
+    this.saveState();
+
+    let center = null;
+    if (typeof LayoutEngine !== "undefined") {
+      center = LayoutEngine.applyGroupLayout(this.appState.pins, { groupBy });
+    }
+
+    this.centerViewOnPins(100, center);
+    this.saveState();
+    this.draw();
+    this.render();
+  }
+
+  // Radial / Starburst layout - positions root in center, neighbors in concentric rings
+  layoutRadial() {
+    if (!this.appState.pins || this.appState.pins.length === 0) return;
+    this.appState.timelineActive = false;
+    if (typeof this.appState.saveHistory === "function") {
+      this.appState.saveHistory();
+    }
+    this.saveState();
+
+    // Determine root: active selected pin, or highest connection degree
+    const pins = this.appState.pins;
+    const connections = this.appState.connections || [];
+    let rootIndex = 0;
+    if (this.appState.selectedPinIndex !== null && this.appState.selectedPinIndex >= 0 && this.appState.selectedPinIndex < pins.length) {
+      rootIndex = this.appState.selectedPinIndex;
+    } else {
+      const degree = new Array(pins.length).fill(0);
+      connections.forEach(c => {
+        const from = Number(c.from !== undefined ? c.from : c.startIndex);
+        const to = Number(c.to !== undefined ? c.to : c.endIndex);
+        if (Number.isInteger(from) && from >= 0 && from < pins.length &&
+            Number.isInteger(to) && to >= 0 && to < pins.length) {
+          degree[from]++;
+          degree[to]++;
+        }
+      });
+      let maxDeg = -1;
+      degree.forEach((deg, idx) => {
+        if (deg > maxDeg) {
+          maxDeg = deg;
+          rootIndex = idx;
+        }
+      });
+    }
+
+    let center = null;
+    if (typeof LayoutEngine !== "undefined" && typeof LayoutEngine.applyRadialLayout === "function") {
+      center = LayoutEngine.applyRadialLayout(pins, connections, rootIndex);
+    } else {
+      let currentCenterX = 0;
+      let currentCenterY = 0;
+      let validCount = 0;
+      pins.forEach(p => {
+        const px = Number(p.x);
+        const py = Number(p.y);
+        if (Number.isFinite(px) && Number.isFinite(py)) {
+          currentCenterX += px;
+          currentCenterY += py;
+          validCount++;
+        }
+      });
+
+      if (validCount > 0) {
+        currentCenterX = Math.round(currentCenterX / validCount);
+        currentCenterY = Math.round(currentCenterY / validCount);
+      } else {
+        const container = document.getElementById("canvas-container");
+        currentCenterX = Math.round((container?.clientWidth || window.innerWidth || 1200) / 2);
+        currentCenterY = Math.round(((container?.clientHeight || window.innerHeight - 190) || 700) / 2);
+      }
+
+      center = { x: currentCenterX, y: currentCenterY };
+      pins[rootIndex].x = currentCenterX;
+      pins[rootIndex].y = currentCenterY;
+
+      // Find immediate connections
+      const neighbors = new Set();
+      connections.forEach(c => {
+        const from = Number(c.from !== undefined ? c.from : c.startIndex);
+        const to = Number(c.to !== undefined ? c.to : c.endIndex);
+        if (from === rootIndex && to !== rootIndex && to >= 0 && to < pins.length) neighbors.add(to);
+        if (to === rootIndex && from !== rootIndex && from >= 0 && from < pins.length) neighbors.add(from);
+      });
+
+      const ring1Pins = Array.from(neighbors).map(i => pins[i]).filter(Boolean);
+      const otherPins = pins.filter((p, i) => i !== rootIndex && !neighbors.has(i));
+
+      if (ring1Pins.length > 0) {
+        const r1 = Math.max(200, ring1Pins.length * 36);
+        const step1 = (Math.PI * 2) / ring1Pins.length;
+        ring1Pins.forEach((p, i) => {
+          p.x = Math.round(currentCenterX + r1 * Math.cos(i * step1));
+          p.y = Math.round(currentCenterY + r1 * Math.sin(i * step1));
+        });
+      }
+
+      if (otherPins.length > 0) {
+        const r2 = Math.max(380, ring1Pins.length * 36 + otherPins.length * 28);
+        const step2 = (Math.PI * 2) / otherPins.length;
+        otherPins.forEach((p, i) => {
+          p.x = Math.round(currentCenterX + r2 * Math.cos(i * step2));
+          p.y = Math.round(currentCenterY + r2 * Math.sin(i * step2));
+        });
+      }
+    }
+
+    this.centerViewOnPins(100, center);
+    this.saveState();
+    this.draw();
+    this.render();
+  }
+
+  // Force-directed layout - untangles overlapping nodes using spring-embedder simulation
+  layoutForce() {
+    if (!this.appState.pins || this.appState.pins.length < 2) return;
+    this.appState.timelineActive = false;
+    if (typeof this.appState.saveHistory === "function") {
+      this.appState.saveHistory();
+    }
+    this.saveState();
+
+    const pins = this.appState.pins;
+    const connections = this.appState.connections || [];
+    const n = pins.length;
+
+    let currentCenterX = 0;
+    let currentCenterY = 0;
+    let validCount = 0;
+    pins.forEach(p => {
+      const px = Number(p.x);
+      const py = Number(p.y);
+      if (Number.isFinite(px) && Number.isFinite(py)) {
+        currentCenterX += px;
+        currentCenterY += py;
+        validCount++;
+      }
+    });
+
+    if (validCount > 0) {
+      currentCenterX = Math.round(currentCenterX / validCount);
+      currentCenterY = Math.round(currentCenterY / validCount);
+    } else {
+      const container = document.getElementById("canvas-container");
+      currentCenterX = Math.round((container?.clientWidth || window.innerWidth || 1200) / 2);
+      currentCenterY = Math.round(((container?.clientHeight || window.innerHeight - 190) || 700) / 2);
+    }
+
+    const K = 190; // Equilibrium distance
+    const iterations = 80;
+    const dt = 0.35;
+
+    for (let it = 0; it < iterations; it++) {
+      const fx = new Float32Array(n);
+      const fy = new Float32Array(n);
+
+      // Repulsion between all node pairs
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          let dx = pins[i].x - pins[j].x;
+          let dy = pins[i].y - pins[j].y;
+          let dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 1 || !Number.isFinite(dist)) {
+            dx = (Math.random() - 0.5) * 10;
+            dy = (Math.random() - 0.5) * 10;
+            dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          }
+          const repForce = (K * K) / dist;
+          const fxi = (dx / dist) * repForce;
+          const fyi = (dy / dist) * repForce;
+          if (Number.isFinite(fxi) && Number.isFinite(fyi)) {
+            fx[i] += fxi; fy[i] += fyi;
+            fx[j] -= fxi; fy[j] -= fyi;
+          }
+        }
+      }
+
+      // Attraction along connection springs
+      connections.forEach(c => {
+        const from = Number(c.from !== undefined ? c.from : c.startIndex);
+        const to = Number(c.to !== undefined ? c.to : c.endIndex);
+        if (Number.isInteger(from) && from >= 0 && from < n &&
+            Number.isInteger(to) && to >= 0 && to < n && from !== to &&
+            pins[from] && pins[to]) {
+          let dx = pins[from].x - pins[to].x;
+          let dy = pins[from].y - pins[to].y;
+          let dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          const attForce = (dist * dist) / K;
+          const fxi = (dx / dist) * attForce;
+          const fyi = (dy / dist) * attForce;
+          if (Number.isFinite(fxi) && Number.isFinite(fyi)) {
+            fx[from] -= fxi; fy[from] -= fyi;
+            fx[to] += fxi; fy[to] += fyi;
+          }
+        }
+      });
+
+      // Gravity pulling toward centroid
+      for (let i = 0; i < n; i++) {
+        fx[i] -= (pins[i].x - currentCenterX) * 0.04;
+        fy[i] -= (pins[i].y - currentCenterY) * 0.04;
+      }
+
+      // Cooling factor
+      const temp = 1.0 - (it / iterations) * 0.85;
+      for (let i = 0; i < n; i++) {
+        const dispLen = Math.sqrt(fx[i] * fx[i] + fy[i] * fy[i]);
+        if (dispLen > 0 && Number.isFinite(dispLen)) {
+          const step = Math.min(dispLen, 35 * temp);
+          const nx = pins[i].x + Math.round((fx[i] / dispLen) * step * dt);
+          const ny = pins[i].y + Math.round((fy[i] / dispLen) * step * dt);
+          if (Number.isFinite(nx)) pins[i].x = nx;
+          if (Number.isFinite(ny)) pins[i].y = ny;
+        }
+      }
+    }
+
+    this.centerViewOnPins();
+    this.saveState();
+    this.draw();
+    this.render();
+  }
+
+  // Affinity Clusters layout - groups pins into clusters by color/theme
+  layoutClusters() {
+    if (!this.appState.pins || this.appState.pins.length === 0) return;
+    this.appState.timelineActive = false;
+    if (typeof this.appState.saveHistory === "function") {
+      this.appState.saveHistory();
+    }
+    this.saveState();
+
+    if (typeof LayoutEngine !== "undefined") {
+      LayoutEngine.applyGroupLayout(this.appState.pins, { groupBy: "color" });
+    } else {
+      const pins = this.appState.pins;
+      const count = pins.length;
+
+      let currentCenterX = 0;
+      let currentCenterY = 0;
+      let validCount = 0;
+      pins.forEach(p => {
+        const px = Number(p.x);
+        const py = Number(p.y);
+        if (Number.isFinite(px) && Number.isFinite(py)) {
+          currentCenterX += px;
+          currentCenterY += py;
+          validCount++;
+        }
+      });
+
+      if (validCount > 0) {
+        currentCenterX = Math.round(currentCenterX / validCount);
+        currentCenterY = Math.round(currentCenterY / validCount);
+      } else {
+        const container = document.getElementById("canvas-container");
+        currentCenterX = Math.round((container?.clientWidth || window.innerWidth || 1200) / 2);
+        currentCenterY = Math.round(((container?.clientHeight || window.innerHeight - 190) || 700) / 2);
+      }
+
+      // Group pins by color or slot
+      const groups = new Map();
+      pins.forEach(pin => {
+        const key = pin.color || (pin.colorSlot !== undefined ? `slot_${pin.colorSlot}` : "default");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(pin);
+      });
+
+      const groupKeys = Array.from(groups.keys());
+      const numGroups = groupKeys.length;
+
+      if (numGroups === 1) {
+        this.layoutGrid();
+        return;
+      }
+
+      const clusterRingRadius = Math.max(260, numGroups * 85);
+      const angleStep = (Math.PI * 2) / numGroups;
+
+      groupKeys.forEach((key, gIdx) => {
+        const groupPins = groups.get(key);
+        const gCenterX = currentCenterX + clusterRingRadius * Math.cos(gIdx * angleStep);
+        const gCenterY = currentCenterY + clusterRingRadius * Math.sin(gIdx * angleStep);
+
+        if (groupPins.length === 1) {
+          groupPins[0].x = Math.round(gCenterX);
+          groupPins[0].y = Math.round(gCenterY);
+        } else {
+          const subRadius = Math.max(70, groupPins.length * 24);
+          const subStep = (Math.PI * 2) / groupPins.length;
+          groupPins.forEach((p, pIdx) => {
+            p.x = Math.round(gCenterX + subRadius * Math.cos(pIdx * subStep));
+            p.y = Math.round(gCenterY + subRadius * Math.sin(pIdx * subStep));
+          });
+        }
+      });
+    }
+
+    this.centerViewOnPins();
+    this.saveState();
+    this.draw();
+    this.render();
   }
 
   // Timeline layout - arrange pins chronologically
@@ -2219,28 +2834,45 @@ class Application {
     }
 
     // Save history before layout
+    if (typeof this.appState.saveHistory === "function") {
+      this.appState.saveHistory();
+    }
     this.saveState();
 
-    // Parse dates and sort chronologically
-    timedPins.forEach((tp) => (tp.timestamp = this.deps.parseDate(tp.dateStr)));
+    // Parse dates and sort chronologically - robustly extract numeric timestamp
+    timedPins.forEach((tp) => {
+      const parsed = typeof this.deps.parseDate === "function" ? this.deps.parseDate(tp.dateStr) : null;
+      if (parsed && typeof parsed === "object" && typeof parsed.timestamp === "number" && !isNaN(parsed.timestamp)) {
+        tp.timestamp = parsed.timestamp;
+      } else if (typeof parsed === "number" && !isNaN(parsed)) {
+        tp.timestamp = parsed;
+      } else {
+        const parsedTime = Date.parse(tp.dateStr);
+        tp.timestamp = !isNaN(parsedTime) ? parsedTime : Date.now();
+      }
+    });
     timedPins.sort((a, b) => a.timestamp - b.timestamp);
     this.appState.timelinePins = timedPins;
 
     const minTime = timedPins[0].timestamp;
     const maxTime = timedPins[timedPins.length - 1].timestamp;
+    const timeSpan = maxTime - minTime || 1;
 
     // Calculate timeline span based on number of pins (ensure good spacing)
     const pinSpacing = 150; // World units between pins
     const timelineWidth = Math.max(pinSpacing * (timedPins.length - 1), 500);
     const horizontalPadding = 100; // Padding on each end
-    
+
     // Center the timeline around the current view center
-    const viewCenterX = (this.canvas.width / 2 - this.appState.offsetX) / this.appState.scale;
+    const container = document.getElementById("canvas-container");
+    const viewWidth = (container && container.clientWidth) ? container.clientWidth : (this.canvas ? this.canvas.width : (window.innerWidth || 1200));
+    const currentScale = this.appState.scale || 1;
+    const viewCenterX = (viewWidth / 2 - (this.appState.offsetX || 0)) / currentScale;
     this.appState.timelineLeft = viewCenterX - timelineWidth / 2 - horizontalPadding;
     this.appState.timelineRight = viewCenterX + timelineWidth / 2 + horizontalPadding;
-    
+
     // Position timeline below existing pins (using fixed world coordinates)
-    const lowestY = this.appState.pins.length ? Math.max(...this.appState.pins.map((p) => p.y)) : 0;
+    const lowestY = this.appState.pins.length ? Math.max(...this.appState.pins.map((p) => Number(p.y) || 0)) : 0;
     const footerMarginWorld = 200; // Fixed world units below the lowest pin
     this.appState.timelineY = lowestY + footerMarginWorld;
 
@@ -2253,19 +2885,17 @@ class Application {
     // Position pins along timeline chronologically
     const worldSpan = this.appState.timelineRight - this.appState.timelineLeft - (2 * horizontalPadding);
     timedPins.forEach((tp, i) => {
-      const t = (tp.timestamp - minTime) / (maxTime - minTime || 1);
-      tp.pin.x = this.appState.timelineLeft + horizontalPadding + (t * worldSpan);
-      tp.pin.y = this.appState.timelineY + (i % 2 === 0 ? -offsetWorld : offsetWorld);
+      const t = (tp.timestamp - minTime) / timeSpan;
+      tp.pin.x = Math.round(this.appState.timelineLeft + horizontalPadding + (t * worldSpan));
+      tp.pin.y = Math.round(this.appState.timelineY + (i % 2 === 0 ? -offsetWorld : offsetWorld));
     });
 
-    // Adjust viewport if timeline extends beyond canvas
-    const footerScreenY = this.appState.timelineY * this.appState.scale + this.appState.offsetY;
-    if (footerScreenY > this.canvas.height - 80) {
-      this.appState.offsetY -= footerScreenY - (this.canvas.height - 80);
-    }
+    // Center camera on the timeline and all pins
+    this.centerViewOnPins();
 
     // Save state and redraw
     this.saveState();
+    this.draw();
     this.render();
   }
 
@@ -2345,6 +2975,3 @@ class Application {
 
 // Export for global access
 window.Application = Application;
-
-  // Export for global access
-  window.Application = Application;

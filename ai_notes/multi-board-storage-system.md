@@ -350,3 +350,4 @@ Board data structure supports future real-time sync:
 | `js/ui/boardPicker.js` | Board picker modal UI |
 | `js/ui/systemMenu.js` | File menu integration |
 | `css/board-styles.css` | Board picker styles |
+

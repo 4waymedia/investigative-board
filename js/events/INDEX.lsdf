@@ -1,0 +1,5 @@
+# L-SDF Index: js/events
+# Subsystem: User Input, Interaction Handlers & Shortcuts
+
+§ EVENTS_SUBSYSTEM
+└── ◈ eventHandlers.js       :: Pointer, mouse, keyboard shortcuts, marquee, zoom/pan

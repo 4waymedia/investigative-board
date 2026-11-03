@@ -366,3 +366,4 @@ window.PreviewRenderer = PreviewRenderer;
 
 // Create default instance
 window.previewRenderer = new PreviewRenderer();
+

@@ -128,6 +128,11 @@ class BoardPickerUI {
   open() {
     if (this.isOpen) return;
     
+    // Refresh thumbnail for current active board before rendering
+    if (this.boardManager && this.appState?.meta?.id) {
+      this.boardManager.saveBoard(true);
+    }
+
     this.isOpen = true;
     this.backdrop.style.display = 'flex';
     this._render();
@@ -572,3 +577,4 @@ class BoardPickerUI {
 // ============================================================================
 
 window.BoardPickerUI = BoardPickerUI;
+

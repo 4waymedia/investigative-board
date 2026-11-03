@@ -1,0 +1,96 @@
+{
+  "id": "1d24b679-06f3-4a1e-a802-4277c592010f",
+  "meta": {
+    "id": "1d24b679-06f3-4a1e-a802-4277c592010f",
+    "title": "Operation Nightshade",
+    "description": "A secret investigation",
+    "created": "2026-11-01T23:08:28.923Z",
+    "lastModified": "2026-11-01T23:08:38.892Z",
+    "thumbnail": null
+  },
+  "document": {
+    "pins": [
+      {
+        "id": "1793574518758_3joh",
+        "x": 200,
+        "y": 150,
+        "label": "Suspect Alpha",
+        "note": "",
+        "description": "Found near docks",
+        "color": "#f85149",
+        "colorSlot": "c2",
+        "shape": "circle",
+        "typeId": "pin:circle",
+        "date": "",
+        "width": 120,
+        "height": 60,
+        "pinScale": 1
+      },
+      {
+        "id": "1793574518826_liks",
+        "x": 500,
+        "y": 300,
+        "label": "Warehouse 4",
+        "note": "",
+        "description": "Last known location",
+        "color": "#3fb950",
+        "colorSlot": "c2",
+        "shape": "circle",
+        "typeId": "pin:circle",
+        "date": "",
+        "width": 120,
+        "height": 60,
+        "pinScale": 1
+      }
+    ],
+    "connections": [
+      {
+        "id": "conn_1793574518892_34ld",
+        "from": 0,
+        "to": 1,
+        "label": "Frequented",
+        "color": "#58a6ff",
+        "type": "curved",
+        "relationship": "relates-to"
+      }
+    ],
+    "cards": [],
+    "textElements": [],
+    "areas": [],
+    "currentThemeId": "dark",
+    "palette": [
+      {
+        "name": "Red",
+        "value": "#f85149"
+      },
+      {
+        "name": "Blue",
+        "value": "#58a6ff"
+      },
+      {
+        "name": "Green",
+        "value": "#3fb950"
+      },
+      {
+        "name": "Yellow",
+        "value": "#f1c40f"
+      },
+      {
+        "name": "Purple",
+        "value": "#a471f7"
+      }
+    ],
+    "timelineActive": false,
+    "timelinePins": [],
+    "timelineY": 0,
+    "timelineLeft": 0,
+    "timelineRight": 0
+  },
+  "view": {
+    "scale": 1,
+    "offsetX": 0,
+    "offsetY": 0,
+    "isLayoutSimulating": false
+  },
+  "history": []
+}

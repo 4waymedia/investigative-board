@@ -1,0 +1,15 @@
+# L-SDF Index: js/core
+# Subsystem: Core Engine, State, Storage, and Lifecycle
+
+§ CORE_SUBSYSTEM
+├── ◈ app.js                 :: Application coordinator (draw loop, camera, layout algorithms, hit test)
+├── ◈ layoutEngine.js        :: Master 40px grid, count-based optimal alignment, group clustering, world grid drawing
+├── ◇ state.js               :: AppState singleton (document, view, session, history snapshots)
+├── ◈ boardManager.js        :: Multi-board repository, persistence, import/export
+├── ◈ dragManager.js         :: Drag calculations, spatial movement, containment
+├── ◈ backgroundBuilder.js   :: Canvas patterns, theme backgrounds
+├── ◈ previewRenderer.js     :: Thumbnail generation for cards & boards
+├── ◈ syncBridge.js          :: Bi-directional event bus
+├── ⚙ schema.js              :: Theme schemas and color validation
+├── ⚙ constants.js           :: Node metrics, default geometry
+└── ⚡ actions.js             :: Command registry & modal mappings

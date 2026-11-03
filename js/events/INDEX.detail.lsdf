@@ -1,0 +1,32 @@
+# L-SDF Detail: js/events
+# Event Handling Contracts, Methods & Action Triggers
+
+§ SIGNATURES [js/events/eventHandlers.js]
+
+◈ EventHandlers
+├── λ initialize(dependencies: Object) : void
+├── λ handleCanvasMouseDown(e: MouseEvent) : void
+│   ├── Left Click (Pin Tool)     → Place pin or select pin
+│   ├── Left Click (Card Tool)    → Open Card creation modal
+│   ├── Left Click (Area Tool)    → Start areaDragStart marquee or click existing
+│   ├── Left Click (Text Tool)    → Open Text modal or create bubble
+│   ├── Right Click (Pin)         → Open Radial Menu + Activate marquee connection hub
+│   └── Right Click (Connection)  → Open Connection Edit Modal
+├── λ handleCanvasMouseMove(e: MouseEvent) : void
+│   ├── Pan Drag                  → appState.offsetX += dx, appState.offsetY += dy
+│   ├── Marquee Drag              → updateMarqueeAnimation(), multi-select pins
+│   ├── Area Creation Drag        → update areaDragCurrent dimensions preview
+│   └── Connection Drag           → update connectMousePos with animated dashed line
+├── λ handleCanvasMouseUp(e: MouseEvent) : void
+│   ├── Area Mouse Up             → Commit area-circle or area-rect to appState.pins
+│   ├── Connection Mouse Up       → Complete line connection between start and target
+│   └── Pin Drag Mouse Up         → Commit new world positions and trigger saveState()
+├── λ handleCanvasWheel(e: WheelEvent) : void
+│   └── Cursor Zoom               → Adjust appState.scale & counter-offset screen coords
+├── λ handleKeyDown(e: KeyboardEvent) : void
+│   ├── Keys '1'-'5'              → Set active tool family (1: pin, 2: card, 3: area, 4: text, 5: pan)
+│   ├── Cmd+Z / Cmd+Shift+Z       → AppState undo / redo
+│   ├── Backspace / Delete        → Delete selected pin (removePin) or connection
+│   ├── Shift + 1-9               → Change color slot of selected pin or active tool
+│   └── Escape                    → Close modals, close radial menu, deselect
+└── λ getMousePos(e: MouseEvent) : {screen: {x, y}, world: {x, y}}

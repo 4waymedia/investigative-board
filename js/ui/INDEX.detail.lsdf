@@ -1,0 +1,38 @@
+# L-SDF Detail: js/ui
+# UI Managers, Modal Dialogs & Control Bridges
+
+§ SIGNATURES [js/ui]
+
+◈ ModalManager (js/ui/modal.js)
+├── λ openPinModal(pinIndex: number) : void
+├── λ closePinModal() : void
+├── λ openCardModal(cardIndex: number|null) : void
+├── λ openTextModal(options: Object) : void
+├── λ openConnectionModal(connectionIndex: number) : void
+└── λ openAddColorModal() : void
+
+◈ TrayManager (js/ui/tray.js)
+├── λ initialize() : void
+├── λ render() : void
+├── λ handleCardDragStart(cardIndex: number, e: MouseEvent) : void
+└── λ handleCardDrop(e: MouseEvent) : void
+
+◈ ToolbarManager (js/ui/toolbar.js)
+├── λ initialize() : void
+├── λ setTool(toolName: string) : void
+├── λ selectColor(colorValue: string, slotId: string) : void
+├── λ updateColorPalette(colors: Array<string>) : void
+└── λ updateThemeDropdown() : void
+
+◈ BoardPickerUI (js/ui/boardPicker.js)
+├── λ initialize(boardManager, appState, app, callbacks) : void
+├── λ show() : void
+├── λ hide() : void
+├── λ renderBoardList() : void
+└── λ createBoardCard(boardMeta: Object) : HTMLElement
+
+◈ SystemMenuManager (js/ui/systemMenu.js)
+├── λ initialize(deps: Object) : void
+├── λ open() : void
+├── λ close() : void
+└── λ handleAction(actionId: string) : void

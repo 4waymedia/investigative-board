@@ -1,0 +1,38 @@
+# L-SDF Index: tests
+# Subsystem: Automated Unit & Regression Test Suites
+
+§ TEST_SUITE_CATALOG (32 Suites, 0 Failures)
+
+├── ◈ run-all.js                     :: Master runner executing all 32 test suites
+├── ✓ test-canvas-grid-layout.js     :: LayoutEngine master grid, count aspect alignment, snapping, grouping & rendering
+├── ✓ test-layout-erasing-fix.js     :: BUG-013: Layout coordinate integrity, finite guards, viewport bounds
+├── ✓ test-area-connection.js        :: BUG-012: Area pin hit testing and connection line creation
+├── ✓ test-layout-dock.js            :: BUG-011: ArtCraft Layout Dock auto-centering & history snapshots
+├── ✓ test-image-hit-testing.js      :: BUG-010: Image pin hit-testing and hidden shape click selection
+├── ✓ test-radial-edit-action.js     :: BUG-009: Radial menu pencil click opening pin modal
+├── ✓ test-no-duplicate-declarations :: BUG-008: Zero duplicate globals or class declarations
+├── ✓ test-shift-color-selection.js  :: BUG-007: Shift+1-9 color slot cycling
+├── ✓ test-board-manager.js          :: BUG-005/BUG-006: BoardManager CRUD & background saving
+├── ✓ test-pin-connection-integrity  :: BUG-004: Safe pin removal without connection array splice corruption
+├── ✓ test-shadow-color-field.js     :: BUG-003: Hex/RGBA CSS shadow color string parsing
+├── ✓ test-theme-selection-fix.js    :: BUG-001/BUG-002: Non-destructive theme initialization & default fallback
+├── ✓ test-viewport-culling.js       :: Camera culling optimization for off-screen pins and lines
+├── ✓ test-area-drag.js              :: Area marquee box dragging & pin inclusion checks
+├── ✓ test-canvas-container.js       :: Viewport element styling and dynamic background lifecycle
+├── ✓ test-key-4-text-activation.js  :: Key '4' text tool switching
+├── ✓ test-keyboard-debug.js         :: Keyboard modifier event propagation
+├── ✓ test-keyboard-text-deselect.js :: Escape key dismissal and blur
+├── ✓ test-keyboard.js               :: Core hotkeys validation
+├── ✓ test-lazy-dom-references.js    :: Safe DOM element lookups across lifecycle
+├── ✓ test-mcp-server.js             :: Model Context Protocol JSON-RPC 2.0 stdio server
+├── ✓ test-modal-ids.js              :: 31 modal DOM element ID verification
+├── ✓ test-shape-registration.js     :: Custom shape registry and render dispatch
+├── ✓ test-text-creation-rename.js   :: Text pin creation with inline rename
+├── ✓ test-text-drag-creation.js     :: Drag-to-size text creation
+├── ✓ test-text-drag-sizing.js       :: Corner resize handle bounds
+├── ✓ test-text-keyboard-cycle.js    :: Tab key text entity cycling
+├── ✓ test-text-modal-dom.js         :: Text modal dialog DOM integrity
+├── ✓ test-text-type-bar.js          :: Text floating toolbar active state
+├── ✓ test-theme-selection.js        :: Theme switcher palette swapping
+├── ✓ test-tool-selection.js         :: Tool mode radio group state
+└── ✓ test-type-bar-exclusive-active :: Exclusive active bar button toggling

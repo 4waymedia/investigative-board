@@ -878,3 +878,4 @@ class BoardManager {
 // ============================================================================
 
 window.BoardManager = BoardManager;
+

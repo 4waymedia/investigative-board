@@ -862,6 +862,9 @@ class SchemaManager {
    * @returns {Object|null} - Theme object or null
    */
   getTheme(themeId) {
+    if (themeId === "default") {
+      return this.themes["dark"] || Object.values(this.themes)[0] || null;
+    }
     return this.themes[themeId] || this.userThemes[themeId] || null;
   }
 
@@ -2827,7 +2830,7 @@ class NewBoardModalUI {
 
     // Create new board
     if (window.app.boardManager) {
-      const boardId = window.app.boardManager.createBoard(boardData.name);
+      const boardId = window.app.boardManager.createBoard(boardData.name, boardData.description);
       if (boardId) {
         window.app.boardManager.loadBoard(boardId);
         window.app.appState.meta.description = boardData.description;
@@ -2913,3 +2916,4 @@ schemaManager.updateDefaultColors();
 schemaManager.loadCustomIcons();
 
 console.log("✅ Schema system initialized with", Object.keys(BUILT_IN_THEMES).length, "built-in themes");
+

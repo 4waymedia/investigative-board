@@ -191,6 +191,10 @@ class SystemMenuManager {
           <span class="file-menu-icon">✖️</span>
           <span class="file-menu-label">Close Board</span>
         </div>
+        <div class="file-menu-item" data-action="clear-board" style="color: #f85149;">
+          <span class="file-menu-icon">🗑️</span>
+          <span class="file-menu-label">Clear Board...</span>
+        </div>
       </div>
       <div class="file-menu-separator"></div>
       <div class="file-menu-section">
@@ -303,6 +307,9 @@ class SystemMenuManager {
       case "close-board":
         this.handleCloseBoard();
         break;
+      case "clear-board":
+        this.handleClearBoard();
+        break;
       case "export":
         this.handleExport();
         break;
@@ -365,7 +372,7 @@ class SystemMenuManager {
           this.boardManager.saveBoard();
         }
 
-        const boardId = this.boardManager.createBoard(boardData.name);
+        const boardId = this.boardManager.createBoard(boardData.name, boardData.description);
         if (boardId) {
           this.boardManager.loadBoard(boardId);
           this.appState.meta.description = boardData.description;
@@ -441,6 +448,15 @@ class SystemMenuManager {
     this.appState.clearBoard();
     this._notifyBoardChange();
     this.showToast("Board closed", "info");
+  }
+
+  handleClearBoard() {
+    this.closeFileMenu();
+    if (this.app && typeof this.app.resetBoard === 'function') {
+      this.app.resetBoard();
+    } else if (window.app && typeof window.app.resetBoard === 'function') {
+      window.app.resetBoard();
+    }
   }
 
   handleExport() {

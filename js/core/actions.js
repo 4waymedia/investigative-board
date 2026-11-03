@@ -18,15 +18,18 @@ const PIN_MODAL_MAPPINGS = {
   "text-plain": "text",
   "text-title": "text",
   
-  // Card pins use the card modal
-  "card": "card",
+  // Card-type pins use the comprehensive pin modal
+  "card": "pin",
+  "doc": "pin",
+  "folder": "pin",
   
-  // Area pins use area modal (or pin modal with area options)
-  "area-circle": "area",
-  "area-rect": "area",
+  // Area pins use the pin modal (with area scale controls)
+  "area-circle": "pin",
+  "area-rect": "pin",
   
-  // Standard pins use the pin modal
+  // Standard shapes use the pin modal
   "circle": "pin",
+  "square": "pin",
   "rect": "pin",
   "pill": "pin",
   "diamond": "pin",
@@ -63,54 +66,47 @@ const ACTION_REGISTRY = {
     description: "Open the appropriate editor for the selected pin",
     context: ACTION_CONTEXTS.PIN_SELECTED,
     execute: (pinIndex) => {
-      const pin = window.app?.appState?.pins[pinIndex];
+      // Resolve target pin index: passed argument or active selection
+      const targetIndex = (typeof pinIndex === "number" && pinIndex >= 0)
+        ? pinIndex
+        : (window.app?.appState?.selectedPinIndex ?? window.app?.appState?.selectedPin);
+
+      if (targetIndex === null || targetIndex === undefined || targetIndex < 0) {
+        console.error("❌ Action pin:edit - No pin specified or selected");
+        return false;
+      }
+
+      const pin = window.app?.appState?.pins[targetIndex];
       if (!pin) {
-        console.error("❌ Action pin:edit - Pin not found:", pinIndex);
+        console.error("❌ Action pin:edit - Pin not found:", targetIndex);
         return false;
       }
       
       const modalType = PIN_MODAL_MAPPINGS[pin.shape] || "pin";
       
-      switch (modalType) {
-        case "text":
-          if (window.openTextModal) {
-            window.openTextModal({
-              id: pin.id,
-              x: window.innerWidth / 2,
-              y: window.innerHeight / 2,
-              initialText: pin.label || '',
-              width: pin.width || 200,
-              height: pin.height || 50
-            });
-            return true;
-          }
-          break;
-        case "card":
-          if (window.openCardModal) {
-            window.openCardModal(pinIndex);
-            return true;
-          }
-          break;
-        case "area":
-          // Area pins can use pin modal for now (extend later)
-          if (window.app?.modalManager?.openPinModal) {
-            window.app.modalManager.openPinModal(pinIndex);
-            return true;
-          }
-          break;
-        case "pin":
-        default:
-          if (window.app?.modalManager?.openPinModal) {
-            window.app.modalManager.openPinModal(pinIndex);
-            return true;
-          } else if (window.openPinModal) {
-            window.openPinModal(pinIndex);
-            return true;
-          }
-          break;
+      if (modalType === "text" && window.openTextModal) {
+        window.openTextModal({
+          id: pin.id,
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+          initialText: pin.label || '',
+          width: pin.width || 200,
+          height: pin.height || 50
+        });
+        return true;
+      }
+
+      // For standard pins, cards, documents, folders, areas, or text fallback:
+      // Open the comprehensive Pin Modal
+      if (window.app?.modalManager?.openPinModal) {
+        window.app.modalManager.openPinModal(targetIndex);
+        return true;
+      } else if (typeof window.openPinModal === "function") {
+        window.openPinModal(targetIndex);
+        return true;
       }
       
-      console.error("❌ Action pin:edit - No modal available for type:", modalType);
+      console.error("❌ Action pin:edit - No modal manager available to edit pin:", targetIndex);
       return false;
     }
   },
@@ -123,7 +119,11 @@ const ACTION_REGISTRY = {
     requiresConfirmation: true,
     confirmMessage: "Delete this pin?",
     execute: (pinIndex) => {
-      window.app.appState.pins.splice(pinIndex, 1);
+      if (window.app?.appState?.removePin) {
+        window.app.appState.removePin(pinIndex);
+      } else {
+        window.app.appState.pins.splice(pinIndex, 1);
+      }
       window.app.setSelectedPin(null);
       window.app.saveState();
       window.draw();
@@ -1185,3 +1185,4 @@ window.openKeyboardShortcutsModal = () => {
 };
 
 console.log("✅ Action system initialized with", Object.keys(ACTION_REGISTRY).length, "actions");
+

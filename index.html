@@ -25,7 +25,9 @@
     <!-- Core application modules -->
     <script src="js/core/state.js"></script>
     <script src="js/core/boardManager.js"></script>
+    <script src="js/core/syncBridge.js"></script>
     <script src="js/core/dragManager.js"></script>
+    <script src="js/core/layoutEngine.js"></script>
     <script src="js/core/previewRenderer.js"></script>
     <script src="js/events/eventHandlers.js"></script>
     <script src="js/ui.js"></script>
@@ -998,16 +1000,41 @@
       });
     </script>
 
-    <!-- Right side controls -->
-    <div id="controls">
-      <div class="ctrl-btn" id="reset" title="Reset board">↻</div>
-      <div class="ctrl-btn magic" id="magic" title="Toggle Force Layout">★</div>
-      <div class="ctrl-btn radial" id="radial" title="Radial Mind Map">🌸</div>
-      <div class="ctrl-btn clusters" id="clusters" title="Affinity Clusters">
-        ☁️
-      </div>
-      <div class="ctrl-btn timeline" id="timeline" title="Auto Timeline">
-        ⏳
+    <!-- Layout Dock -->
+    <div id="layout-dock" class="layout-dock" role="toolbar" aria-label="Layout tools">
+      <button class="layout-dock-toggle" id="layout-dock-toggle" title="Toggle Layout Dock">
+        <span class="layout-dock-icon">📐</span>
+        <span class="layout-dock-text">Layout</span>
+      </button>
+      <div class="layout-dock-panel" id="layout-dock-panel">
+        <button class="layout-btn" id="btn-layout-grid" title="Arrange in Grid">
+          <span class="layout-icon">▦</span>
+          <span class="layout-label">Grid</span>
+        </button>
+        <button class="layout-btn" id="radial" title="Radial / Mind Map Layout">
+          <span class="layout-icon">🌸</span>
+          <span class="layout-label">Radial</span>
+        </button>
+        <button class="layout-btn" id="magic" title="Force-Directed Physics (Untangle)">
+          <span class="layout-icon">⚡</span>
+          <span class="layout-label">Force</span>
+        </button>
+        <button class="layout-btn" id="timeline" title="Chronological Timeline">
+          <span class="layout-icon">⏳</span>
+          <span class="layout-label">Timeline</span>
+        </button>
+        <button class="layout-btn" id="clusters" title="Affinity Clusters (by Color/Group)">
+          <span class="layout-icon">☁️</span>
+          <span class="layout-label">Clusters</span>
+        </button>
+        <button class="layout-btn" id="btn-layout-groups" title="Organize by Group Type (Pins, Cards, Areas, Text)">
+          <span class="layout-icon">📑</span>
+          <span class="layout-label">Groups</span>
+        </button>
+        <button class="layout-btn" id="btn-toggle-grid" title="Toggle Canvas Alignment Grid">
+          <span class="layout-icon">⊞</span>
+          <span class="layout-label">Grid View</span>
+        </button>
       </div>
     </div>
   </body>

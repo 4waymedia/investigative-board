@@ -469,3 +469,4 @@ window.BUILTIN_PATTERNS = BUILTIN_PATTERNS;
 window.LOGO_ANIMATIONS = LOGO_ANIMATIONS;
 
 console.log('✅ Background builder initialized with', Object.keys(BACKGROUND_PRESETS).length, 'presets');
+

@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "activeId": "1d24b679-06f3-4a1e-a802-4277c592010f",
+  "settings": {
+    "historyDepth": 20,
+    "membership": "enterprise"
+  },
+  "boards": [
+    {
+      "id": "1d24b679-06f3-4a1e-a802-4277c592010f",
+      "title": "Operation Nightshade",
+      "description": "A secret investigation",
+      "created": "2026-11-01T23:08:28.923Z",
+      "lastModified": "2026-11-01T23:08:38.892Z",
+      "thumbnail": null
+    }
+  ]
+}
