@@ -42,6 +42,7 @@ The project utilizes an automated node-based integration and regression testing 
 | **30** | [`tests/test-area-connection.js`](file:///Users/health/Sites/investigative-board/tests/test-area-connection.js) | Engine / Interaction | Area pins (circle, rectangle) hit-testing, contained pin priority, and connection lines creation | ✅ PASS |
 | **31** | [`tests/test-layout-erasing-fix.js`](file:///Users/health/Sites/investigative-board/tests/test-layout-erasing-fix.js) | UI / Camera | Layout reorganization resilience, finite coordinate validation, container viewport alignment, and area pin culling | ✅ PASS |
 | **32** | [`tests/test-canvas-grid-layout.js`](file:///Users/health/Sites/investigative-board/tests/test-canvas-grid-layout.js) | Engine / Layout | Master 40px grid, count-based optimal aspect alignment, drag-release snapping, and group sub-grids | ✅ PASS |
+| **33** | [`tests/test-branch-manager.js`](file:///Users/health/Sites/investigative-board/tests/test-branch-manager.js) | Interaction / Radial | Hold-to-branch charge ring (900ms), '+' edge handle, safe release cancellation, 45° radial angular snapping & child pin spawn | ✅ PASS |
 
 ---
 
@@ -68,6 +69,7 @@ The project utilizes an automated node-based integration and regression testing 
 | **BUG-012** | High | `js/core/app.js` & `js/events/eventHandlers.js` | Area pins ('circle', 'rectangle') unable to connect with lines on creation or through interaction | `[VERIFIED]` | `test-area-connection.js` |
 | **BUG-013** | Critical | `js/core/app.js` | Changing layout erased pins due to timeline `parseDate` returning object instead of timestamp, unconstrained canvas height pushing pins off-screen, and strict viewport bounds culling area pins | `[VERIFIED]` | `test-layout-erasing-fix.js` |
 | **BUG-014** | High | `js/core/app.js` & `js/core/layoutEngine.js` | Grid and Radial layouts not centered on screen due to `minCanvasHeight` inflating DOM height, percentage `image.size` producing NaN in bounds, and radial root offset | `[VERIFIED]` | `test-canvas-grid-layout.js` |
+| **BUG-015** | Medium | `js/drawing.js` & `js/core/app.js` | Thought bubble rendering deformed cloud body (arcs stroking inwards into cloud) and colliding overlapping tail drops | `[VERIFIED]` | `test-shape-registration.js` |
 
 ---
 
@@ -174,6 +176,15 @@ The project utilizes an automated node-based integration and regression testing 
   3. Implemented `LayoutEngine.applyRadialLayout(pins, connections, rootIndex, options)` which locks root pin at `centerX, centerY`, places rings at 200px / 360px radii, snaps all pins to the master 40px grid, and returns `{ x: centerX, y: centerY }`.
   4. Verified in [`tests/test-canvas-grid-layout.js`](file:///Users/health/Sites/investigative-board/tests/test-canvas-grid-layout.js) and [`tests/test-layout-dock.js`](file:///Users/health/Sites/investigative-board/tests/test-layout-dock.js).
 
+### BUG-015: Thought Bubble Deformed Cloud Body & Overlapping Tail Drops
+- **Root Causes:**
+  1. **Inward Arc Sweeping:** In `registerShape("thought")` and `drawThoughtPreview()`, the cloud outline stroked arcs centered on `angleToCenter = Math.atan2(-bump.y, -bump.x)`. This stroked the arcs facing the *inside* of the cloud, cutting circular black lines through the body where text was supposed to render, while leaving the true outer perimeter unstroked.
+  2. **Colliding / Overlapping Tail Drops:** The trailing thought circles had fixed fraction distances (`dist: 1.15, 1.35, 1.5`) where the center-to-center distance was less than the sum of the radii, causing them to collide into an awkward overlapping stack.
+- **Fix:**
+  1. Implemented a unified `drawCartoonCloud(ctx, scr, width, height, tailAngle, ...)` with a continuous 10-lobe quadratic curve path (`ctx.quadraticCurveTo`), eliminating all internal seams and yielding a clean scalloped cartoon cloud.
+  2. Spaced trailing drops proportionally with guaranteed separation padding gaps (`d = r_prev + r_curr + 7px`), eliminating collisions.
+  3. Integrated direct `+` handle discoverability on selected pins, added `🌿 Branch (45°)` to radial menu, and enabled `B` keyboard hotkey.
+
 ---
 
 ## 4. Verification & Health History
@@ -191,12 +202,13 @@ The project utilizes an automated node-based integration and regression testing 
 | **2026-11-02 18:12** | Full Regression Suite Run | **31/31 suites passed, 0 failures** | macOS / Node v20.19.6 |
 | **2026-11-02 19:05** | L-SDF Project Structure | Added Latent-Structured Documentation Format indexes (`INDEX.lsdf`, `INDEX.detail.lsdf`, subsystem maps) | macOS / Node v20.19.6 |
 | **2026-11-02 21:00** | Master Grid & Centering Verification | Fixed `BUG-014` (viewport height inflation & radial root centering), **32/32 suites passed, 0 failures** | macOS / Node v20.19.6 |
+| **2026-11-03 15:45** | Hold-to-Branch & 45° Radial Engine | Added `BranchManager`, hold charge gauge, '+' handle, 45° magnetic snap, **33/33 suites passed, 0 failures** | macOS / Node v20.19.6 |
 
 ---
 
 ## 5. Ongoing Monitoring & Checklist
 
-- [x] All 32 automated regression tests pass in CI/local runner (`node tests/run-all.js`).
+- [x] All 33 automated regression tests pass in CI/local runner (`node tests/run-all.js`).
 - [x] Zero duplicate global declarations in any module (`test-no-duplicate-declarations.js`).
 - [x] Theme system completely non-destructive on initialization.
 - [x] Pin removal preserves connection graph topology.
@@ -208,4 +220,6 @@ The project utilizes an automated node-based integration and regression testing 
 - [x] Area pins ('circle', 'rectangle') fully hit-testable and connectable via drag, click, shift+click, and radial menu.
 - [x] Master 40px grid with count-based aspect alignment and drag-release snapping active.
 - [x] Radial and Grid layouts center exactly within active viewport between 50px top header and 140px bottom tray.
+- [x] Hold-to-Branch (900ms) with circular charge ring, edge '+' handle, and safe cancellation on release.
+- [x] Omnidirectional radial branching with 45° angular snapping (8 spokes) aligned to master 40px grid.
 - [x] Latent-Structured Documentation Format (L-SDF) active across root, core, events, ui, and test suites.

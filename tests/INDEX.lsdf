@@ -1,9 +1,10 @@
 # L-SDF Index: tests
 # Subsystem: Automated Unit & Regression Test Suites
 
-§ TEST_SUITE_CATALOG (32 Suites, 0 Failures)
+§ TEST_SUITE_CATALOG (33 Suites, 0 Failures)
 
-├── ◈ run-all.js                     :: Master runner executing all 32 test suites
+├── ◈ run-all.js                     :: Master runner executing all 33 test suites
+├── ✓ test-branch-manager.js         :: Hold-to-branch charge gauge, '+' handle, safe cancel & 45° radial angular snap
 ├── ✓ test-canvas-grid-layout.js     :: LayoutEngine master grid, count aspect alignment, snapping, grouping & rendering
 ├── ✓ test-layout-erasing-fix.js     :: BUG-013: Layout coordinate integrity, finite guards, viewport bounds
 ├── ✓ test-area-connection.js        :: BUG-012: Area pin hit testing and connection line creation

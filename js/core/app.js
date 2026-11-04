@@ -225,6 +225,7 @@ class Application {
       ToolbarManager: deps.ToolbarManager || window.ToolbarManager,
       EventHandlers: deps.EventHandlers || window.EventHandlers,
       DragManager: deps.DragManager || window.DragManager,
+      BranchManager: deps.BranchManager || window.BranchManager,
       SystemMenuManager: deps.SystemMenuManager || window.SystemMenuManager,
       loadThemes: deps.loadThemes || window.loadThemes,
       loadAppState: deps.loadAppState || window.loadAppState,
@@ -249,6 +250,8 @@ class Application {
     this.modalManager = null;
     this.trayManager = null;
     this.toolbarManager = null;
+    this.dragManager = null;
+    this.branchManager = null;
     this.canvas = null;
     this.ctx = null;
 
@@ -270,17 +273,21 @@ class Application {
     this.selectedColor = null;
   }
 
-  // Initialize drag manager early (before event handlers need it)
+  // Initialize drag manager & branch manager early (before event handlers need it)
   initializeDragManagerEarly() {
     console.log("🎯 Initializing drag manager early");
     if (this.deps.DragManager) {
       this.dragManager = new this.deps.DragManager(this.appState);
-      // Note: Full initialization happens later in initializeManagers()
-      // For now, just make it globally available
       window.dragManager = this.dragManager;
       console.log("✅ Drag manager created and available globally");
     } else {
       console.warn("⚠️ DragManager dependency not available");
+    }
+
+    if (this.deps.BranchManager) {
+      this.branchManager = new this.deps.BranchManager(this.appState);
+      window.branchManager = this.branchManager;
+      console.log("✅ Branch manager created and available globally");
     }
   }
 
@@ -563,6 +570,22 @@ class Application {
       console.log("✅ Drag manager fully initialized with dependencies");
     }
 
+    // Initialize branch manager (hold-to-branch & 45° angular snapping)
+    if (this.branchManager) {
+      this.branchManager.initialize({
+        draw: () => this.render(),
+        saveAppState: this.deps.saveAppState,
+        setSelectedPin: (idx) => {
+          if (this.eventHandlers && typeof this.eventHandlers.setSelectedPin === 'function') {
+            this.eventHandlers.setSelectedPin(idx);
+          } else if (this.appState) {
+            this.appState.selectedPinIndex = idx;
+          }
+        }
+      });
+      console.log("✅ Branch manager fully initialized with dependencies");
+    }
+
     // Initialize event handlers
     console.log("Creating EventHandlers, deps.EventHandlers:", typeof this.deps.EventHandlers);
     if (!this.deps.EventHandlers) {
@@ -781,6 +804,11 @@ class Application {
 
     // Draw pins AFTER connections so they mask the connection line ends
     this.drawPins(this.ctx);
+
+    // Draw hold-to-branch guides, charge ring, 45-degree reticle, and preview pin
+    if (this.branchManager) {
+      this.branchManager.drawWorld(this.ctx, this.appState);
+    }
 
     this.ctx.restore();
   }
@@ -1618,60 +1646,52 @@ class Application {
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 8]);
 
-    // Draw cloud shape using overlapping circles
-    const cloudBumps = [
-      { x: -0.5, y: -0.7, r: 0.45 },
-      { x: 0.1, y: -0.8, r: 0.4 },
-      { x: 0.55, y: -0.6, r: 0.42 },
-      { x: 0.8, y: -0.2, r: 0.38 },
-      { x: 0.75, y: 0.35, r: 0.4 },
-      { x: 0.4, y: 0.7, r: 0.38 },
-      { x: -0.2, y: 0.75, r: 0.42 },
-      { x: -0.7, y: 0.4, r: 0.38 },
-      { x: -0.8, y: -0.15, r: 0.4 },
-      { x: 0, y: 0, r: 0.6 },
-    ];
+    // Draw clean continuous cloud body preview
+    const numLobes = 10;
+    const bumpH = Math.min(rx, ry) * 0.26;
 
-    // Fill all bumps
     ctx.beginPath();
-    cloudBumps.forEach((bump) => {
-      const cx = startScreen.x + bump.x * rx;
-      const cy = startScreen.y + bump.y * ry;
-      const cr = bump.r * Math.min(rx, ry);
-      ctx.moveTo(cx + cr, cy);
-      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-    });
+    const startX = startScreen.x + (rx - 2);
+    const startY = startScreen.y;
+    ctx.moveTo(startX, startY);
+
+    for (let i = 0; i < numLobes; i++) {
+      const nextAngle = ((i + 1) / numLobes) * Math.PI * 2;
+      const midAngle = (i + 0.5) * (Math.PI * 2 / numLobes);
+
+      const ctrlX = startScreen.x + (rx + bumpH) * Math.cos(midAngle);
+      const ctrlY = startScreen.y + (ry + bumpH) * Math.sin(midAngle);
+
+      const nextX = startScreen.x + (rx - 2) * Math.cos(nextAngle);
+      const nextY = startScreen.y + (ry - 2) * Math.sin(nextAngle);
+
+      ctx.quadraticCurveTo(ctrlX, ctrlY, nextX, nextY);
+    }
+
+    ctx.closePath();
     ctx.fill();
+    ctx.stroke();
 
-    // Stroke outer bumps
-    cloudBumps.slice(0, 9).forEach((bump) => {
-      const cx = startScreen.x + bump.x * rx;
-      const cy = startScreen.y + bump.y * ry;
-      const cr = bump.r * Math.min(rx, ry);
-      const angleToCenter = Math.atan2(-bump.y, -bump.x);
-      
-      ctx.beginPath();
-      ctx.arc(cx, cy, cr, angleToCenter - Math.PI * 0.6, angleToCenter + Math.PI * 0.6);
-      ctx.stroke();
-    });
-
-    // Draw trailing circular drops
+    // Draw trailing circular drops preview
     if (showTail) {
       ctx.setLineDash([]);
-      const drops = [
-        { dist: 1.15, size: 0.18 },
-        { dist: 1.35, size: 0.12 },
-        { dist: 1.5, size: 0.07 }
-      ];
-      
-      drops.forEach((drop) => {
-        const dist = Math.max(rx, ry) * drop.dist;
-        const cx = startScreen.x + dist * Math.cos(tailAngle);
-        const cy = startScreen.y + dist * Math.sin(tailAngle);
-        const radius = Math.min(width, height) * drop.size;
-        
+      const minDim = Math.min(rx, ry);
+      const dropRadii = [minDim * 0.20, minDim * 0.13, minDim * 0.08];
+      const attachX = startScreen.x + (rx + bumpH * 0.4) * Math.cos(tailAngle);
+      const attachY = startScreen.y + (ry + bumpH * 0.4) * Math.sin(tailAngle);
+
+      let currentDist = 0;
+      dropRadii.forEach((radius, idx) => {
+        if (idx === 0) {
+          currentDist += radius + 8;
+        } else {
+          currentDist += dropRadii[idx - 1] + radius + 7;
+        }
+        const cx = attachX + currentDist * Math.cos(tailAngle);
+        const cy = attachY + currentDist * Math.sin(tailAngle);
+
         ctx.beginPath();
-        ctx.arc(cx, cy, Math.max(radius, 3), 0, Math.PI * 2);
+        ctx.arc(cx, cy, Math.max(radius, 4), 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       });

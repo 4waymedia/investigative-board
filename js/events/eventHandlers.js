@@ -615,6 +615,16 @@ class EventHandlers {
     this.prevScreenX = e.clientX;
     this.prevScreenY = e.clientY;
 
+    // Direct click on open-side '+' branch handle
+    if (e.button === 0 && !e.shiftKey && window.branchManager) {
+      const hit = window.branchManager.hitTestHandle(mousePos.world.x, mousePos.world.y);
+      if (hit) {
+        console.log(`🌿 Direct click on ${hit.handle.side} '+' branch handle of pin ${hit.pinIndex}`);
+        window.branchManager.startFromHandle(hit.handle, mousePos.world);
+        return;
+      }
+    }
+
     // Handle ALL shift+click interactions first (takes precedence over everything)
     if (e.button === 0 && e.shiftKey) {
       // Prioritize pin clicks over connection clicks
@@ -731,6 +741,11 @@ class EventHandlers {
           this.setSelectedPin(clickedPinIndex);
           this.selectedPins = [clickedPinIndex];
           this.appState.setSelectedPins([clickedPinIndex]);
+
+          // Start hold-to-branch check
+          if (window.branchManager) {
+            window.branchManager.startHold(clickedPinIndex, e.clientX, e.clientY, mousePos.world);
+          }
 
           // Start drag using drag manager
           if (window.dragManager) {
@@ -1157,6 +1172,24 @@ class EventHandlers {
       // Don't call draw() here - let the marquee animation handle drawing
     }
 
+    // Hover handles detection for open sides of pins (visible for 4s)
+    if (e.buttons === 0 && window.branchManager && !this.isUserInteracting && !this.isDraggingPin && !this.isDraggingArea) {
+      const hoveredPinIndex = this.findPinAt(mousePos.world.x, mousePos.world.y);
+      if (hoveredPinIndex !== null) {
+        window.branchManager.showHoverHandles(hoveredPinIndex, mousePos.world);
+      } else {
+        window.branchManager.updateHover(mousePos.world);
+      }
+    }
+
+    // Handle hold-to-branch state (suppress pin dragging while charging, ready, or branching)
+    if (window.branchManager && window.branchManager.isActive()) {
+      const branchHandled = window.branchManager.updateMove(e.clientX, e.clientY, this.screenToWorld(canvasX, canvasY));
+      if (branchHandled) {
+        return; // Suppress regular pin dragging while branching
+      }
+    }
+
     // Handle pin dragging using drag manager
     if (window.dragManager && this.isDragManagerDragging) {
       window.dragManager.updateDrag(this.screenToWorld(canvasX, canvasY));
@@ -1188,6 +1221,20 @@ class EventHandlers {
 
     const mousePos = this.getMousePos(e);
     const mouseWorld = mousePos.world;
+
+    // Handle hold-to-branch mouseup first
+    if (window.branchManager && window.branchManager.isActive()) {
+      const branchResult = window.branchManager.handleMouseUp();
+      if (branchResult.handled) {
+        if (window.dragManager) {
+          window.dragManager.endDrag();
+        }
+        this.isDragManagerDragging = false;
+        this.stopMarqueeAnimation();
+        this.draw();
+        return;
+      }
+    }
 
     // END DRAG OPERATIONS FIRST - this must happen regardless of double-click detection
     if (window.dragManager) {
@@ -2293,6 +2340,12 @@ class EventHandlers {
     } else if (e.key === 'f' || e.key === 'F') {
       // Frame all pins
       this.frameAllPins();
+    } else if (e.key === 'b' || e.key === 'B') {
+      // Branch hotkey (B): activate 45° branch rotation on selected pin
+      const selIdx = (this.appState.selectedPins?.length === 1) ? this.appState.selectedPins[0] : this.appState.selectedPinIndex;
+      if (selIdx !== null && selIdx !== undefined && window.branchManager) {
+        window.branchManager.activateForPin(selIdx);
+      }
     } else if (e.key === 'Escape' && (this.appState.connectStartIndex !== null || this.marqueeAnimationId)) {
       // Force stop marquee animation if it's stuck
       console.log("🎯 Force stopping marquee animation");
@@ -2300,6 +2353,10 @@ class EventHandlers {
       this.draw();
     } else if (e.key === 'Escape') {
       console.log(`🎯 ESC key pressed - checking for modals/marquee to cancel`);
+
+      if (window.branchManager && window.branchManager.isActive()) {
+        window.branchManager.cancel();
+      }
 
       // First check if any modals are open
       const pinModal = document.getElementById("pin-modal");

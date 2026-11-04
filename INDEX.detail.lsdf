@@ -44,6 +44,13 @@
 │   ├── λ layoutTimeline()           :: Chronological date layout with object timestamp unwrapping
 │   └── λ findPinAt(wx, wy)          :: 2-pass spatial hit testing (pass 1: pins, pass 2: areas)
 │
+├── ◈ BranchManager (js/core/branchManager.js)
+│   ├── λ startHold(pinIndex, sx, sy, wpos) :: Initiates circular charge gauge hold timer (900ms)
+│   ├── λ updateMove(sx, sy, wpos)          :: Jitter cancel, ready '+' handle, 45° angular snapping
+│   ├── λ handleMouseUp()                   :: Safe cancel on release ('ready') or spawn child on drag
+│   ├── λ cancel()                          :: Resets hold state to idle (e.g. Escape key)
+│   └── λ drawWorld(ctx, appState)          :: World-space charge ring, 8-spoke reticle, and ghost pin
+│
 ├── ◈ BoardManager (js/core/boardManager.js)
 │   ├── λ getIndex()                 :: Returns boards array and activeId metadata
 │   ├── λ createBoard(title, desc)   :: Creates new board ID and initializes default doc

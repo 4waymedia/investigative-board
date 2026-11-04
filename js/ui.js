@@ -421,6 +421,7 @@ function openRadialMenu(pinIndex, screenX, screenY) {
   const hasConnections = pinConnections.length > 0;
 
   const items = [
+    { icon: "🌿", action: "branch", title: "Branch (45°)" },
     { icon: "🔗", action: "connect", title: "Connect" },
     { icon: "✏️", action: "edit", title: "Edit" },
     { icon: "🎨", action: "color", title: "Color", hasSubmenu: true },
@@ -881,6 +882,10 @@ function executeRadialAction(action, pinIndex) {
   // Use centralized action system when available
   if (window.executeAction) {
     switch (action) {
+      case "branch":
+        window.executeAction("pin:branch", pinIndex);
+        closeRadialMenu();
+        break;
       case "connect":
         window.executeAction("pin:setParent", pinIndex);
         break;
@@ -905,6 +910,10 @@ function executeRadialAction(action, pinIndex) {
   } else {
     // Fallback if action system not loaded
     switch (action) {
+      case "branch":
+        window.executeAction("pin:branch", pinIndex);
+        closeRadialMenu();
+        break;
       case "connect":
         window.app.appState.connectStartIndex = pinIndex;
         window.app.appState.connectionMode = 'parent';

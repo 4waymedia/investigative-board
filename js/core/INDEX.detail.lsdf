@@ -27,6 +27,18 @@
 ├── λ getPinCenter(pin: Pin) : {x: number, y: number}
 └── λ saveState() : void
 
+◈ BranchManager
+├── ⚙ holdDuration = 900
+├── ⚙ snapAngleDeg = 45
+├── ⚙ minBranchDistance = 140
+├── ⚙ jitterThreshold = 8
+├── λ startHold(pinIndex: number, screenX: number, screenY: number, worldPos: {x, y}) : boolean
+├── λ updateMove(screenX: number, screenY: number, worldPos: {x, y}) : boolean
+├── λ computeBranchTarget(worldPos: {x, y}) : void
+├── λ handleMouseUp() : {handled: boolean, action: string, result?: Object}
+├── λ cancel() : void
+└── λ drawWorld(ctx: CanvasRenderingContext2D, appState: AppState) : void
+
 ◈ LayoutEngine
 ├── ⚙ GRID_SIZE = 40
 ├── ⚙ MAJOR_GRID_FACTOR = 4

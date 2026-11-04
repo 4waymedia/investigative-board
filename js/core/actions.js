@@ -166,6 +166,22 @@ const ACTION_REGISTRY = {
     }
   },
 
+  "pin:branch": {
+    id: "pin:branch",
+    label: "Branch (45°)",
+    description: "Start 45° angular radial branching from this pin",
+    context: ACTION_CONTEXTS.PIN_SELECTED,
+    execute: (pinIndex) => {
+      if (window.branchManager) {
+        window.branchManager.activateForPin(pinIndex);
+        if (window.app?.render) window.app.render();
+        else if (window.draw) window.draw();
+        return true;
+      }
+      return false;
+    }
+  },
+
   "pin:setParent": {
     id: "pin:setParent",
     label: "Set as Parent",

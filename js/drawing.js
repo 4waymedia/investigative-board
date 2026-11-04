@@ -2110,62 +2110,92 @@ function drawComicBubbleTail(ctx, pin, scr, width, height, tailType, fillColor, 
 }
 
 /**
+ * Draw a clean, unified cartoon cloud shape with non-overlapping trailing drops
+ */
+function drawCartoonCloud(ctx, scr, width, height, tailAngle, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth, dropShadow = false) {
+  const rx = width / 2;
+  const ry = height / 2;
+  const numLobes = 10;
+  const bumpH = Math.min(rx, ry) * 0.26;
+
+  ctx.save();
+  if (dropShadow) {
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+  }
+
+  ctx.fillStyle = hexToRgba(fillColor, fillAlpha);
+  ctx.strokeStyle = hexToRgba(strokeColor, strokeAlpha);
+  ctx.lineWidth = strokeWidth;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // 1. Draw smooth continuous cloud body as a single closed path (zero interior lines)
+  ctx.beginPath();
+  const startX = scr.x + (rx - 2);
+  const startY = scr.y;
+  ctx.moveTo(startX, startY);
+
+  for (let i = 0; i < numLobes; i++) {
+    const nextAngle = ((i + 1) / numLobes) * Math.PI * 2;
+    const midAngle = (i + 0.5) * (Math.PI * 2 / numLobes);
+
+    // Control point bulges outward
+    const ctrlX = scr.x + (rx + bumpH) * Math.cos(midAngle);
+    const ctrlY = scr.y + (ry + bumpH) * Math.sin(midAngle);
+
+    // Next valley point on inner ellipse
+    const nextX = scr.x + (rx - 2) * Math.cos(nextAngle);
+    const nextY = scr.y + (ry - 2) * Math.sin(nextAngle);
+
+    ctx.quadraticCurveTo(ctrlX, ctrlY, nextX, nextY);
+  }
+
+  ctx.closePath();
+  ctx.fill();
+  if (strokeWidth > 0) {
+    ctx.stroke();
+  }
+
+  // 2. Draw 3 distinct, non-overlapping trailing thought drops
+  if (tailAngle !== null && tailAngle !== undefined) {
+    const minDim = Math.min(rx, ry);
+    const dropRadii = [minDim * 0.20, minDim * 0.13, minDim * 0.08];
+    const attachX = scr.x + (rx + bumpH * 0.4) * Math.cos(tailAngle);
+    const attachY = scr.y + (ry + bumpH * 0.4) * Math.sin(tailAngle);
+
+    let currentDist = 0;
+    dropRadii.forEach((radius, idx) => {
+      // Step distance: previous radius + current radius + clean padding gap (7px)
+      if (idx === 0) {
+        currentDist += radius + 8;
+      } else {
+        currentDist += dropRadii[idx - 1] + radius + 7;
+      }
+      const cx = attachX + currentDist * Math.cos(tailAngle);
+      const cy = attachY + currentDist * Math.sin(tailAngle);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(radius, 4), 0, Math.PI * 2);
+      ctx.fill();
+      if (strokeWidth > 0) {
+        ctx.stroke();
+      }
+    });
+  }
+
+  ctx.restore();
+}
+
+/**
  * Draw a thought bubble - cloud shape with trailing small circles
  */
 function drawThoughtBubble(ctx, pin, scr, width, height, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth) {
   let tailPos = pin.tailPosition || { angle: 225, distance: 0.8 };
   const tailAngle = tailPos.angle * Math.PI / 180;
-  const rx = width / 2;
-  const ry = height / 2;
-  
-  ctx.save();
-  ctx.fillStyle = hexToRgba(fillColor, fillAlpha);
-  ctx.strokeStyle = hexToRgba(strokeColor, strokeAlpha);
-  ctx.lineWidth = strokeWidth;
-  
-  // Draw cloud-like main bubble using overlapping circles
-  ctx.beginPath();
-  
-  // Create cloud shape with bumpy edges
-  const numBumps = 12;
-  const bumpSize = Math.min(rx, ry) * 0.3;
-  
-  for (let i = 0; i < numBumps; i++) {
-    const angle = (i / numBumps) * Math.PI * 2;
-    const bumpX = scr.x + (rx - bumpSize * 0.3) * Math.cos(angle);
-    const bumpY = scr.y + (ry - bumpSize * 0.3) * Math.sin(angle);
-    
-    if (i === 0) {
-      ctx.moveTo(bumpX + bumpSize, bumpY);
-    }
-    
-    // Draw arc for each bump
-    ctx.arc(bumpX, bumpY, bumpSize, angle - Math.PI/numBumps, angle + Math.PI/numBumps);
-  }
-  
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  
-  // Draw trailing circles (thought tail)
-  const numTrailingCircles = 3;
-  const startDist = Math.max(rx, ry) * 0.9;
-  
-  for (let i = 0; i < numTrailingCircles; i++) {
-    const t = (i + 1) / (numTrailingCircles + 0.5);
-    const dist = startDist + t * Math.min(width, height) * 0.5;
-    const cx = scr.x + dist * Math.cos(tailAngle);
-    const cy = scr.y + dist * Math.sin(tailAngle);
-    // Circles get smaller as they trail away
-    const radius = Math.min(width, height) * 0.1 * (1 - t * 0.6);
-    
-    ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(radius, 3), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-  
-  ctx.restore();
+  drawCartoonCloud(ctx, scr, width, height, tailAngle, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth, pin.dropShadow);
 }
 
 // Register text pin shapes (bubble and rectangle)
@@ -2442,91 +2472,10 @@ registerShape("thought", {
       const width = pin.width || 140;
       const height = pin.height || 90;
       const borderWidth = pin.borderWidth || 2;
-
-      ctx.save();
-      ctx.fillStyle = hexToRgba(bubbleColor, bubbleColorAlpha);
-      ctx.strokeStyle = hexToRgba(borderColor, borderColorAlpha);
-      ctx.lineWidth = borderWidth;
-
-      const rx = width / 2;
-      const ry = height / 2;
-
-      // Draw cloud shape using overlapping circles
-      // First, fill the interior with overlapping circles
-      const cloudBumps = [
-        // Top bumps
-        { x: -0.5, y: -0.7, r: 0.45 },
-        { x: 0.1, y: -0.8, r: 0.4 },
-        { x: 0.55, y: -0.6, r: 0.42 },
-        // Right bumps
-        { x: 0.8, y: -0.2, r: 0.38 },
-        { x: 0.75, y: 0.35, r: 0.4 },
-        // Bottom bumps
-        { x: 0.4, y: 0.7, r: 0.38 },
-        { x: -0.2, y: 0.75, r: 0.42 },
-        // Left bumps
-        { x: -0.7, y: 0.4, r: 0.38 },
-        { x: -0.8, y: -0.15, r: 0.4 },
-        // Center fill
-        { x: 0, y: 0, r: 0.6 },
-        { x: -0.25, y: -0.2, r: 0.5 },
-        { x: 0.25, y: 0.15, r: 0.48 },
-      ];
-
-      // Draw all cloud bumps as fills first (to create solid interior)
-      ctx.beginPath();
-      cloudBumps.forEach((bump, i) => {
-        const cx = scr.x + bump.x * rx;
-        const cy = scr.y + bump.y * ry;
-        const cr = bump.r * Math.min(rx, ry);
-        
-        ctx.moveTo(cx + cr, cy);
-        ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-      });
-      ctx.fill();
-
-      // Now draw the outline - only the outer edges of the bumps
-      // Draw each bump's arc that faces outward
-      cloudBumps.slice(0, 9).forEach((bump) => {
-        const cx = scr.x + bump.x * rx;
-        const cy = scr.y + bump.y * ry;
-        const cr = bump.r * Math.min(rx, ry);
-        
-        // Calculate angle from center to this bump
-        const angleToCenter = Math.atan2(-bump.y, -bump.x);
-        // Draw arc facing away from center (roughly 180 degrees)
-        const startAngle = angleToCenter - Math.PI * 0.6;
-        const endAngle = angleToCenter + Math.PI * 0.6;
-        
-        ctx.beginPath();
-        ctx.arc(cx, cy, cr, startAngle, endAngle);
-        ctx.stroke();
-      });
-
-      // Draw trailing thought circles (drops)
       let tailPos = pin.tailPosition || { angle: 225, distance: 0.8 };
       const tailAngle = tailPos.angle * Math.PI / 180;
-      
-      // 3 circular drops, decreasing in size
-      const drops = [
-        { dist: 1.15, size: 0.18 },
-        { dist: 1.35, size: 0.12 },
-        { dist: 1.5, size: 0.07 }
-      ];
-      
-      drops.forEach((drop) => {
-        const dist = Math.max(rx, ry) * drop.dist;
-        const cx = scr.x + dist * Math.cos(tailAngle);
-        const cy = scr.y + dist * Math.sin(tailAngle);
-        const radius = Math.min(width, height) * drop.size;
-        
-        ctx.beginPath();
-        ctx.arc(cx, cy, Math.max(radius, 3), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      });
 
-      ctx.restore();
+      drawCartoonCloud(ctx, scr, width, height, tailAngle, bubbleColor, bubbleColorAlpha, borderColor, borderColorAlpha, borderWidth, pin.dropShadow);
     },
     main: function() {},
     decoration: function() {},
