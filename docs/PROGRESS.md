@@ -70,6 +70,7 @@ The project utilizes an automated node-based integration and regression testing 
 | **BUG-013** | Critical | `js/core/app.js` | Changing layout erased pins due to timeline `parseDate` returning object instead of timestamp, unconstrained canvas height pushing pins off-screen, and strict viewport bounds culling area pins | `[VERIFIED]` | `test-layout-erasing-fix.js` |
 | **BUG-014** | High | `js/core/app.js` & `js/core/layoutEngine.js` | Grid and Radial layouts not centered on screen due to `minCanvasHeight` inflating DOM height, percentage `image.size` producing NaN in bounds, and radial root offset | `[VERIFIED]` | `test-canvas-grid-layout.js` |
 | **BUG-015** | Medium | `js/drawing.js` & `js/core/app.js` | Thought bubble rendering deformed cloud body (arcs stroking inwards into cloud) and colliding overlapping tail drops | `[VERIFIED]` | `test-shape-registration.js` |
+| **BUG-016** | High | `js/events/eventHandlers.js` & `js/core/branchManager.js` | Pin dragging suppressed by hold charge check; opposite branch distance mismatch | `[VERIFIED]` | `test-branch-manager.js` |
 
 ---
 
@@ -184,6 +185,17 @@ The project utilizes an automated node-based integration and regression testing 
   1. Implemented a unified `drawCartoonCloud(ctx, scr, width, height, tailAngle, ...)` with a continuous 10-lobe quadratic curve path (`ctx.quadraticCurveTo`), eliminating all internal seams and yielding a clean scalloped cartoon cloud.
   2. Spaced trailing drops proportionally with guaranteed separation padding gaps (`d = r_prev + r_curr + 7px`), eliminating collisions.
   3. Integrated direct `+` handle discoverability on selected pins, added `🌿 Branch (45°)` to radial menu, and enabled `B` keyboard hotkey.
+
+### BUG-016: Pin Dragging Conflict & Branch Opposite Side Distance Mismatch
+- **Root Causes:**
+  1. **Pin Drag Suppression by Hold Charge:** On every pin `mousedown`, `BranchManager.startHold` was initiated in parallel with `DragManager.startPinDrag`. During the initial 8px jitter window of mouse movement, `branchManager.updateMove` returned `true`, causing `handleCanvasMouseMove` to execute `return;` early and block `dragManager.updateDrag`. If the user held the pin or moved slowly, the drag was hijacked into branch creation.
+  2. **Asymmetrical Opposite Branch Distances:** When a pin had an existing branch (e.g. Left at 240px), creating a branch on the opposite side (Right) hardcoded `minBranchDistance = 160px`, resulting in an asymmetric layout rather than matching the opposite branch distance.
+- **Fix:**
+  1. Removed `startHold` from pin `mousedown` in [`js/events/eventHandlers.js`](file:///Users/health/Sites/investigative-board/js/events/eventHandlers.js). Pin clicks and drags are 100% dedicated to smooth pin movement with zero delay or interference. Branching is initiated exclusively via hover `+` handles, the radial menu, or the `B` hotkey.
+  2. Implemented `BranchManager.getOppositeDistance(pinIndex, targetAngle)` in [`js/core/branchManager.js`](file:///Users/health/Sites/investigative-board/js/core/branchManager.js). When branching towards an angle, it detects any connected pin in the opposite sector ($\pm 60^\circ$ of $\theta + 180^\circ$) and matches its distance snapped to the 40px master grid.
+  3. Left and Right hover `+` handle default targets now automatically use `getOppositeDistance`.
+  4. Dragging a branch now magnetically locks to the opposite side distance (within $\pm 35\text{px}$) and renders a symmetrical badge indicator (`↔`).
+  5. Verified in [`tests/test-branch-manager.js`](file:///Users/health/Sites/investigative-board/tests/test-branch-manager.js) (Tests 13 & 14).
 
 ---
 

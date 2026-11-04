@@ -25,6 +25,7 @@ class BranchManager {
     this.chargeStartTime = 0;
     this.chargeProgress = 0;
     this.startScreenPos = { x: 0, y: 0 };
+    this.startWorldPos = { x: 0, y: 0 };
     this.currentWorldPos = { x: 0, y: 0 };
     this.activeHandle = null;
     this.branchTarget = null;
@@ -80,6 +81,80 @@ class BranchManager {
       if (Number.isFinite(imgSize) && imgSize > 0) return imgSize / 2;
     }
     return 24;
+  }
+
+  /**
+   * Determine matching distance from an opposite connected pin,
+   * or fallback to consistent neighbor distance / minBranchDistance
+   */
+  getOppositeDistance(pinIndex, targetAngle) {
+    const pin = this.appState.pins[pinIndex];
+    if (!pin) return this.minBranchDistance;
+
+    const connections = this.appState.connections || [];
+    // Opposite angle is (targetAngle + PI) normalized
+    const oppositeAngle = (targetAngle + Math.PI) % (Math.PI * 2);
+
+    let bestDist = null;
+    let minAngleDiff = Infinity;
+
+    for (const conn of connections) {
+      const from = conn.from !== undefined ? conn.from : conn.startIndex;
+      const to = conn.to !== undefined ? conn.to : conn.endIndex;
+      let otherIndex = null;
+      if (from === pinIndex) otherIndex = to;
+      else if (to === pinIndex) otherIndex = from;
+
+      if (otherIndex !== null && this.appState.pins[otherIndex]) {
+        const other = this.appState.pins[otherIndex];
+        const dx = other.x - pin.x;
+        const dy = other.y - pin.y;
+        const dist = Math.hypot(dx, dy);
+        const connAngle = Math.atan2(dy, dx);
+
+        // Normalize difference between connAngle and oppositeAngle to [-PI, PI]
+        let diff = Math.atan2(Math.sin(connAngle - oppositeAngle), Math.cos(connAngle - oppositeAngle));
+        diff = Math.abs(diff);
+
+        // Consider opposite if within 60 degrees (broad opposite sector)
+        if (diff <= Math.PI / 3 && diff < minAngleDiff) {
+          minAngleDiff = diff;
+          bestDist = dist;
+        }
+      }
+    }
+
+    if (bestDist !== null) {
+      const snapped = Math.round(bestDist / 40) * 40;
+      return Math.max(80, snapped);
+    }
+
+    // Fallback: If no opposite pin, match any connected neighbor distance (min 80px)
+    let anyDist = null;
+    let minConnDist = Infinity;
+    for (const conn of connections) {
+      const from = conn.from !== undefined ? conn.from : conn.startIndex;
+      const to = conn.to !== undefined ? conn.to : conn.endIndex;
+      let otherIndex = null;
+      if (from === pinIndex) otherIndex = to;
+      else if (to === pinIndex) otherIndex = from;
+
+      if (otherIndex !== null && this.appState.pins[otherIndex]) {
+        const other = this.appState.pins[otherIndex];
+        const dist = Math.hypot(other.x - pin.x, other.y - pin.y);
+        if (dist >= 60 && dist < minConnDist) {
+          minConnDist = dist;
+          anyDist = dist;
+        }
+      }
+    }
+
+    if (anyDist !== null) {
+      const snapped = Math.round(anyDist / 40) * 40;
+      return Math.max(80, snapped);
+    }
+
+    return this.minBranchDistance; // 160px
   }
 
   /**
@@ -148,11 +223,15 @@ class BranchManager {
 
     // Right Handle (0° / East)
     if (openSides.right) {
-      let targetX = pin.x + this.minBranchDistance;
+      const rightDist = this.getOppositeDistance(pinIndex, 0);
+      let targetX = pin.x + rightDist;
       let targetY = pin.y;
       if (typeof LayoutEngine !== 'undefined') {
         targetX = LayoutEngine.snap(targetX, 40);
         targetY = LayoutEngine.snap(targetY, 40);
+      } else {
+        targetX = Math.round(targetX / 40) * 40;
+        targetY = Math.round(targetY / 40) * 40;
       }
       newHandles.push({
         id: `pin_${pinIndex}_right`,
@@ -162,17 +241,21 @@ class BranchManager {
         y: pin.y,
         angle: 0,
         radius: 13,
-        defaultTarget: { x: targetX, y: targetY, rawAngle: 0, snappedAngle: 0, snappedDegrees: 0, distance: this.minBranchDistance }
+        defaultTarget: { x: targetX, y: targetY, rawAngle: 0, snappedAngle: 0, snappedDegrees: 0, distance: rightDist, matchedOpposite: true }
       });
     }
 
     // Left Handle (180° / West)
     if (openSides.left) {
-      let targetX = pin.x - this.minBranchDistance;
+      const leftDist = this.getOppositeDistance(pinIndex, Math.PI);
+      let targetX = pin.x - leftDist;
       let targetY = pin.y;
       if (typeof LayoutEngine !== 'undefined') {
         targetX = LayoutEngine.snap(targetX, 40);
         targetY = LayoutEngine.snap(targetY, 40);
+      } else {
+        targetX = Math.round(targetX / 40) * 40;
+        targetY = Math.round(targetY / 40) * 40;
       }
       newHandles.push({
         id: `pin_${pinIndex}_left`,
@@ -182,7 +265,7 @@ class BranchManager {
         y: pin.y,
         angle: Math.PI,
         radius: 13,
-        defaultTarget: { x: targetX, y: targetY, rawAngle: Math.PI, snappedAngle: Math.PI, snappedDegrees: 180, distance: this.minBranchDistance }
+        defaultTarget: { x: targetX, y: targetY, rawAngle: Math.PI, snappedAngle: Math.PI, snappedDegrees: 180, distance: leftDist, matchedOpposite: true }
       });
     }
 
@@ -263,6 +346,7 @@ class BranchManager {
     this.startedFromHandle = true;
     this.chargeProgress = 1.0;
     this.startScreenPos = { x: 0, y: 0 };
+    this.startWorldPos = { x: worldPos.x, y: worldPos.y };
     this.currentWorldPos = { x: worldPos.x, y: worldPos.y };
     this.branchTarget = handle.defaultTarget || null;
 
@@ -334,12 +418,13 @@ class BranchManager {
       return true;
     }
 
-    // 2. READY STATE: Dragging out initiates branch
+    // 2. READY STATE: Small drag movement transitions to active 45° branching
     if (this.state === 'ready') {
-      const radius = this.getPinRadius(pin);
-      const worldDist = Math.hypot(worldPos.x - pin.x, worldPos.y - pin.y);
+      const dragDist = this.startWorldPos
+        ? Math.hypot(worldPos.x - this.startWorldPos.x, worldPos.y - this.startWorldPos.y)
+        : Math.hypot(worldPos.x - pin.x, worldPos.y - pin.y);
 
-      if (worldDist > radius + 15) {
+      if (dragDist > 4) {
         this.state = 'branching';
         this.computeBranchTarget(worldPos);
       }
@@ -347,7 +432,7 @@ class BranchManager {
       return true;
     }
 
-    // 3. BRANCHING STATE: 45° angular snapping
+    // 3. BRANCHING STATE: 45° angular and opposite-distance snapping
     if (this.state === 'branching') {
       this.computeBranchTarget(worldPos);
       if (this.draw) this.draw();
@@ -375,7 +460,16 @@ class BranchManager {
     let deg = Math.round((snappedAngle * 180) / Math.PI);
     deg = ((deg % 360) + 360) % 360;
 
-    const dist = Math.max(this.minBranchDistance, Math.round(rawDist / 40) * 40);
+    // Opposite distance matching
+    const oppDist = this.getOppositeDistance(this.sourcePinIndex, snappedAngle);
+
+    let dist;
+    // Magnetic snap to opposite distance if within 35px, or if user hasn't pulled beyond oppDist
+    if (Math.abs(rawDist - oppDist) <= 35 || rawDist <= oppDist) {
+      dist = oppDist;
+    } else {
+      dist = Math.max(oppDist, Math.round(rawDist / 40) * 40);
+    }
 
     let targetX = pin.x + dist * Math.cos(snappedAngle);
     let targetY = pin.y + dist * Math.sin(snappedAngle);
@@ -394,7 +488,8 @@ class BranchManager {
       rawAngle,
       snappedAngle,
       snappedDegrees: deg,
-      distance: dist
+      distance: dist,
+      matchedOpposite: (dist === oppDist)
     };
   }
 
@@ -675,8 +770,9 @@ class BranchManager {
       ctx.lineCap = "round";
       ctx.stroke();
 
-      // Direction Badge (e.g. "0°", "45°", "180°")
-      const degText = `${this.branchTarget.snappedDegrees}°`;
+      // Direction & Distance Badge (e.g. "0° • 160px" or "180° • 200px ↔")
+      const symIcon = this.branchTarget.matchedOpposite ? " ↔" : "";
+      const degText = `${this.branchTarget.snappedDegrees}° • ${this.branchTarget.distance}px${symIcon}`;
       ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, sans-serif";
       const badgeW = ctx.measureText(degText).width + 12;
       const badgeH = 18;
@@ -684,7 +780,7 @@ class BranchManager {
       const badgeY = this.branchTarget.y + 30;
 
       ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
-      ctx.strokeStyle = accentColor;
+      ctx.strokeStyle = this.branchTarget.matchedOpposite ? "#38bdf8" : accentColor;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);

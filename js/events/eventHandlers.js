@@ -742,9 +742,9 @@ class EventHandlers {
           this.selectedPins = [clickedPinIndex];
           this.appState.setSelectedPins([clickedPinIndex]);
 
-          // Start hold-to-branch check
+          // Clear any branch hover handles during normal pin drag
           if (window.branchManager) {
-            window.branchManager.startHold(clickedPinIndex, e.clientX, e.clientY, mousePos.world);
+            window.branchManager.clearHover();
           }
 
           // Start drag using drag manager

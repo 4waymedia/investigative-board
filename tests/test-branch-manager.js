@@ -242,4 +242,57 @@ assert(westPin.x < appState.pins[0].x, "Left handle click must spawn child to th
 assert.strictEqual(westPin.y, appState.pins[0].y, "Spawned child must be horizontally aligned");
 console.log("  ✅ Left and Right '+' handle instant clicks spawn aligned connected branches");
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 13: Match Opposite Side Distance for Symmetrical Branch Creation
+// ─────────────────────────────────────────────────────────────────────────────
+// Setup: Root pin at (400, 400). Left pin at (160, 400) -> distance is 240px.
+const symAppState = new MockAppState();
+symAppState.pins = [
+  { id: 'root', x: 400, y: 400, color: '#58a6ff', typeId: 'pin:circle', radius: 20 },
+  { id: 'left_child', x: 160, y: 400, color: '#58a6ff', typeId: 'pin:circle', radius: 20 }
+];
+symAppState.connections = [
+  { from: 0, to: 1 } // Connection from root to left child (distance = 240px, angle = 180° / West)
+];
+
+const symBm = new BranchManager(symAppState);
+
+// Opposite distance when branching Right (0° / East) must be 240px to match left side
+const rightMatchedDist = symBm.getOppositeDistance(0, 0);
+assert.strictEqual(rightMatchedDist, 240, `Right branch distance must match opposite left side distance of 240px, got ${rightMatchedDist}`);
+
+// When hovering root pin, Right handle's default target must be at 400 + 240 = 640px
+symBm.showHoverHandles(0);
+const symRightHandle = symBm.handles.find(h => h.side === 'right');
+assert.ok(symRightHandle, "Right handle must exist");
+assert.strictEqual(symRightHandle.defaultTarget.distance, 240, "Right handle target distance must be 240px");
+assert.strictEqual(symRightHandle.defaultTarget.x, 640, "Right handle target X must be 640 (400 + 240)");
+assert.strictEqual(symRightHandle.defaultTarget.matchedOpposite, true, "Must be flagged as matched opposite");
+
+// Clicking right handle must place new pin at x = 640
+symBm.startFromHandle(symRightHandle, { x: symRightHandle.x, y: symRightHandle.y });
+const symResult = symBm.handleMouseUp();
+assert.strictEqual(symResult.handled, true);
+const rightChild = symAppState.pins[symAppState.pins.length - 1];
+assert.strictEqual(rightChild.x, 640, "New pin must be at x = 640, matching the opposite side distance (240px)");
+assert.strictEqual(rightChild.y, 400, "New pin must be at y = 400");
+console.log("  ✅ Matching opposite side distance for symmetrical branch creation verified (240px ↔ 240px)");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 14: Magnetic Lock to Opposite Distance During Drag
+// ─────────────────────────────────────────────────────────────────────────────
+// Drag slightly past or under opposite distance (e.g. raw dist = 225px near 240px)
+symBm.sourcePinIndex = 0;
+symBm.state = 'branching';
+symBm.computeBranchTarget({ x: 625, y: 400 }); // raw dist = 225px from (400, 400)
+assert.strictEqual(symBm.branchTarget.distance, 240, "Drag within 35px of opposite distance must magnetically lock to 240px");
+assert.strictEqual(symBm.branchTarget.x, 640, "Target X must lock to 640");
+assert.strictEqual(symBm.branchTarget.matchedOpposite, true);
+
+// Pull far out (e.g. x = 760 -> raw dist = 360px)
+symBm.computeBranchTarget({ x: 760, y: 400 });
+assert.strictEqual(symBm.branchTarget.distance, 360, "Pulling far beyond opposite distance must extend to 360px on 40px grid");
+assert.strictEqual(symBm.branchTarget.x, 760);
+console.log("  ✅ Magnetic distance locking to opposite distance during rotation and drag verified");
+
 console.log("🎉 All BranchManager tests passed successfully!");
