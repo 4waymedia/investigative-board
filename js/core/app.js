@@ -1084,39 +1084,75 @@ class Application {
 
       const connType = conn.type || this.appState.connectionType;
 
+      const x1 = Math.round(startAnchor.x);
+      const y1 = Math.round(startAnchor.y);
+      const x2 = Math.round(endAnchor.x);
+      const y2 = Math.round(endAnchor.y);
+
       lineSegments.push({
         index: idx,
         conn,
         type: connType,
-        p1: { x: Math.round(startAnchor.x), y: Math.round(startAnchor.y) },
-        p2: { x: Math.round(endAnchor.x), y: Math.round(endAnchor.y) }
+        x1, y1, x2, y2,
+        minX: x1 < x2 ? x1 : x2,
+        maxX: x1 > x2 ? x1 : x2,
+        minY: y1 < y2 ? y1 : y2,
+        maxY: y1 > y2 ? y1 : y2
       });
     });
 
     // Compute line jump points if enabled (default true)
+    // Optimized with precomputed AABB scalar rejection
     const lineJumpsEnabled = this.appState.lineJumpsEnabled !== false;
     if (lineJumpsEnabled) {
-      for (let i = 0; i < lineSegments.length; i++) {
-        for (let j = i + 1; j < lineSegments.length; j++) {
-          const segA = lineSegments[i];
-          const segB = lineSegments[j];
+      const segCount = lineSegments.length;
+      for (let i = 0; i < segCount; i++) {
+        const segA = lineSegments[i];
+        if (segA.type === "curved") continue;
 
-          // Jumps supported between straight lines
-          if (segA.type !== "curved" && segB.type !== "curved") {
-            const hit = this.lineSegmentIntersection(segA.p1, segA.p2, segB.p1, segB.p2);
-            if (hit) {
-              const lenB = Math.hypot(segB.p2.x - segB.p1.x, segB.p2.y - segB.p1.y);
-              const distFromStartB = hit.tB * lenB;
-              const distFromEndB = (1 - hit.tB) * lenB;
+        const aMinX = segA.minX;
+        const aMaxX = segA.maxX;
+        const aMinY = segA.minY;
+        const aMaxY = segA.maxY;
+        const aX1 = segA.x1;
+        const aY1 = segA.y1;
+        const aDx = segA.x2 - aX1;
+        const aDy = segA.y2 - aY1;
+
+        for (let j = i + 1; j < segCount; j++) {
+          const segB = lineSegments[j];
+          if (segB.type === "curved") continue;
+
+          // Scalar AABB fast rejection check (slashes ~90% of pairwise calculations)
+          if (aMaxX < segB.minX || aMinX > segB.maxX || aMaxY < segB.minY || aMinY > segB.maxY) {
+            continue;
+          }
+
+          const bX1 = segB.x1;
+          const bY1 = segB.y1;
+          const bDx = segB.x2 - bX1;
+          const bDy = segB.y2 - bY1;
+
+          const denom = aDx * bDy - aDy * bDx;
+          if (Math.abs(denom) > 1e-6) {
+            const qpX = bX1 - aX1;
+            const qpY = bY1 - aY1;
+            const tA = (qpX * bDy - qpY * bDx) / denom;
+            const tB = (qpX * aDy - qpY * aDx) / denom;
+
+            if (tA > 0.05 && tA < 0.95 && tB > 0.05 && tB < 0.95) {
+              const lenB = Math.hypot(bDx, bDy);
+              const distFromStartB = tB * lenB;
+              const distFromEndB = (1 - tB) * lenB;
 
               if (distFromStartB > minEndDist && distFromEndB > minEndDist) {
                 if (!jumpsByConn.has(segB.index)) {
                   jumpsByConn.set(segB.index, []);
                 }
                 jumpsByConn.get(segB.index).push({
-                  x: hit.x,
-                  y: hit.y,
-                  t: hit.tB
+                  x: aX1 + tA * aDx,
+                  y: aY1 + tA * aDy,
+                  t: tB
                 });
               }
             }
