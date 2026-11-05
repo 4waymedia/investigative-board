@@ -182,8 +182,105 @@ class StencilDock {
 
     this.toggleBtn.onclick = () => this.toggle();
 
-    // Populate stencil cards
-    const grid = dock.querySelector("#stencil-grid");
+    this.loadCustomStencils();
+    this.renderGrid();
+  }
+
+  loadCustomStencils() {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const saved = localStorage.getItem("artcraft_custom_stencils");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(s => {
+              if (!this.stencils.some(existing => existing.id === s.id)) {
+                this.stencils.push(s);
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Try fetching from server API if online
+    if (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http')) {
+      fetch('/api/stencils')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && Array.isArray(data.stencils)) {
+            data.stencils.forEach(s => {
+              const idx = this.stencils.findIndex(existing => existing.id === s.id);
+              if (idx >= 0) {
+                this.stencils[idx] = s;
+              } else {
+                this.stencils.push(s);
+              }
+            });
+            this.renderGrid();
+          }
+        })
+        .catch(() => {});
+    }
+  }
+
+  registerCustomStencil(stencilDef, saveToLocalStorage = true) {
+    if (!stencilDef || !stencilDef.title) return null;
+    const id = stencilDef.id || `stencil:${stencilDef.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const fullStencil = {
+      id,
+      category: stencilDef.category || "Custom",
+      title: stencilDef.title.trim(),
+      icon: stencilDef.icon || "📌",
+      badge: (stencilDef.badge || stencilDef.title.toUpperCase()).slice(0, 12),
+      shape: stencilDef.shape || "circle",
+      typeId: stencilDef.typeId || `pin:${stencilDef.shape || "circle"}`,
+      color: stencilDef.color || "#58a6ff",
+      label: stencilDef.label || stencilDef.title,
+      subtitle: stencilDef.subtitle || "AI Clue Preset",
+      description: stencilDef.description || "Custom AI-generated investigative stencil.",
+      pinScale: Number(stencilDef.pinScale) || 1.0,
+      width: stencilDef.width,
+      height: stencilDef.height,
+      radius: stencilDef.radius,
+      customFields: stencilDef.customFields || {}
+    };
+
+    const idx = this.stencils.findIndex(s => s.id === id);
+    if (idx >= 0) {
+      this.stencils[idx] = fullStencil;
+    } else {
+      this.stencils.push(fullStencil);
+    }
+
+    if (saveToLocalStorage && typeof localStorage !== 'undefined') {
+      try {
+        const customs = this.stencils.filter(s => !STENCIL_PRESETS.some(p => p.id === s.id));
+        localStorage.setItem("artcraft_custom_stencils", JSON.stringify(customs));
+      } catch (e) {}
+    }
+
+    this.renderGrid();
+    return fullStencil;
+  }
+
+  removeCustomStencil(stencilId) {
+    this.stencils = this.stencils.filter(s => s.id !== stencilId);
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const customs = this.stencils.filter(s => !STENCIL_PRESETS.some(p => p.id === s.id));
+        localStorage.setItem("artcraft_custom_stencils", JSON.stringify(customs));
+      } catch (e) {}
+    }
+    this.renderGrid();
+  }
+
+  renderGrid() {
+    if (!this.dockEl) return;
+    const grid = this.dockEl.querySelector("#stencil-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
     this.stencils.forEach(stencil => {
       const item = document.createElement("div");
       item.className = "stencil-item";
@@ -293,6 +390,7 @@ class StencilDock {
       targetY = Math.round(targetY / 40) * 40;
     }
 
+    const themeTextColor = (typeof window !== 'undefined' && window._currentThemeTextColor) || "#f0f6fc";
     const pinProps = {
       x: targetX,
       y: targetY,
@@ -309,7 +407,9 @@ class StencilDock {
       pinScale: stencil.pinScale || 1.0,
       width: stencil.width,
       height: stencil.height,
-      radius: stencil.radius
+      radius: stencil.radius,
+      titleColor: themeTextColor,
+      customFields: stencil.customFields ? { ...stencil.customFields } : {}
     };
 
     let newIndex;

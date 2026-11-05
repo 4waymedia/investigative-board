@@ -73,6 +73,7 @@ The project utilizes an automated node-based integration and regression testing 
 | **BUG-014** | High | `js/core/app.js` & `js/core/layoutEngine.js` | Grid and Radial layouts not centered on screen due to `minCanvasHeight` inflating DOM height, percentage `image.size` producing NaN in bounds, and radial root offset | `[VERIFIED]` | `test-canvas-grid-layout.js` |
 | **BUG-015** | Medium | `js/drawing.js` & `js/core/app.js` | Thought bubble rendering deformed cloud body (arcs stroking inwards into cloud) and colliding overlapping tail drops | `[VERIFIED]` | `test-shape-registration.js` |
 | **BUG-016** | High | `js/events/eventHandlers.js` & `js/core/branchManager.js` | Pin dragging suppressed by hold charge check; opposite branch distance mismatch | `[VERIFIED]` | `test-branch-manager.js` |
+| **BUG-017** | Medium | `js/drawing.js` | External title/label below text shapes (`rectangle`, `thought`, `bubble`) defaulting to `#000000` on dark canvas | `[VERIFIED]` | `test-artcraft-agent-api.js` |
 
 ---
 
@@ -217,16 +218,27 @@ The project utilizes an automated node-based integration and regression testing 
 | **2026-11-02 19:05** | L-SDF Project Structure | Added Latent-Structured Documentation Format indexes (`INDEX.lsdf`, `INDEX.detail.lsdf`, subsystem maps) | macOS / Node v20.19.6 |
 | **2026-11-02 21:00** | Master Grid & Centering Verification | Fixed `BUG-014` (viewport height inflation & radial root centering), **32/32 suites passed, 0 failures** | macOS / Node v20.19.6 |
 | **2026-11-03 15:45** | Hold-to-Branch & 45° Radial Engine | Added `BranchManager`, hold charge gauge, '+' handle, 45° magnetic snap, **33/33 suites passed, 0 failures** | macOS / Node v20.19.6 |
+| **2026-11-04 14:00** | Pin Dragging Immediate & Opposite Symmetry | Removed hold suppression from pin mousedown; opposite branch distance locking | macOS / Node v20.19.6 |
+| **2026-11-04 15:30** | Connection Jumps & Line Labels | Added R=8px semi-circular bridge arcs, chip label pills, AABB 4.97x speedup, **34/34 suites passed** | macOS / Node v20.19.6 |
+| **2026-11-04 17:15** | Stencil Palette & Clue Presets | Added `StencilDock` with 8 investigative entities, drag-drop, Shift+S toggle, **35/35 suites passed** | macOS / Node v20.19.6 |
+| **2026-11-04 18:30** | ArtCraft Agent MCP Suite | Built AI generation for stencils, themes & custom shapes; fixed `BUG-017` dark contrast; corner badges; **36/36 suites passed** | macOS / Node v20.19.6 |
+
+---
+
+### BUG-017: Dark Canvas External Label Contrast
+- **Root Cause:** In [`js/drawing.js`](file:///Users/health/Sites/investigative-board/js/drawing.js), external labels drawn below containers (`rectangle`, `thought`, `bubble`) defaulted `defaultTextColor` to `#000000`. On dark themes (background `#0d1117`), external titles were rendered as black-on-black text.
+- **Fix:** Routed external label color through `window._currentThemeTextColor || "#f0f6fc"` with a crisp `rgba(0,0,0,0.65)` drop-shadow backing. Added `drawPinBadge` corner capsule chip rendering for investigative presets (`SUSPECT`, `EVIDENCE`, `ALIBI`, etc.).
 
 ---
 
 ## 5. Ongoing Monitoring & Checklist
 
-- [x] All 33 automated regression tests pass in CI/local runner (`node tests/run-all.js`).
+- [x] All 36 automated regression tests pass in CI/local runner (`node tests/run-all.js`).
 - [x] Zero duplicate global declarations in any module (`test-no-duplicate-declarations.js`).
 - [x] Theme system completely non-destructive on initialization.
 - [x] Pin removal preserves connection graph topology.
-- [x] Model Context Protocol server verifies against JSON-RPC 2.0 specs.
+- [x] Model Context Protocol server verifies against JSON-RPC 2.0 specs with 22 tools.
+- [x] AI agent generation active for custom investigative stencils, themes, and procedural shapes.
 - [x] Real-time bi-directional synchronization bridge active for CLI and GUI pairing.
 - [x] Full bounding box hit-testing and image selection enabled.
 - [x] Layout organization (Grid, Radial, Force, Clusters, Timeline) preserves all pins and centers viewport reliably.

@@ -51,6 +51,62 @@
         } catch (err) {}
       });
 
+      // --- ArtCraft Dynamic Stencil, Theme, and Shape Events ---
+      eventSource.addEventListener('stencil-created', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          console.log('📡 Agent Live Sync: stencil-created', data);
+          if (window.stencilDock && typeof window.stencilDock.registerCustomStencil === 'function') {
+            window.stencilDock.registerCustomStencil(data.stencil, false);
+          }
+        } catch (err) {
+          console.warn('⚠️ Error processing stencil-created event:', err);
+        }
+      });
+
+      eventSource.addEventListener('stencil-deleted', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          console.log('📡 Agent Live Sync: stencil-deleted', data);
+          if (window.stencilDock && typeof window.stencilDock.removeCustomStencil === 'function') {
+            window.stencilDock.removeCustomStencil(data.stencilId);
+          }
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('theme-created', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          console.log('📡 Agent Live Sync: theme-created', data);
+          if (window.SchemaManager && typeof window.SchemaManager.registerTheme === 'function') {
+            window.SchemaManager.registerTheme(data.theme);
+          }
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('theme-applied', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          console.log('📡 Agent Live Sync: theme-applied', data);
+          if (window.app && typeof window.app.setTheme === 'function') {
+            window.app.setTheme(data.themeId);
+          } else if (window.SchemaManager && typeof window.SchemaManager.applyThemeToUI === 'function') {
+            window.SchemaManager.applyThemeToUI(data.themeId);
+          }
+          if (window.app?.render) window.app.render();
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('shape-registered', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          console.log('📡 Agent Live Sync: shape-registered', data);
+          if (typeof window.registerCustomShape === 'function') {
+            window.registerCustomShape(data.shape);
+          }
+        } catch (err) {}
+      });
+
       eventSource.onerror = () => {
         if (eventSource) {
           eventSource.close();

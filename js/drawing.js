@@ -1265,6 +1265,89 @@ registerShape("business-building", {
   },
 });
 
+// ── Investigative Corner Badge (ArtCraft Clue Preset Standard) ───────────
+
+function drawPinBadge(ctx, pin, m, scr, s, appScale) {
+  if (!pin.badge) return;
+
+  const badgeText = String(pin.badge).toUpperCase();
+  const color = pin.color || "#58a6ff";
+
+  ctx.save();
+  const fontSize = Math.max(8, Math.min(11, Math.round(9 * s)));
+  ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const metrics = ctx.measureText(badgeText);
+  const textWidth = metrics.width;
+  const paddingX = 4 * s;
+  const badgeWidth = textWidth + paddingX * 2;
+  const badgeHeight = (fontSize + 4) * s;
+
+  let badgeX = scr.x;
+  let badgeY = scr.y;
+
+  // Determine badge placement relative to shape bounds
+  if (["rectangle", "rect", "card", "thought", "bubble"].includes(m.shape)) {
+    const halfW = (m.width * s) / 2;
+    const halfH = (m.height * s) / 2;
+    badgeX = scr.x + halfW - badgeWidth / 2 - 4 * s;
+    badgeY = scr.y - halfH + badgeHeight / 2 + 4 * s;
+  } else if (["area-circle", "area-rect"].includes(m.shape)) {
+    badgeX = scr.x;
+    badgeY = scr.y - (m.radius ? m.radius * s : 40 * s) - badgeHeight / 2 - 4 * s;
+  } else {
+    // Standard pin (person, circle, diamond, pill)
+    const topOffset = m.radius ? m.radius * s : (m.height ? (m.height * s) / 2 : 14 * s);
+    badgeX = scr.x;
+    badgeY = scr.y - topOffset - badgeHeight / 2 - 4 * s;
+  }
+
+  // Badge capsule shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+  if (window.DrawingUtils?.roundRectPath) {
+    window.DrawingUtils.roundRectPath(
+      ctx,
+      badgeX - badgeWidth / 2,
+      badgeY - badgeHeight / 2 + 1,
+      badgeWidth,
+      badgeHeight,
+      3 * s
+    );
+  } else {
+    ctx.rect(badgeX - badgeWidth / 2, badgeY - badgeHeight / 2 + 1, badgeWidth, badgeHeight);
+  }
+  ctx.fill();
+
+  // Badge capsule fill (subtle dark tint with color border)
+  ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+  if (window.DrawingUtils?.roundRectPath) {
+    window.DrawingUtils.roundRectPath(
+      ctx,
+      badgeX - badgeWidth / 2,
+      badgeY - badgeHeight / 2,
+      badgeWidth,
+      badgeHeight,
+      3 * s
+    );
+  } else {
+    ctx.rect(badgeX - badgeWidth / 2, badgeY - badgeHeight / 2, badgeWidth, badgeHeight);
+  }
+  ctx.fill();
+
+  // Badge border
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1 * s;
+  ctx.stroke();
+
+  // Badge text
+  ctx.fillStyle = color;
+  ctx.fillText(badgeText, badgeX, badgeY);
+
+  ctx.restore();
+}
+
 // ── Main drawing loop ────────────────────────────────────────────────────
 
 function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
@@ -1420,6 +1503,11 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
           pinScale,
           appScale
         );
+      }
+
+      // 7. Investigative Corner Badge phase (ArtCraft Standard)
+      if (pin.badge && appScale >= 0.35) {
+        drawPinBadge(ctx, pin, finalMetrics, scr, pinScale, appScale);
       }
 
       ctx.restore();
@@ -2262,10 +2350,12 @@ registerShape("bubble", {
     decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
       // Separate colors for title and description (with backwards compatibility)
-      const defaultTextColor = pin.textColor || "#000000";
+      const themeTextColor = (window.appState?.theme?.ui?.text) || window._currentThemeTextColor || "#f0f6fc";
+      const insideContrast = pin.color && window.ColorUtils ? window.ColorUtils.contrastText(pin.color) : "#1e293b";
+      const defaultTextColor = pin.textColor || insideContrast;
       const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
-      const titleColor = pin.titleColor || defaultTextColor;
-      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : defaultTextAlpha;
+      const titleColor = pin.titleColor || themeTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : 1;
       const descriptionColor = pin.descriptionColor || defaultTextColor;
       const descriptionColorAlpha = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : defaultTextAlpha;
       const fontSize = pin.fontSize || 14;
@@ -2305,16 +2395,18 @@ registerShape("bubble", {
         }
       }
 
-      // Draw title below bubble (10% larger, centered)
+      // Draw title below bubble (10% larger, centered with drop shadow for contrast)
       if (pin.label) {
         const titleFontSize = Math.round(fontSize * 1.1); // 10% larger
-        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
-        ctx.font = `${titleFontSize}px system-ui`;
+        ctx.font = `bold ${titleFontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top"; // Start from top of text
 
         // Position title below the bubble with a small gap
         const titleY = scr.y + height/2 + 8; // 8px gap below bubble
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillText(pin.label, scr.x, titleY + 1);
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
         ctx.fillText(pin.label, scr.x, titleY);
       }
 
@@ -2387,10 +2479,12 @@ registerShape("rectangle", {
     decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
       // Separate colors for title and description (with backwards compatibility)
-      const defaultTextColor = pin.textColor || "#000000";
+      const themeTextColor = (window.appState?.theme?.ui?.text) || window._currentThemeTextColor || "#f0f6fc";
+      const insideContrast = pin.color && window.ColorUtils ? window.ColorUtils.contrastText(pin.color) : "#1e293b";
+      const defaultTextColor = pin.textColor || insideContrast;
       const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
-      const titleColor = pin.titleColor || defaultTextColor;
-      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : defaultTextAlpha;
+      const titleColor = pin.titleColor || themeTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : 1;
       const descriptionColor = pin.descriptionColor || defaultTextColor;
       const descriptionColorAlpha = pin.descriptionColorAlpha !== undefined ? pin.descriptionColorAlpha : defaultTextAlpha;
       const fontSize = pin.fontSize || 14;
@@ -2430,16 +2524,18 @@ registerShape("rectangle", {
         }
       }
 
-      // Draw title below rectangle (10% larger, centered)
+      // Draw title below rectangle (10% larger, centered with drop shadow for contrast)
       if (pin.label) {
         const titleFontSize = Math.round(fontSize * 1.1); // 10% larger
-        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
-        ctx.font = `${titleFontSize}px system-ui`;
+        ctx.font = `bold ${titleFontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top"; // Start from top of text
 
         // Position title below the rectangle with a small gap
         const titleY = scr.y + height/2 + 8; // 8px gap below rectangle
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillText(pin.label, scr.x, titleY + 1);
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
         ctx.fillText(pin.label, scr.x, titleY);
       }
 
@@ -2480,8 +2576,12 @@ registerShape("thought", {
     main: function() {},
     decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
-      const defaultTextColor = pin.textColor || "#000000";
+      const themeTextColor = (window.appState?.theme?.ui?.text) || window._currentThemeTextColor || "#f0f6fc";
+      const insideContrast = pin.color && window.ColorUtils ? window.ColorUtils.contrastText(pin.color) : "#1e293b";
+      const defaultTextColor = pin.textColor || insideContrast;
       const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
+      const titleColor = pin.titleColor || themeTextColor;
+      const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : 1;
       const fontSize = pin.fontSize || 14;
       const width = pin.width || 140;
       const height = pin.height || 90;
@@ -2508,13 +2608,15 @@ registerShape("thought", {
         }
       }
 
-      // Draw label/title below bubble
+      // Draw label/title below bubble with drop shadow for contrast
       if (pin.label) {
         const titleFontSize = Math.round(fontSize * 1.1);
-        ctx.fillStyle = hexToRgba(defaultTextColor, defaultTextAlpha);
-        ctx.font = `${titleFontSize}px system-ui`;
+        ctx.font = `bold ${titleFontSize}px system-ui`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillText(pin.label, scr.x, scr.y + height/2 + 16);
+        ctx.fillStyle = hexToRgba(titleColor, titleColorAlpha);
         ctx.fillText(pin.label, scr.x, scr.y + height/2 + 15);
       }
 
@@ -2687,9 +2789,120 @@ registerShape("text-title", {
 
 // Make shapeRenderers, pin drawing, and text drawing globally available
 window.shapeRenderers = shapeRenderers;
+window.registerShape = registerShape;
 window.drawPinShape = drawPinShape;
 window.drawTextElements = drawTextElements;
 window.DRAW_PHASES = DRAW_PHASES;
+window.drawPinBadge = drawPinBadge;
+
+// ── ArtCraft Procedural and Custom Shape Extensibility ─────────────────────
+
+function registerCustomShape(shapeDef) {
+  if (!shapeDef || !shapeDef.name) return;
+  const name = shapeDef.name.toLowerCase();
+  const base = shapeDef.baseShape === "rect" ? "rect" : "circle";
+  const defWidth = shapeDef.width || 24;
+  const defHeight = shapeDef.height || 24;
+
+  registerShape(name, {
+    baseShape: base,
+    getMetrics(pin, scale) {
+      return {
+        shape: name,
+        width: (pin.width || defWidth) * scale,
+        height: (pin.height || defHeight) * scale,
+        radius: (Math.min(pin.width || defWidth, pin.height || defHeight) / 2) * scale,
+        baseRadius: 3
+      };
+    },
+    drawMain(ctx, pin, m, scr, s) {
+      const color = pin.color || "#58a6ff";
+      const w = m.width * s;
+      const h = m.height * s;
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 1.5 * s;
+
+      if (shapeDef.pathData && typeof Path2D !== 'undefined') {
+        try {
+          const path = new Path2D(shapeDef.pathData);
+          ctx.translate(scr.x - w / 2, scr.y - h / 2);
+          ctx.scale(w / defWidth, h / defHeight);
+          ctx.fill(path);
+          ctx.stroke(path);
+          ctx.restore();
+          return;
+        } catch (e) {}
+      }
+
+      // Procedural custom shapes
+      if (name === "star") {
+        const spikes = 5;
+        const outerRadius = w / 2;
+        const innerRadius = outerRadius * 0.45;
+        let rot = (Math.PI / 2) * 3;
+        let x = scr.x;
+        let y = scr.y;
+        const step = Math.PI / spikes;
+
+        ctx.beginPath();
+        ctx.moveTo(scr.x, scr.y - outerRadius);
+        for (let i = 0; i < spikes; i++) {
+          x = scr.x + Math.cos(rot) * outerRadius;
+          y = scr.y + Math.sin(rot) * outerRadius;
+          ctx.lineTo(x, y);
+          rot += step;
+
+          x = scr.x + Math.cos(rot) * innerRadius;
+          y = scr.y + Math.sin(rot) * innerRadius;
+          ctx.lineTo(x, y);
+          rot += step;
+        }
+        ctx.lineTo(scr.x, scr.y - outerRadius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (name === "shield") {
+        ctx.beginPath();
+        const halfW = w / 2;
+        const halfH = h / 2;
+        ctx.moveTo(scr.x - halfW, scr.y - halfH);
+        ctx.lineTo(scr.x + halfW, scr.y - halfH);
+        ctx.lineTo(scr.x + halfW, scr.y + halfH * 0.2);
+        ctx.quadraticCurveTo(scr.x + halfW * 0.8, scr.y + halfH, scr.x, scr.y + halfH);
+        ctx.quadraticCurveTo(scr.x - halfW * 0.8, scr.y + halfH, scr.x - halfW, scr.y + halfH * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (name === "cross") {
+        const armW = w * 0.35;
+        const armH = h * 0.35;
+        ctx.beginPath();
+        ctx.rect(scr.x - armW / 2, scr.y - h / 2, armW, h);
+        ctx.rect(scr.x - w / 2, scr.y - armH / 2, w, armH);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        if (window.DrawingUtils?.roundRectPath) {
+          window.DrawingUtils.roundRectPath(ctx, scr.x - w / 2, scr.y - h / 2, w, h, Math.min(w, h) * 0.2);
+        } else {
+          ctx.rect(scr.x - w / 2, scr.y - h / 2, w, h);
+        }
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  });
+}
+
+window.registerCustomShape = registerCustomShape;
+
+// Auto-register built-in procedural shapes
+registerCustomShape({ name: "star", baseShape: "circle", width: 24, height: 24 });
+registerCustomShape({ name: "shield", baseShape: "rect", width: 24, height: 28 });
+registerCustomShape({ name: "cross", baseShape: "rect", width: 20, height: 20 });
 
 // Shape registration verification
 if (!shapeRenderers.get("card")) {

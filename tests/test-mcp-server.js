@@ -87,9 +87,135 @@ async function testMCPServer() {
     method: "resources/list",
     params: {}
   });
-  assert.strictEqual(resList.result.resources.length, 1);
-  assert.strictEqual(resList.result.resources[0].uri, `board://${boardId}`);
+  assert.ok(resList.result.resources.length >= 3, "Should include boards, stencils, and themes");
+  assert.ok(resList.result.resources.some(r => r.uri === `board://${boardId}`));
+  assert.ok(resList.result.resources.some(r => r.uri === "stencils://all"));
+  assert.ok(resList.result.resources.some(r => r.uri === "themes://all"));
   console.log("✅ MCP resources/list: OK");
+
+  // 6. Test ArtCraft Agent API: Stencil Creation & Stamping
+  const stencilCreateRes = await mcp.handleMessage({
+    jsonrpc: "2.0",
+    id: 6,
+    method: "tools/call",
+    params: {
+      name: "stencil_create",
+      arguments: {
+        id: "stencil:informant",
+        title: "Confidential Informant",
+        category: "Persons",
+        icon: "🤫",
+        badge: "INFORMANT",
+        shape: "person",
+        color: "#38bdf8",
+        label: "Informant 'Sparrow'",
+        subtitle: "Protected Witness",
+        description: "Provides encrypted Intel on syndicate money transfers.",
+        customFields: { handler: "Special Agent Miller", threatLevel: "high" }
+      }
+    }
+  });
+  const stencilCreated = JSON.parse(stencilCreateRes.result.content[0].text);
+  assert.strictEqual(stencilCreated.stencil.badge, "INFORMANT");
+  console.log("✅ MCP stencil_create: OK");
+
+  // 7. Test Stamping Stencil onto Board
+  const stencilApplyRes = await mcp.handleMessage({
+    jsonrpc: "2.0",
+    id: 7,
+    method: "tools/call",
+    params: {
+      name: "stencil_apply",
+      arguments: {
+        boardId,
+        stencilId: "stencil:informant",
+        x: 600,
+        y: 400,
+        label: "Informant 'Sparrow' (Active)"
+      }
+    }
+  });
+  const stencilApplied = JSON.parse(stencilApplyRes.result.content[0].text);
+  assert.strictEqual(stencilApplied.pin.label, "Informant 'Sparrow' (Active)");
+  assert.strictEqual(stencilApplied.pin.badge, "INFORMANT");
+  console.log("✅ MCP stencil_apply: OK");
+
+  // 8. Test ArtCraft Agent API: Theme Generation
+  const themeCreateRes = await mcp.handleMessage({
+    jsonrpc: "2.0",
+    id: 8,
+    method: "tools/call",
+    params: {
+      name: "theme_create",
+      arguments: {
+        id: "tokyo-noir-1982",
+        name: "Tokyo Noir 1982",
+        type: "dark",
+        description: "Moody rain-slicked Tokyo streets neon aesthetic",
+        canvas: {
+          background: "#080c14",
+          gridColor: "rgba(244, 63, 94, 0.05)",
+          gridMajorColor: "rgba(244, 63, 94, 0.1)"
+        },
+        ui: {
+          background: "#0f172a",
+          border: "#1e293b",
+          text: "#f8fafc",
+          accent: "#f43f5e"
+        },
+        colorSlots: {
+          c1: { name: "Neon Rose", value: "#f43f5e" },
+          c2: { name: "Cyber Cyan", value: "#06b6d4" },
+          c3: { name: "Matrix Emerald", value: "#10b981" },
+          c4: { name: "Tokyo Amber", value: "#f59e0b" },
+          c5: { name: "Syndicate Purple", value: "#8b5cf6" },
+          c6: { name: "Hazard Orange", value: "#ea580c" },
+          c7: { name: "Sakura Pink", value: "#ec4899" },
+          c8: { name: "Electric Blue", value: "#3b82f6" }
+        }
+      }
+    }
+  });
+  const themeCreated = JSON.parse(themeCreateRes.result.content[0].text);
+  assert.strictEqual(themeCreated.theme.id, "tokyo-noir-1982");
+  console.log("✅ MCP theme_create: OK");
+
+  // 9. Test Theme Apply
+  const themeApplyRes = await mcp.handleMessage({
+    jsonrpc: "2.0",
+    id: 9,
+    method: "tools/call",
+    params: {
+      name: "theme_apply",
+      arguments: {
+        boardId,
+        themeId: "tokyo-noir-1982"
+      }
+    }
+  });
+  const themeApplied = JSON.parse(themeApplyRes.result.content[0].text);
+  assert.strictEqual(themeApplied.theme.name, "Tokyo Noir 1982");
+  console.log("✅ MCP theme_apply: OK");
+
+  // 10. Test Custom Shape Registration
+  const shapeRegRes = await mcp.handleMessage({
+    jsonrpc: "2.0",
+    id: 10,
+    method: "tools/call",
+    params: {
+      name: "shape_register",
+      arguments: {
+        name: "fingerprint",
+        description: "Forensic biometric fingerprint marker",
+        baseShape: "rect",
+        width: 32,
+        height: 40
+      }
+    }
+  });
+  const shapeRegistered = JSON.parse(shapeRegRes.result.content[0].text);
+  assert.strictEqual(shapeRegistered.shape.name, "fingerprint");
+  console.log("✅ MCP shape_register: OK");
 
   // Clean up
   fs.rmSync(testDir, { recursive: true, force: true });
