@@ -1370,11 +1370,19 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   // Use world coordinates directly since canvas is already transformed
   const scr = { x: pin.x, y: pin.y };
 
-  // FIRST: Check for pin images (draw underneath the pin shape)
-  if (pin.image && pin.image.dataUrl) {
+  // Check if image should be inset into the bubble / container or drawn behind
+  const isImageInset = Boolean(
+    pin.image && pin.image.dataUrl && (
+      pin.image.layer === "inset" ||
+      (!pin.image.layer && ["thought", "bubble", "rectangle", "card", "doc", "folder"].includes(mergedMetrics.shape))
+    )
+  );
+
+  // FIRST: Check for pin images (only draw underneath if layer is "behind" or not inset)
+  if (pin.image && pin.image.dataUrl && !isImageInset) {
     if (window.DEBUG_IMAGES) {
       console.log(
-        "🎨 Drawing pin image for pin:",
+        "🎨 Drawing pin image (behind layer) for pin:",
         pin.id,
         "style:",
         pin.image.style,
@@ -1384,10 +1392,6 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
       );
     }
     drawPinImage(ctx, pin, mergedMetrics, scr, appScale);
-    if (window.DEBUG_IMAGES) {
-      console.log("🎨 Image drawn, now drawing pin shape on top");
-    }
-    // Continue to draw the pin shape on top of the image
   }
 
   // SECOND: Check for custom theme icons
@@ -1476,6 +1480,11 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
         renderer.drawPhase.decoration(ctx, pin, finalMetrics, scr, pinScale);
       }
 
+      // Draw inset image on top of background for shapes that don't handle it in label phase
+      if (shouldDrawShape && isImageInset && !["thought", "bubble", "rectangle"].includes(finalMetrics.shape)) {
+        drawPinImage(ctx, pin, finalMetrics, scr, appScale);
+      }
+
       // 5. Selection phase (only if selected or marquee, and if no image or shape not hidden)
       if (
         renderer.drawPhase.selection &&
@@ -1527,7 +1536,7 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
  * @param {Object} scr - Screen coordinates {x, y}
  * @param {number} appScale - Application scale
  */
-function drawPinImage(ctx, pin, metrics, scr, appScale) {
+function drawPinImage(ctx, pin, metrics, scr, appScale, customCenter = null, customSize = null) {
   if (!pin.image || !pin.image.dataUrl) return;
 
   // Debug logging (enable by setting window.DEBUG_IMAGES = true)
@@ -1639,7 +1648,9 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
 
   // Use custom size if set, otherwise calculate automatic size
   let imageSize;
-  if (pin.image && pin.image.size) {
+  if (customSize !== null && customSize !== undefined) {
+    imageSize = customSize;
+  } else if (pin.image && pin.image.size) {
     // Use custom size, scaled by appScale
     imageSize = pin.image.size * appScale;
   } else {
@@ -1763,14 +1774,16 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
   }
 
   // Apply the position offset to center the image at the pin location plus offset
-  imgX = scr.x - imgWidth / 2 + positionOffsetX;
-  imgY = scr.y - imgHeight / 2 + positionOffsetY;
+  const originX = customCenter ? customCenter.x : scr.x;
+  const originY = customCenter ? customCenter.y : scr.y;
+  imgX = originX - imgWidth / 2 + positionOffsetX;
+  imgY = originY - imgHeight / 2 + positionOffsetY;
 
   // Draw the image based on style
   if (imageStyle === "circular") {
     // Draw circular image - clip to circle shape at offset position
-    const clipCenterX = scr.x + positionOffsetX;
-    const clipCenterY = scr.y + positionOffsetY;
+    const clipCenterX = originX + positionOffsetX;
+    const clipCenterY = originY + positionOffsetY;
     ctx.save();
     ctx.beginPath();
     ctx.arc(clipCenterX, clipCenterY, imageSize / 2, 0, Math.PI * 2);
@@ -1779,8 +1792,8 @@ function drawPinImage(ctx, pin, metrics, scr, appScale) {
     ctx.restore();
   } else if (imageStyle === "oval") {
     // Draw oval image - clip to oval shape at offset position
-    const clipCenterX = scr.x + positionOffsetX;
-    const clipCenterY = scr.y + positionOffsetY;
+    const clipCenterX = originX + positionOffsetX;
+    const clipCenterY = originY + positionOffsetY;
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(
@@ -2478,6 +2491,12 @@ registerShape("rectangle", {
     // Empty decoration phase
     decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
+      const isInset = Boolean(
+        pin.image && pin.image.dataUrl && (
+          pin.image.layer === "inset" || (!pin.image.layer)
+        )
+      );
+
       // Separate colors for title and description (with backwards compatibility)
       const themeTextColor = (window.appState?.theme?.ui?.text) || window._currentThemeTextColor || "#f0f6fc";
       const insideContrast = pin.color && window.ColorUtils ? window.ColorUtils.contrastText(pin.color) : "#1e293b";
@@ -2494,6 +2513,19 @@ registerShape("rectangle", {
       // Save context
       ctx.save();
 
+      let textCenterY = scr.y;
+
+      // Draw inset image inside rectangle if configured
+      if (isInset) {
+        const s = pinScale || 1;
+        const maxImgDim = Math.min((pin.image.size || 60) * s, width * 0.45, height * 0.6);
+        const imgCenterY = pin.description ? (scr.y - height * 0.15) : scr.y;
+        drawPinImage(ctx, pin, metrics, scr, appScale, { x: scr.x, y: imgCenterY }, maxImgDim);
+        if (pin.description) {
+          textCenterY = imgCenterY + (maxImgDim / 2) + 8;
+        }
+      }
+
       // Draw description inside rectangle (centered)
       if (pin.description) {
         ctx.fillStyle = hexToRgba(descriptionColor, descriptionColorAlpha);
@@ -2501,11 +2533,12 @@ registerShape("rectangle", {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
+        const textMaxW = width * (isInset ? 0.85 : 0.8);
         // Word wrap and render text
         if (window.calculateTextDimensions) {
-          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 16, 60, 30, width);
+          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 16, 60, 30, textMaxW);
           const lineHeight = fontSize * 1.3;
-          const startY = scr.y - (dims.lines.length - 1) * lineHeight / 2;
+          const startY = textCenterY - (dims.lines.length - 1) * lineHeight / 2;
           
           dims.lines.forEach((line, index) => {
             const y = startY + index * lineHeight;
@@ -2515,7 +2548,7 @@ registerShape("rectangle", {
           // Fallback: simple newline split
           const lines = pin.description.split('\n');
           const lineHeight = fontSize * 1.2;
-          const startY = scr.y - (lines.length - 1) * lineHeight / 2;
+          const startY = textCenterY - (lines.length - 1) * lineHeight / 2;
           
           lines.forEach((line, index) => {
             const y = startY + index * lineHeight;
@@ -2576,17 +2609,38 @@ registerShape("thought", {
     main: function() {},
     decoration: function() {},
     label: function(ctx, pin, metrics, scr, pinScale, appScale) {
+      const isInset = Boolean(
+        pin.image && pin.image.dataUrl && (
+          pin.image.layer === "inset" || (!pin.image.layer)
+        )
+      );
+
       const themeTextColor = (window.appState?.theme?.ui?.text) || window._currentThemeTextColor || "#f0f6fc";
       const insideContrast = pin.color && window.ColorUtils ? window.ColorUtils.contrastText(pin.color) : "#1e293b";
       const defaultTextColor = pin.textColor || insideContrast;
       const defaultTextAlpha = pin.textColorAlpha !== undefined ? pin.textColorAlpha : 1;
       const titleColor = pin.titleColor || themeTextColor;
       const titleColorAlpha = pin.titleColorAlpha !== undefined ? pin.titleColorAlpha : 1;
-      const fontSize = pin.fontSize || 14;
+      const fontSize = pin.fontSize || 13;
       const width = pin.width || 140;
       const height = pin.height || 90;
 
       ctx.save();
+
+      let textCenterY = scr.y;
+
+      // Draw inset image inside thought cloud if configured
+      if (isInset) {
+        const s = pinScale || 1;
+        const maxImgDim = Math.min((pin.image.size || 70) * s, width * 0.48, height * 0.48);
+        const imgCenterY = pin.description ? (scr.y - height * 0.15) : scr.y;
+
+        drawPinImage(ctx, pin, metrics, scr, appScale, { x: scr.x, y: imgCenterY }, maxImgDim);
+
+        if (pin.description) {
+          textCenterY = imgCenterY + (maxImgDim / 2) + 12;
+        }
+      }
 
       // Draw text inside thought bubble (centered)
       if (pin.description) {
@@ -2595,16 +2649,17 @@ registerShape("thought", {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
+        const textMaxW = width * (isInset ? 0.8 : 0.7);
         if (window.calculateTextDimensions) {
-          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 16, 60, 30, width * 0.7);
-          const lineHeight = fontSize * 1.3;
-          const startY = scr.y - (dims.lines.length - 1) * lineHeight / 2;
+          const dims = window.calculateTextDimensions(pin.description, fontSize, 'system-ui', 12, 50, 20, textMaxW);
+          const lineHeight = fontSize * 1.25;
+          const startY = textCenterY - (dims.lines.length - 1) * lineHeight / 2;
           
           dims.lines.forEach((line, index) => {
             ctx.fillText(line, scr.x, startY + index * lineHeight);
           });
         } else {
-          ctx.fillText(pin.description, scr.x, scr.y);
+          ctx.fillText(pin.description, scr.x, textCenterY);
         }
       }
 

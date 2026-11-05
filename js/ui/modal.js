@@ -444,6 +444,7 @@ class ModalManager {
   setupImageTab(pin, pinIndex) {
     const imagePreview = document.getElementById("pm-image-preview");
     const imageFileInput = document.getElementById("pm-image-file");
+    const imageLayerSelect = document.getElementById("pm-image-layer");
     const imageStyleSelect = document.getElementById("pm-image-style");
     const imagePositionSelect = document.getElementById("pm-image-position");
     const imageSizeSlider = document.getElementById("pm-image-size");
@@ -457,6 +458,16 @@ class ModalManager {
 
     // Update image preview
     this.updateImagePreview(pin);
+
+    // Set current image layer (inset vs behind)
+    if (imageLayerSelect) {
+      if (pin.image && pin.image.layer) {
+        imageLayerSelect.value = pin.image.layer;
+      } else {
+        const isContainer = ["thought", "bubble", "rectangle", "card", "doc", "folder"].includes(pin.shape);
+        imageLayerSelect.value = isContainer ? "inset" : "behind";
+      }
+    }
 
     // Set current image style
     if (pin.image && pin.image.style) {
@@ -506,11 +517,15 @@ class ModalManager {
         // Store image data in pin
         const imagePositionSelect = document.getElementById("pm-image-position");
         const imageSizeSlider = document.getElementById("pm-image-size");
+        const isContainer = ["thought", "bubble", "rectangle", "card", "doc", "folder"].includes(pin.shape);
+        const selectedLayer = imageLayerSelect ? imageLayerSelect.value : (isContainer ? "inset" : "behind");
+
         pin.image = {
           dataUrl: processedImage,
           style: imageStyleSelect.value,
           position: imagePositionSelect ? imagePositionSelect.value : "center",
           size: imageSizeSlider ? parseInt(imageSizeSlider.value) : 100,
+          layer: selectedLayer,
           originalFileName: file.name,
           uploadedAt: Date.now()
         };
@@ -527,6 +542,16 @@ class ModalManager {
       } catch (error) {
         console.error("Error processing image:", error);
         alert("Failed to process image. Please try again.");
+      }
+    };
+
+    // Handle layer change
+    const layerChangeHandler = () => {
+      if (pin.image && imageLayerSelect) {
+        pin.image.layer = imageLayerSelect.value;
+        this.appState.saveHistory();
+        this.saveAppState(this.appState);
+        this.draw();
       }
     };
 
@@ -575,6 +600,9 @@ class ModalManager {
 
     // Add event listeners for cleanup
     this.addModalListener(() => imageFileInput.removeEventListener("change", fileInputHandler));
+    if (imageLayerSelect) {
+      this.addModalListener(() => imageLayerSelect.removeEventListener("change", layerChangeHandler));
+    }
     this.addModalListener(() => imageStyleSelect.removeEventListener("change", styleChangeHandler));
     this.addModalListener(() => imagePositionSelect.removeEventListener("change", positionChangeHandler));
     this.addModalListener(() => imageSizeSlider.removeEventListener("input", sizeChangeHandler));
@@ -582,6 +610,9 @@ class ModalManager {
 
     // Add event listeners
     imageFileInput.addEventListener("change", fileInputHandler);
+    if (imageLayerSelect) {
+      imageLayerSelect.addEventListener("change", layerChangeHandler);
+    }
     imageStyleSelect.addEventListener("change", styleChangeHandler);
     imagePositionSelect.addEventListener("change", positionChangeHandler);
     imageSizeSlider.addEventListener("input", sizeChangeHandler);

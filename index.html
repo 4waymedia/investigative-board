@@ -13,6 +13,7 @@
     <script src="js/core/constants.js"></script>
     <script src="js/core/actions.js"></script>
     <script src="js/core/schema.js"></script>
+    <script src="js/core/pin.js"></script>
     <script src="js/core/backgroundBuilder.js"></script>
     <script src="js/core/utils.js"></script>
 
@@ -211,6 +212,13 @@
             <div class="form-group">
               <label for="pm-image-file">Upload Image</label>
               <input type="file" id="pm-image-file" accept="image/*" />
+            </div>
+            <div class="form-group">
+              <label for="pm-image-layer">Image Placement</label>
+              <select id="pm-image-layer">
+                <option value="inset">Inset (Inside Bubble / Shape)</option>
+                <option value="behind">Behind Shape (Backdrop / Shadow)</option>
+              </select>
             </div>
             <div class="form-group">
               <label for="pm-image-style">Display Style</label>

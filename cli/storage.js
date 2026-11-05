@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const Pin = require('../js/core/pin');
 
 class BoardStorage {
   constructor(dataDir = null) {
@@ -463,53 +464,16 @@ class BoardStorage {
     return true;
   }
 
-  addPin(boardId, {
-    x = 100,
-    y = 100,
-    label = "",
-    title = "",
-    subtitle = "",
-    note = "",
-    description = "",
-    color = "#58a6ff",
-    shape = "circle",
-    typeId = "pin:circle",
-    badge = null,
-    date = "",
-    width = 120,
-    height = 60,
-    radius = null,
-    pinScale = 1,
-    customFields = {}
-  } = {}) {
+  addPin(boardId, pinProps = {}) {
     const board = this.getBoard(boardId);
     if (!board) throw new Error(`Board not found: ${boardId}`);
 
-    const newPin = {
-      id: Date.now() + "_" + Math.random().toString(36).substr(2, 4),
-      x: Number(x) || 0,
-      y: Number(y) || 0,
-      label: label || "",
-      title: title || "",
-      subtitle: subtitle || "",
-      note: note || "",
-      description: description || "",
-      color: color || "#58a6ff",
-      colorSlot: "c2",
-      shape: shape || "circle",
-      typeId: typeId || "pin:circle",
-      badge: badge || null,
-      date: date || "",
-      width: Number(width) || 120,
-      height: Number(height) || 60,
-      radius: radius !== null && radius !== undefined ? Number(radius) : undefined,
-      pinScale: Number(pinScale) || 1,
-      customFields: customFields || {}
-    };
+    const pinInstance = Pin.from(pinProps);
+    const pinData = pinInstance.toJSON();
 
-    board.document.pins.push(newPin);
+    board.document.pins.push(pinData);
     this.saveBoard(board);
-    return { pin: newPin, index: board.document.pins.length - 1 };
+    return { pin: pinData, index: board.document.pins.length - 1 };
   }
 
   updatePin(boardId, pinIndexOrId, updates = {}) {
@@ -527,13 +491,12 @@ class BoardStorage {
       throw new Error(`Pin not found at index/id: ${pinIndexOrId}`);
     }
 
-    board.document.pins[index] = {
-      ...board.document.pins[index],
-      ...updates
-    };
+    const merged = Pin.from({ ...board.document.pins[index], ...updates });
+    const pinData = merged.toJSON();
+    board.document.pins[index] = pinData;
 
     this.saveBoard(board);
-    return { pin: board.document.pins[index], index };
+    return { pin: pinData, index };
   }
 
   deletePin(boardId, pinIndexOrId) {
