@@ -539,6 +539,180 @@ canvas, #canvas-container {
 .layout-btn#btn-layout-groups .layout-icon { color: #34d399; }
 .layout-btn#btn-toggle-grid .layout-icon { color: #60a5fa; }
 
+/* Stencil Dock & Clue Palette */
+.stencil-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  z-index: 200;
+  user-select: none;
+}
+
+.stencil-dock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  height: 38px;
+  background: rgba(22, 27, 34, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  color: #e6edf3;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.stencil-dock-toggle:hover {
+  background: rgba(33, 38, 45, 0.98);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
+}
+
+.stencil-dock-toggle.active {
+  background: #238636;
+  border-color: #3fb950;
+  color: #ffffff;
+}
+
+.stencil-dock-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 270px;
+  max-height: 440px;
+  background: rgba(22, 27, 34, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.stencil-dock.collapsed .stencil-dock-panel {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px) scale(0.95);
+  display: none;
+}
+
+.stencil-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stencil-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.stencil-panel-hint {
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.stencil-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 380px;
+  padding-right: 4px;
+}
+
+.stencil-grid::-webkit-scrollbar {
+  width: 4px;
+}
+.stencil-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.stencil-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  cursor: grab;
+  transition: all 0.15s ease;
+  border-left: 3px solid var(--stencil-color, #58a6ff);
+}
+
+.stencil-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.stencil-item:active {
+  cursor: grabbing;
+  transform: scale(0.97);
+}
+
+.stencil-item.dragging {
+  opacity: 0.5;
+}
+
+.stencil-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stencil-icon {
+  font-size: 16px;
+}
+
+.stencil-badge {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 4px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.stencil-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stencil-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e6edf3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stencil-subtitle {
+  font-size: 9px;
+  color: #8b949e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .layout-btn.active {
   background: rgba(88, 166, 255, 0.18);
   border-color: rgba(88, 166, 255, 0.4);

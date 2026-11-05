@@ -2120,15 +2120,63 @@ class EventHandlers {
   handleCanvasDrop(e) {
     e.preventDefault();
 
+    const mousePos = this.getMousePos(e);
+    const mouseWorld = mousePos.world;
+
+    // 1. Check if dropping a Stencil preset from Stencil Palette
+    const stencilData = e.dataTransfer.getData("application/x-board-stencil") || e.dataTransfer.getData("stencilData");
+    if (stencilData) {
+      try {
+        const stencil = JSON.parse(stencilData);
+        if (window.stencilDock) {
+          window.stencilDock.spawnStencil(stencil, mouseWorld);
+        } else {
+          // Fallback if dock not initialized
+          let worldX = mouseWorld.x;
+          let worldY = mouseWorld.y;
+          if (typeof LayoutEngine !== 'undefined') {
+            worldX = LayoutEngine.snap(worldX, 40);
+            worldY = LayoutEngine.snap(worldY, 40);
+          }
+          const newPin = {
+            x: worldX,
+            y: worldY,
+            color: stencil.color,
+            label: stencil.label,
+            title: stencil.title,
+            subtitle: stencil.subtitle,
+            description: stencil.description,
+            note: stencil.description,
+            shape: stencil.shape,
+            typeId: stencil.typeId,
+            status: stencil.status,
+            badge: stencil.badge,
+            pinScale: stencil.pinScale || 1.0,
+            width: stencil.width,
+            height: stencil.height,
+            radius: stencil.radius
+          };
+          const newIdx = this.appState.addPin ? this.appState.addPin(worldX, worldY, newPin) : (this.appState.pins.push(newPin) - 1);
+          if (this.appState.setSelectedPins) {
+            this.appState.setSelectedPins([newIdx]);
+          } else {
+            this.appState.selectedPinIndex = newIdx;
+          }
+          this.appState.saveHistory();
+          if (this.saveAppState) this.saveAppState(this.appState);
+          this.draw();
+        }
+        return;
+      } catch (err) {
+        console.error("❌ Failed to parse dropped stencil data:", err);
+      }
+    }
+
+    // 2. Check if dropping a Card from bottom tray
     const cardId = e.dataTransfer.getData("cardId");
     if (!cardId) {
       return;
     }
-
-    // Get drop position
-    const mousePos = this.getMousePos(e);
-    const mouseWorld = mousePos.world;
-
 
     // Find the card data
     const card = window.appState?.cards?.find(c => c.id === parseInt(cardId));
@@ -2506,12 +2554,18 @@ class EventHandlers {
         }
         this.draw();
       }
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      // Save state (Ctrl+S)
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+      // Save state (Ctrl+S / Cmd+S)
       e.preventDefault();
       if (this.appState && this.appState.saveState) {
         this.appState.saveState();
         console.log('💾 State saved');
+      }
+    } else if (e.shiftKey && (e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
+      // Toggle Stencil Palette (Shift+S)
+      e.preventDefault();
+      if (window.stencilDock) {
+        window.stencilDock.toggle();
       }
     } else if (e.key === 'l' || e.key === 'L') {
       // Toggle connection type (L)

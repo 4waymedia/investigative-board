@@ -222,6 +222,7 @@ class Application {
       BoardPickerUI: deps.BoardPickerUI || window.BoardPickerUI,
       ModalManager: deps.ModalManager || window.ModalManager,
       TrayManager: deps.TrayManager || window.TrayManager,
+      StencilDock: deps.StencilDock || window.StencilDock,
       ToolbarManager: deps.ToolbarManager || window.ToolbarManager,
       EventHandlers: deps.EventHandlers || window.EventHandlers,
       DragManager: deps.DragManager || window.DragManager,
@@ -533,6 +534,16 @@ class Application {
     this.trayManager.initialize({
       renderCards: () => this.renderTray()
     });
+
+    // Initialize stencil dock (Investigative Stencil Palette)
+    if (this.deps.StencilDock) {
+      this.stencilDock = new this.deps.StencilDock(this.appState);
+      this.stencilDock.initialize({
+        draw: () => this.render(),
+        saveAppState: this.deps.saveAppState
+      });
+      window.stencilDock = this.stencilDock;
+    }
 
     // Initialize toolbar manager
     this.toolbarManager = new this.deps.ToolbarManager(this.appState, {

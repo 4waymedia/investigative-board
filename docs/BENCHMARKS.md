@@ -52,3 +52,19 @@ To guarantee smooth rendering across displays (including 120Hz ProMotion on macO
 * **Small/Medium Boards:** Pre-computed bounding boxes achieved up to **4.97x speedup**, taking connection jump routing down to **15 microseconds**.
 * **Stress Scale (500 connections):** Baseline exceeded the 2.0ms frame budget (2.155ms). Try 2 pulled it down to **1.314ms**, keeping even massive 500-string conspiracy boards well within 60 FPS real-time panning/zooming.
 * **Accuracy:** All 3 variants verified identical intersection counts across all runs, ensuring zero visual artifacts or missed bridge arcs.
+
+---
+
+## 3. Benchmark Log 002: Stencil Palette & Clue Spawning
+
+* **Date:** 2026-11-04
+* **Subsystem:** [`js/ui/stencilDock.js`](file:///Users/health/Sites/investigative-board/js/ui/stencilDock.js), [`js/events/eventHandlers.js`](file:///Users/health/Sites/investigative-board/js/events/eventHandlers.js)
+* **Target Budget:** $\le 0.100\text{ ms}$ (100 µs) per spawned stencil pin
+* **Test Harness:** [`tests/test-stencil-palette.js`](file:///Users/health/Sites/investigative-board/tests/test-stencil-palette.js)
+
+### Results Table
+
+| Action | Volume | Total Time | Time / Entity | Budget Status | Output Consistency |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Stencil Deserialization & Grid Snap** | 100 entities | **5.625 ms** | **0.056 ms** (56.2 µs) | ✅ Under 100 µs budget | 100% 40px grid aligned |
+| **Drag & Drop Serialization** | 100 payloads | **0.840 ms** | **0.008 ms** (8.4 µs) | ✅ Instantaneous | Valid MIME type & JSON |
