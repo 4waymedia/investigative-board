@@ -2079,7 +2079,21 @@ class EventHandlers {
         console.error(`❌ Action system not available`);
       }
     } else {
-      console.log(`❌ No pin found at double-click location`);
+      // Check if user double-clicked a connection or its label
+      const clickedConnectionIndex = this.findConnectionNear ? this.findConnectionNear(mouseWorld.x, mouseWorld.y) : null;
+      if (clickedConnectionIndex !== null) {
+        console.log(`🔗 Double-clicked connection ${clickedConnectionIndex} -> opening connection editor`);
+        this.stopMarqueeAnimation();
+        this.appState.setSelectedConnection(clickedConnectionIndex);
+        if (window.openConnectionModal) {
+          window.openConnectionModal(clickedConnectionIndex);
+        } else if (window.executeAction) {
+          window.executeAction("connection:edit", clickedConnectionIndex);
+        }
+        this.draw();
+        return;
+      }
+      console.log(`❌ No pin or connection found at double-click location`);
     }
   }
 

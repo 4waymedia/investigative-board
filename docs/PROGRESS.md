@@ -43,6 +43,7 @@ The project utilizes an automated node-based integration and regression testing 
 | **31** | [`tests/test-layout-erasing-fix.js`](file:///Users/health/Sites/investigative-board/tests/test-layout-erasing-fix.js) | UI / Camera | Layout reorganization resilience, finite coordinate validation, container viewport alignment, and area pin culling | ✅ PASS |
 | **32** | [`tests/test-canvas-grid-layout.js`](file:///Users/health/Sites/investigative-board/tests/test-canvas-grid-layout.js) | Engine / Layout | Master 40px grid, count-based optimal aspect alignment, drag-release snapping, and group sub-grids | ✅ PASS |
 | **33** | [`tests/test-branch-manager.js`](file:///Users/health/Sites/investigative-board/tests/test-branch-manager.js) | Interaction / Radial | Hold-to-branch charge ring (900ms), '+' edge handle, safe release cancellation, 45° radial angular snapping & child pin spawn | ✅ PASS |
+| **34** | [`tests/test-connection-jumps-and-labels.js`](file:///Users/health/Sites/investigative-board/tests/test-connection-jumps-and-labels.js) | Connectors / Render | Line jumps (semi-circular hop-over bridge arcs at intersections), pill label chip rendering, hit-testing & double-click editing | ✅ PASS |
 
 ---
 

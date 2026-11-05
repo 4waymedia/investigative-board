@@ -991,6 +991,73 @@ class Application {
     this.ctx.lineWidth = 1; // Reset line width
   }
 
+  // Line segment intersection for line jumps (bridges)
+  lineSegmentIntersection(p1, p2, q1, q2) {
+    const dxA = p2.x - p1.x;
+    const dyA = p2.y - p1.y;
+    const dxB = q2.x - q1.x;
+    const dyB = q2.y - q1.y;
+
+    const denom = dxA * dyB - dyA * dxB;
+    if (Math.abs(denom) < 1e-6) return null; // Parallel or collinear
+
+    const tA = ((q1.x - p1.x) * dyB - (q1.y - p1.y) * dxB) / denom;
+    const tB = ((q1.x - p1.x) * dyA - (q1.y - p1.y) * dxA) / denom;
+
+    if (tA > 0.05 && tA < 0.95 && tB > 0.05 && tB < 0.95) {
+      return {
+        x: p1.x + tA * dxA,
+        y: p1.y + tA * dyA,
+        tA,
+        tB
+      };
+    }
+    return null;
+  }
+
+  // Draw straight line with hop-over semi-circular bridge arcs at crossings
+  drawStraightConnectionWithJumps(ctx, startX, startY, endX, endY, jumps = []) {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist === 0 || !jumps || jumps.length === 0) {
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      return;
+    }
+
+    const jumpRadius = 8;
+    const angle = Math.atan2(dy, dx);
+    const uX = Math.cos(angle);
+    const uY = Math.sin(angle);
+
+    // Sort jumps by distance along line
+    const sortedJumps = [...jumps].sort((a, b) => a.t - b.t);
+
+    // Filter jumps that are too close to each other
+    const filteredJumps = [];
+    for (const jmp of sortedJumps) {
+      if (filteredJumps.length === 0) {
+        filteredJumps.push(jmp);
+      } else {
+        const prev = filteredJumps[filteredJumps.length - 1];
+        if (Math.hypot(jmp.x - prev.x, jmp.y - prev.y) >= jumpRadius * 2 + 4) {
+          filteredJumps.push(jmp);
+        }
+      }
+    }
+
+    ctx.moveTo(startX, startY);
+    for (const jmp of filteredJumps) {
+      const ax = jmp.x - jumpRadius * uX;
+      const ay = jmp.y - jumpRadius * uY;
+      ctx.lineTo(ax, ay);
+      ctx.arc(jmp.x, jmp.y, jumpRadius, angle + Math.PI, angle, true);
+    }
+    ctx.lineTo(endX, endY);
+  }
+
   // Draw all connections
   drawConnections(ctx) {
     if (!this.appState.connections || !this.appState.pins) return;
@@ -998,14 +1065,66 @@ class Application {
     // Viewport bounds for culling offscreen connections
     const viewport = this.getVisibleWorldBounds(100);
 
-    // Group connections by endpoint for fan-out calculations
-    const connectionsByEndpoint = {};
+    // Collect active endpoints and line segments for intersection testing
+    const lineSegments = [];
+    const jumpsByConn = new Map();
+    const jumpRadius = 8;
+    const minEndDist = 24;
+
     this.appState.connections.forEach((conn, idx) => {
-      if (!connectionsByEndpoint[conn.from]) connectionsByEndpoint[conn.from] = [];
-      if (!connectionsByEndpoint[conn.to]) connectionsByEndpoint[conn.to] = [];
-      connectionsByEndpoint[conn.from].push(idx);
-      connectionsByEndpoint[conn.to].push(idx);
+      const startIndex = conn.from !== undefined ? conn.from : conn.startIndex;
+      const endIndex = conn.to !== undefined ? conn.to : conn.endIndex;
+      const startPin = this.appState.pins[startIndex];
+      const endPin = this.appState.pins[endIndex];
+      if (!startPin || !endPin) return;
+
+      const startAnchor = this.getPinCenter(startPin);
+      const endAnchor = this.getPinCenter(endPin);
+      if (!startAnchor || !endAnchor) return;
+
+      const connType = conn.type || this.appState.connectionType;
+
+      lineSegments.push({
+        index: idx,
+        conn,
+        type: connType,
+        p1: { x: Math.round(startAnchor.x), y: Math.round(startAnchor.y) },
+        p2: { x: Math.round(endAnchor.x), y: Math.round(endAnchor.y) }
+      });
     });
+
+    // Compute line jump points if enabled (default true)
+    const lineJumpsEnabled = this.appState.lineJumpsEnabled !== false;
+    if (lineJumpsEnabled) {
+      for (let i = 0; i < lineSegments.length; i++) {
+        for (let j = i + 1; j < lineSegments.length; j++) {
+          const segA = lineSegments[i];
+          const segB = lineSegments[j];
+
+          // Jumps supported between straight lines
+          if (segA.type !== "curved" && segB.type !== "curved") {
+            const hit = this.lineSegmentIntersection(segA.p1, segA.p2, segB.p1, segB.p2);
+            if (hit) {
+              const lenB = Math.hypot(segB.p2.x - segB.p1.x, segB.p2.y - segB.p1.y);
+              const distFromStartB = hit.tB * lenB;
+              const distFromEndB = (1 - hit.tB) * lenB;
+
+              if (distFromStartB > minEndDist && distFromEndB > minEndDist) {
+                if (!jumpsByConn.has(segB.index)) {
+                  jumpsByConn.set(segB.index, []);
+                }
+                jumpsByConn.get(segB.index).push({
+                  x: hit.x,
+                  y: hit.y,
+                  t: hit.tB
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    this._activeJumpsByConn = jumpsByConn;
 
     this.appState.connections.forEach((connection, idx) => {
       // Handle both property name formats: from/to and startIndex/endIndex
@@ -1084,13 +1203,8 @@ class Application {
         console.log(`   End: (${endX}, ${endY}) [from pin center: (${endAnchor.x.toFixed(1)}, ${endAnchor.y.toFixed(1)})]`);
       }
 
-
       // Determine connection type (use connection's type, or default to global setting)
       const connType = connection.type || this.appState.connectionType;
-
-      // CENTER-CONNECTION LOGIC: All connections go directly to pin centers
-      // No fan-out or spreading - every connection uses the exact same anchor point
-      const fanOutOffset = 0; // All connections go to the same center point
 
       if (connType === "curved") {
         // Calculate curve
@@ -1106,11 +1220,10 @@ class Application {
           const perpX = -dy / dist;
           const perpY = dx / dist;
 
-          // CENTER-BASED CURVING: Curve connects directly to centers
-          const curveAmount = 40; // World-space curve amount (context is already scaled)
+          const curveAmount = 40; // World-space curve amount
 
           const controlX = midX + perpX * curveAmount;
-          const controlY = midY + perpY * curveAmount; // No fan-out offset
+          const controlY = midY + perpY * curveAmount;
 
           ctx.moveTo(startX, startY);
           ctx.quadraticCurveTo(controlX, controlY, endX, endY);
@@ -1120,20 +1233,9 @@ class Application {
           ctx.lineTo(endX, endY);
         }
       } else {
-        // Straight line with fan-out offset
-        const dx = endX - startX;
-        const dy = endY - startY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist > 0) {
-          // DIRECT CENTER-TO-CENTER CONNECTION: No offsets, straight to center
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
-        } else {
-          // Fallback if pins are at same position
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
-        }
+        // Straight line with hop-over bridges if crossing other lines
+        const jumps = jumpsByConn.get(idx) || [];
+        this.drawStraightConnectionWithJumps(ctx, startX, startY, endX, endY, jumps);
       }
 
       ctx.stroke();
@@ -1144,14 +1246,13 @@ class Application {
 
       // Draw label at midpoint if exists
       if (connection.label) {
-        const connType = connection.type || this.appState.connectionType;
         let labelX, labelY;
 
         if (connType === "curved") {
           // For curved lines, calculate point at t=0.5 on the Bezier curve
           const dx = endX - startX;
           const dy = endY - startY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+          const dist = Math.hypot(dx, dy);
           if (dist > 0) {
             const midX = (startX + endX) / 2;
             const midY = (startY + endY) / 2;
@@ -1160,7 +1261,6 @@ class Application {
             const curveAmount = 40;
             const ctrlX = midX + perpX * curveAmount;
             const ctrlY = midY + perpY * curveAmount;
-            // Quadratic Bezier at t=0.5
             labelX = 0.25 * startX + 0.5 * ctrlX + 0.25 * endX;
             labelY = 0.25 * startY + 0.5 * ctrlY + 0.25 * endY;
           } else {
@@ -1173,21 +1273,60 @@ class Application {
           labelY = (startY + endY) / 2;
         }
 
-        // Draw label background
-        ctx.font = "12px -apple-system, BlinkMacSystemFont, sans-serif";
-        const textMetrics = ctx.measureText(connection.label);
-        const padding = 4;
-        const bgWidth = textMetrics.width + padding * 2;
-        const bgHeight = 16;
+        ctx.save();
+        ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
-        ctx.fillStyle = "rgba(22, 27, 34, 0.9)";
-        ctx.fillRect(labelX - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight);
+        let labelText = connection.label;
+        if (connection.relationshipType && connection.relationshipType !== "none" && window.RELATIONSHIP_TYPES) {
+          const rel = window.RELATIONSHIP_TYPES.find(r => r.id === connection.relationshipType);
+          if (rel && rel.icon) {
+            labelText = `${rel.icon} ${labelText}`;
+          }
+        }
+
+        const textMetrics = ctx.measureText(labelText);
+        const padX = 8;
+        const padY = 4;
+        const bgWidth = Math.max(28, textMetrics.width + padX * 2);
+        const bgHeight = 20;
+
+        // Cache label bounding box on connection for fast hit-testing
+        connection._labelBounds = {
+          x: labelX - bgWidth / 2,
+          y: labelY - bgHeight / 2,
+          width: bgWidth,
+          height: bgHeight
+        };
+
+        // Draw pill chip background with subtle shadow
+        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetY = 2;
+
+        ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+        ctx.strokeStyle = connection.color || "#58a6ff";
+        ctx.lineWidth = 1.2;
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(labelX - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight, 10);
+        } else {
+          ctx.rect(labelX - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
 
         // Draw label text
-        ctx.fillStyle = "#e6edf3";
+        ctx.fillStyle = "#f0f6fc";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(connection.label, labelX, labelY);
+        ctx.fillText(labelText, labelX, labelY);
+        ctx.restore();
+      } else {
+        delete connection._labelBounds;
       }
     });
   }
@@ -1243,6 +1382,9 @@ class Application {
     const time = performance.now() / 1000;
     const dashOffset = (time * 20) % 16; // Animate at 20 pixels per second
 
+    // Second pass: black dashes (offset by half to create marching effect)
+    const selJumps = (this._activeJumpsByConn && this._activeJumpsByConn.get(selectedIndex)) || [];
+
     // Draw two passes for black and white marching ants effect
     // First pass: white dashes (background)
     ctx.save();
@@ -1255,8 +1397,7 @@ class Application {
       ctx.moveTo(startX, startY);
       ctx.quadraticCurveTo(controlX, controlY, endX, endY);
     } else {
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
+      this.drawStraightConnectionWithJumps(ctx, startX, startY, endX, endY, selJumps);
     }
     ctx.stroke();
 
@@ -1268,8 +1409,7 @@ class Application {
       ctx.moveTo(startX, startY);
       ctx.quadraticCurveTo(controlX, controlY, endX, endY);
     } else {
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
+      this.drawStraightConnectionWithJumps(ctx, startX, startY, endX, endY, selJumps);
     }
     ctx.stroke();
 
@@ -1892,6 +2032,14 @@ class Application {
     for (let i = this.appState.connections.length - 1; i >= 0; i--) {
       const conn = this.appState.connections[i];
       if (!conn) continue;
+
+      // 1. Check direct hit on connection's label pill badge
+      if (conn._labelBounds) {
+        const b = conn._labelBounds;
+        if (wx >= b.x && wx <= b.x + b.width && wy >= b.y && wy <= b.y + b.height) {
+          return i;
+        }
+      }
 
       const startPin = this.appState.pins[conn.from];
       const endPin = this.appState.pins[conn.to];
