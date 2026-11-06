@@ -207,7 +207,9 @@ class SelectionAnimator {
 
 // Create global instance
 const selectionAnimator = new SelectionAnimator();
-window.selectionAnimator = selectionAnimator;
+if (typeof window !== "undefined") {
+  window.selectionAnimator = selectionAnimator;
+}
 
 // ============================================================================
 // APPLICATION CLASS
@@ -884,6 +886,24 @@ class Application {
     };
   }
 
+  // Get connection endpoint on a pin (supporting explicit/auto docking ports)
+  getConnectionEndpoint(pin, targetPinOrPos, portOption = null, role = "source") {
+    if (!pin) return { x: 0, y: 0, side: "center" };
+    const p = pin instanceof (typeof Pin !== "undefined" ? Pin : Object)
+      ? pin
+      : (typeof Pin !== "undefined" && typeof Pin.from === "function" ? Pin.from(pin) : null);
+
+    if (p && typeof p.getPort === "function") {
+      let side = portOption;
+      if (!side || side === "auto") {
+        side = typeof p.getAutoPort === "function" ? p.getAutoPort(targetPinOrPos, role) : "center";
+      }
+      return p.getPort(side);
+    }
+    const center = this.getPinCenter(pin);
+    return { x: center.x, y: center.y, side: "center" };
+  }
+
   // VERIFICATION: Test that all connections to a pin use identical coordinates
   verifyPinConnectionConsistency(pinIndex) {
     if (!this.appState.pins || !this.appState.connections) {
@@ -1069,6 +1089,172 @@ class Application {
     ctx.lineTo(endX, endY);
   }
 
+  // Calculate Manhattan orthogonal waypoints with exit/entry port awareness
+  getOrthogonalWaypoints(startX, startY, endX, endY, fromPort = "auto", toPort = "auto") {
+    const dx = endX - startX;
+    const dy = endY - startY;
+
+    if (Math.abs(dx) < 2 || Math.abs(dy) < 2) {
+      return [{ x: startX, y: startY }, { x: endX, y: endY }];
+    }
+
+    const normFrom = String(fromPort || "auto").toLowerCase();
+    const normTo = String(toPort || "auto").toLowerCase();
+
+    // 1. Horizontal-horizontal ports (e.g. east to west)
+    if ((normFrom === "east" || normFrom === "west") && (normTo === "west" || normTo === "east")) {
+      const midX = Math.round((startX + endX) / 2);
+      return [
+        { x: startX, y: startY },
+        { x: midX, y: startY },
+        { x: midX, y: endY },
+        { x: endX, y: endY }
+      ];
+    }
+
+    // 2. Vertical-vertical ports (e.g. south to north)
+    if ((normFrom === "north" || normFrom === "south") && (normTo === "north" || normTo === "south")) {
+      const midY = Math.round((startY + endY) / 2);
+      return [
+        { x: startX, y: startY },
+        { x: startX, y: midY },
+        { x: endX, y: midY },
+        { x: endX, y: endY }
+      ];
+    }
+
+    // 3. Horizontal exit to Vertical entry (L-route)
+    if ((normFrom === "east" || normFrom === "west") && (normTo === "north" || normTo === "south")) {
+      return [
+        { x: startX, y: startY },
+        { x: endX, y: startY },
+        { x: endX, y: endY }
+      ];
+    }
+
+    // 4. Vertical exit to Horizontal entry (L-route)
+    if ((normFrom === "north" || normFrom === "south") && (normTo === "east" || normTo === "west")) {
+      return [
+        { x: startX, y: startY },
+        { x: startX, y: endY },
+        { x: endX, y: endY }
+      ];
+    }
+
+    // 5. Default auto Manhattan routing based on primary delta
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const midX = Math.round((startX + endX) / 2);
+      return [
+        { x: startX, y: startY },
+        { x: midX, y: startY },
+        { x: midX, y: endY },
+        { x: endX, y: endY }
+      ];
+    } else {
+      const midY = Math.round((startY + endY) / 2);
+      return [
+        { x: startX, y: startY },
+        { x: startX, y: midY },
+        { x: endX, y: midY },
+        { x: endX, y: endY }
+      ];
+    }
+  }
+
+  // Draw orthogonal route with rounded corners at elbows
+  drawOrthogonalConnection(ctx, waypoints, cornerRadius = 8) {
+    if (!waypoints || waypoints.length === 0) return;
+    if (waypoints.length === 1) {
+      ctx.moveTo(waypoints[0].x, waypoints[0].y);
+      return;
+    }
+    if (waypoints.length === 2) {
+      ctx.moveTo(waypoints[0].x, waypoints[0].y);
+      ctx.lineTo(waypoints[1].x, waypoints[1].y);
+      return;
+    }
+
+    ctx.moveTo(waypoints[0].x, waypoints[0].y);
+    for (let i = 1; i < waypoints.length - 1; i++) {
+      const pPrev = waypoints[i - 1];
+      const pCurr = waypoints[i];
+      const pNext = waypoints[i + 1];
+
+      const d1 = Math.hypot(pCurr.x - pPrev.x, pCurr.y - pPrev.y);
+      const d2 = Math.hypot(pNext.x - pCurr.x, pNext.y - pCurr.y);
+      const r = Math.min(cornerRadius, d1 / 2, d2 / 2);
+
+      ctx.arcTo(pCurr.x, pCurr.y, pNext.x, pNext.y, r);
+    }
+    const last = waypoints[waypoints.length - 1];
+    ctx.lineTo(last.x, last.y);
+  }
+
+  // Draw directional arrowhead at connection endpoint
+  drawArrowhead(ctx, fromX, fromY, toX, toY, color, size = 9, style = "filled") {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-4) return;
+    const angle = Math.atan2(dy, dx);
+    const arrowAngle = Math.PI / 6;
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+
+    const x1 = toX - size * Math.cos(angle - arrowAngle);
+    const y1 = toY - size * Math.sin(angle - arrowAngle);
+    const x2 = toX - size * Math.cos(angle + arrowAngle);
+    const y2 = toY - size * Math.sin(angle + arrowAngle);
+
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(x1, y1);
+    if (style === "filled") {
+      ctx.lineTo(x2, y2);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.moveTo(toX, toY);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Get point at fractional distance along polyline waypoints
+  getPathPointAt(waypoints, t = 0.5) {
+    if (!waypoints || waypoints.length === 0) return { x: 0, y: 0 };
+    if (waypoints.length === 1) return { x: waypoints[0].x, y: waypoints[0].y };
+
+    let totalDist = 0;
+    const dists = [];
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const d = Math.hypot(waypoints[i + 1].x - waypoints[i].x, waypoints[i + 1].y - waypoints[i].y);
+      dists.push(d);
+      totalDist += d;
+    }
+
+    if (totalDist < 1e-4) return { x: waypoints[0].x, y: waypoints[0].y };
+
+    const targetDist = totalDist * Math.max(0, Math.min(1, t));
+    let acc = 0;
+    for (let i = 0; i < dists.length; i++) {
+      const d = dists[i];
+      if (acc + d >= targetDist || i === dists.length - 1) {
+        const segT = d > 0 ? (targetDist - acc) / d : 0;
+        return {
+          x: waypoints[i].x + (waypoints[i + 1].x - waypoints[i].x) * segT,
+          y: waypoints[i].y + (waypoints[i + 1].y - waypoints[i].y) * segT
+        };
+      }
+      acc += d;
+    }
+    return { x: waypoints[waypoints.length - 1].x, y: waypoints[waypoints.length - 1].y };
+  }
+
   // Draw all connections
   drawConnections(ctx) {
     if (!this.appState.connections || !this.appState.pins) return;
@@ -1089,27 +1275,53 @@ class Application {
       const endPin = this.appState.pins[endIndex];
       if (!startPin || !endPin) return;
 
-      const startAnchor = this.getPinCenter(startPin);
-      const endAnchor = this.getPinCenter(endPin);
-      if (!startAnchor || !endAnchor) return;
-
       const connType = conn.type || this.appState.connectionType;
+      const isOrthogonal = connType === "orthogonal";
+
+      let startAnchor, endAnchor;
+      if (isOrthogonal || conn.fromPort || conn.toPort) {
+        startAnchor = this.getConnectionEndpoint(startPin, endPin, conn.fromPort || (isOrthogonal ? "auto" : "center"), "source");
+        endAnchor = this.getConnectionEndpoint(endPin, startPin, conn.toPort || (isOrthogonal ? "auto" : "center"), "target");
+      } else {
+        startAnchor = this.getPinCenter(startPin);
+        endAnchor = this.getPinCenter(endPin);
+      }
+      if (!startAnchor || !endAnchor) return;
 
       const x1 = Math.round(startAnchor.x);
       const y1 = Math.round(startAnchor.y);
       const x2 = Math.round(endAnchor.x);
       const y2 = Math.round(endAnchor.y);
 
-      lineSegments.push({
-        index: idx,
-        conn,
-        type: connType,
-        x1, y1, x2, y2,
-        minX: x1 < x2 ? x1 : x2,
-        maxX: x1 > x2 ? x1 : x2,
-        minY: y1 < y2 ? y1 : y2,
-        maxY: y1 > y2 ? y1 : y2
-      });
+      if (isOrthogonal) {
+        const waypoints = this.getOrthogonalWaypoints(x1, y1, x2, y2, conn.fromPort || startAnchor.side || "auto", conn.toPort || endAnchor.side || "auto");
+        for (let s = 0; s < waypoints.length - 1; s++) {
+          const pA = waypoints[s];
+          const pB = waypoints[s + 1];
+          lineSegments.push({
+            index: idx,
+            segmentIndex: s,
+            conn,
+            type: connType,
+            x1: pA.x, y1: pA.y, x2: pB.x, y2: pB.y,
+            minX: pA.x < pB.x ? pA.x : pB.x,
+            maxX: pA.x > pB.x ? pA.x : pB.x,
+            minY: pA.y < pB.y ? pA.y : pB.y,
+            maxY: pA.y > pB.y ? pA.y : pB.y
+          });
+        }
+      } else {
+        lineSegments.push({
+          index: idx,
+          conn,
+          type: connType,
+          x1, y1, x2, y2,
+          minX: x1 < x2 ? x1 : x2,
+          maxX: x1 > x2 ? x1 : x2,
+          minY: y1 < y2 ? y1 : y2,
+          maxY: y1 > y2 ? y1 : y2
+        });
+      }
     });
 
     // Compute line jump points if enabled (default true)
@@ -1198,9 +1410,17 @@ class Application {
         }
       }
 
-      // CENTER-TO-CENTER CONNECTIONS: All lines connect to pin visual centers
-      const startAnchor = this.getPinCenter(startPin);
-      const endAnchor = this.getPinCenter(endPin);
+      const connType = connection.type || this.appState.connectionType;
+      const isOrthogonal = connType === "orthogonal";
+
+      let startAnchor, endAnchor;
+      if (isOrthogonal || connection.fromPort || connection.toPort) {
+        startAnchor = this.getConnectionEndpoint(startPin, endPin, connection.fromPort || (isOrthogonal ? "auto" : "center"), "source");
+        endAnchor = this.getConnectionEndpoint(endPin, startPin, connection.toPort || (isOrthogonal ? "auto" : "center"), "target");
+      } else {
+        startAnchor = this.getPinCenter(startPin);
+        endAnchor = this.getPinCenter(endPin);
+      }
 
       if (!startAnchor || !endAnchor) return;
 
@@ -1216,7 +1436,6 @@ class Application {
       const useGradient = connection.useGradient && fromColor.toLowerCase() !== toColor.toLowerCase();
 
       if (useGradient) {
-        // Create gradient from start pin to end pin
         const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
         gradient.addColorStop(0, fromColor);
         gradient.addColorStop(1, toColor);
@@ -1227,34 +1446,31 @@ class Application {
 
       // Line width varies based on confidence score (1.5 to 4px)
       const confidence = connection.confidenceScore ?? 50;
-      const baseLineWidth = 1.5 + (confidence / 100) * 2.5; // 1.5px at 0%, 4px at 100%
+      const baseLineWidth = 1.5 + (confidence / 100) * 2.5;
       ctx.lineWidth = baseLineWidth;
 
       // Glow effect based on validation percent
       const validation = connection.validationPercent ?? 0;
       if (validation > 0) {
         ctx.shadowColor = connection.color || "#58a6ff";
-        ctx.shadowBlur = (validation / 100) * 10; // 0 to 10px blur
+        ctx.shadowBlur = (validation / 100) * 10;
       } else {
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
       }
 
-      ctx.setLineDash([]); // Ensure solid line (not dashed)
-      ctx.beginPath();
-
-      // VERIFICATION: All connections to a pin use identical coordinates
-      if (window.DEBUG_PIN_CENTERS) {
-        console.log(`🔗 Connection ${idx}: pin ${connection.from}→${connection.to}`);
-        console.log(`   Start: (${startX}, ${startY}) [from pin center: (${startAnchor.x.toFixed(1)}, ${startAnchor.y.toFixed(1)})]`);
-        console.log(`   End: (${endX}, ${endY}) [from pin center: (${endAnchor.x.toFixed(1)}, ${endAnchor.y.toFixed(1)})]`);
+      // Dashed line support
+      const isDashed = connection.dashed || connection.style === "dashed" || connection.lineStyle === "dashed";
+      if (isDashed) {
+        ctx.setLineDash([6, 4]);
+      } else {
+        ctx.setLineDash([]);
       }
 
-      // Determine connection type (use connection's type, or default to global setting)
-      const connType = connection.type || this.appState.connectionType;
+      ctx.beginPath();
 
+      let waypoints = null;
       if (connType === "curved") {
-        // Calculate curve
         const dx = endX - startX;
         const dy = endY - startY;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1262,23 +1478,25 @@ class Application {
         if (dist > 0) {
           const midX = (startX + endX) / 2;
           const midY = (startY + endY) / 2;
-
-          // Perpendicular vector
           const perpX = -dy / dist;
           const perpY = dx / dist;
-
-          const curveAmount = 40; // World-space curve amount
-
+          const curveAmount = 40;
           const controlX = midX + perpX * curveAmount;
           const controlY = midY + perpY * curveAmount;
 
           ctx.moveTo(startX, startY);
           ctx.quadraticCurveTo(controlX, controlY, endX, endY);
         } else {
-          // Fallback to straight line if pins are at same position
           ctx.moveTo(startX, startY);
           ctx.lineTo(endX, endY);
         }
+      } else if (isOrthogonal) {
+        waypoints = this.getOrthogonalWaypoints(
+          startX, startY, endX, endY,
+          connection.fromPort || startAnchor.side || "auto",
+          connection.toPort || endAnchor.side || "auto"
+        );
+        this.drawOrthogonalConnection(ctx, waypoints, 8);
       } else {
         // Straight line with hop-over bridges if crossing other lines
         const jumps = jumpsByConn.get(idx) || [];
@@ -1286,17 +1504,115 @@ class Application {
       }
 
       ctx.stroke();
+      ctx.setLineDash([]); // Reset dash
 
       // Reset shadow
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
 
+      // Draw directional arrowheads
+      const arrowMode = connection.arrow || (isOrthogonal ? "target" : "none");
+      const arrowColor = connection.color || "#666";
+      const arrowSize = connection.arrowSize || 8;
+
+      if (arrowMode === "target" || arrowMode === "both" || arrowMode === "forward") {
+        if (isOrthogonal && waypoints && waypoints.length >= 2) {
+          const prev = waypoints[waypoints.length - 2];
+          this.drawArrowhead(ctx, prev.x, prev.y, endX, endY, arrowColor, arrowSize);
+        } else if (connType === "curved") {
+          const midX = (startX + endX) / 2;
+          const midY = (startY + endY) / 2;
+          const perpX = -(endY - startY) / (Math.hypot(endX - startX, endY - startY) || 1);
+          const perpY = (endX - startX) / (Math.hypot(endX - startX, endY - startY) || 1);
+          const ctrlX = midX + perpX * 40;
+          const ctrlY = midY + perpY * 40;
+          this.drawArrowhead(ctx, ctrlX, ctrlY, endX, endY, arrowColor, arrowSize);
+        } else {
+          this.drawArrowhead(ctx, startX, startY, endX, endY, arrowColor, arrowSize);
+        }
+      }
+
+      if (arrowMode === "source" || arrowMode === "both" || arrowMode === "backward") {
+        if (isOrthogonal && waypoints && waypoints.length >= 2) {
+          const next = waypoints[1];
+          this.drawArrowhead(ctx, next.x, next.y, startX, startY, arrowColor, arrowSize);
+        } else {
+          this.drawArrowhead(ctx, endX, endY, startX, startY, arrowColor, arrowSize);
+        }
+      }
+
+      // Step sequence badge (e.g. 1, 2, 3 or ❶, ❷)
+      if (connection.step !== undefined && connection.step !== null && connection.step !== "") {
+        let stepPt;
+        if (isOrthogonal && waypoints) {
+          stepPt = this.getPathPointAt(waypoints, 0.28);
+        } else {
+          stepPt = { x: startX + (endX - startX) * 0.28, y: startY + (endY - startY) * 0.28 };
+        }
+
+        ctx.save();
+        const stepR = 10;
+        ctx.fillStyle = "#0f172a";
+        ctx.strokeStyle = connection.color || "#38bdf8";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(stepPt.x, stepPt.y, stepR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 10px system-ui, -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(connection.step), stepPt.x, stepPt.y + 0.5);
+        ctx.restore();
+      }
+
+      // Multiplier chip (e.g. × 8, × 1.5)
+      if (connection.multiplier !== undefined && connection.multiplier !== null && connection.multiplier !== "") {
+        let multPt;
+        if (isOrthogonal && waypoints) {
+          multPt = this.getPathPointAt(waypoints, connection.label ? 0.72 : 0.5);
+        } else {
+          const t = connection.label ? 0.72 : 0.5;
+          multPt = { x: startX + (endX - startX) * t, y: startY + (endY - startY) * t };
+        }
+
+        ctx.save();
+        const multText = String(connection.multiplier);
+        ctx.font = "bold 10px system-ui, -apple-system, sans-serif";
+        const tWidth = ctx.measureText(multText).width;
+        const chipW = tWidth + 14;
+        const chipH = 18;
+
+        ctx.fillStyle = "#ea580c";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(multPt.x - chipW / 2, multPt.y - chipH / 2, chipW, chipH, chipH / 2);
+        } else {
+          ctx.rect(multPt.x - chipW / 2, multPt.y - chipH / 2, chipW, chipH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(multText, multPt.x, multPt.y);
+        ctx.restore();
+      }
+
       // Draw label at midpoint if exists
       if (connection.label) {
         let labelX, labelY;
 
-        if (connType === "curved") {
-          // For curved lines, calculate point at t=0.5 on the Bezier curve
+        if (isOrthogonal && waypoints) {
+          const midPt = this.getPathPointAt(waypoints, 0.5);
+          labelX = midPt.x;
+          labelY = midPt.y;
+        } else if (connType === "curved") {
           const dx = endX - startX;
           const dy = endY - startY;
           const dist = Math.hypot(dx, dy);
@@ -1315,7 +1631,6 @@ class Application {
             labelY = (startY + endY) / 2;
           }
         } else {
-          // For straight lines, use midpoint
           labelX = (startX + endX) / 2;
           labelY = (startY + endY) / 2;
         }
@@ -1394,9 +1709,18 @@ class Application {
 
     if (!startPin || !endPin) return;
 
-    // Get pin centers
-    const startAnchor = this.getPinCenter(startPin);
-    const endAnchor = this.getPinCenter(endPin);
+    // Get pin centers or docking ports
+    const connType = connection.type || this.appState.connectionType;
+    const isOrthogonal = connType === "orthogonal";
+
+    let startAnchor, endAnchor;
+    if (isOrthogonal || connection.fromPort || connection.toPort) {
+      startAnchor = this.getConnectionEndpoint(startPin, endPin, connection.fromPort || (isOrthogonal ? "auto" : "center"), "source");
+      endAnchor = this.getConnectionEndpoint(endPin, startPin, connection.toPort || (isOrthogonal ? "auto" : "center"), "target");
+    } else {
+      startAnchor = this.getPinCenter(startPin);
+      endAnchor = this.getPinCenter(endPin);
+    }
 
     if (!startAnchor || !endAnchor) return;
 
@@ -1405,8 +1729,14 @@ class Application {
     const endX = Math.round(endAnchor.x);
     const endY = Math.round(endAnchor.y);
 
-    // Get connection type
-    const connType = connection.type || this.appState.connectionType;
+    let selWaypoints = null;
+    if (isOrthogonal) {
+      selWaypoints = this.getOrthogonalWaypoints(
+        startX, startY, endX, endY,
+        connection.fromPort || startAnchor.side || "auto",
+        connection.toPort || endAnchor.side || "auto"
+      );
+    }
 
     // Calculate control point for curved lines
     let controlX, controlY;
@@ -1443,6 +1773,8 @@ class Application {
     if (connType === "curved" && controlX !== undefined) {
       ctx.moveTo(startX, startY);
       ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+    } else if (isOrthogonal && selWaypoints) {
+      this.drawOrthogonalConnection(ctx, selWaypoints, 8);
     } else {
       this.drawStraightConnectionWithJumps(ctx, startX, startY, endX, endY, selJumps);
     }
@@ -1455,6 +1787,8 @@ class Application {
     if (connType === "curved" && controlX !== undefined) {
       ctx.moveTo(startX, startY);
       ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+    } else if (isOrthogonal && selWaypoints) {
+      this.drawOrthogonalConnection(ctx, selWaypoints, 8);
     } else {
       this.drawStraightConnectionWithJumps(ctx, startX, startY, endX, endY, selJumps);
     }
@@ -2093,9 +2427,18 @@ class Application {
 
       if (!startPin || !endPin) continue;
 
-      // Get pin centers
-      const startAnchor = this.getPinCenter(startPin);
-      const endAnchor = this.getPinCenter(endPin);
+      // Get pin centers or docking ports
+      const connType = conn.type || this.appState.connectionType;
+      const isOrthogonal = connType === "orthogonal";
+
+      let startAnchor, endAnchor;
+      if (isOrthogonal || conn.fromPort || conn.toPort) {
+        startAnchor = this.getConnectionEndpoint(startPin, endPin, conn.fromPort || (isOrthogonal ? "auto" : "center"), "source");
+        endAnchor = this.getConnectionEndpoint(endPin, startPin, conn.toPort || (isOrthogonal ? "auto" : "center"), "target");
+      } else {
+        startAnchor = this.getPinCenter(startPin);
+        endAnchor = this.getPinCenter(endPin);
+      }
       
       if (!startAnchor || !endAnchor) continue;
 
@@ -2104,13 +2447,24 @@ class Application {
       const endX = endAnchor.x;
       const endY = endAnchor.y;
 
-      // Check connection type
-      const connType = conn.type || this.appState.connectionType;
       let distance;
 
       if (connType === "curved") {
         // For curved connections, calculate distance to the quadratic Bezier curve
         distance = this.pointToCurvedConnectionDistance(wx, wy, startX, startY, endX, endY);
+      } else if (isOrthogonal) {
+        // For orthogonal connections, check distance to each waypointed segment
+        const waypoints = this.getOrthogonalWaypoints(
+          startX, startY, endX, endY,
+          conn.fromPort || startAnchor.side || "auto",
+          conn.toPort || endAnchor.side || "auto"
+        );
+        let minD = Infinity;
+        for (let s = 0; s < waypoints.length - 1; s++) {
+          const d = this.pointToLineDistance(wx, wy, waypoints[s].x, waypoints[s].y, waypoints[s + 1].x, waypoints[s + 1].y);
+          if (d < minD) minD = d;
+        }
+        distance = minD;
       } else {
         // For straight connections, use line distance
         distance = this.pointToLineDistance(wx, wy, startX, startY, endX, endY);
@@ -3189,4 +3543,9 @@ class Application {
 }
 
 // Export for global access
-window.Application = Application;
+if (typeof window !== "undefined") {
+  window.Application = Application;
+}
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = Application;
+}

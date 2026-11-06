@@ -43,6 +43,32 @@ This document provides a comprehensive catalog of all implemented features, user
 
 ---
 
+## 4. Data-Flow Charting & System Architecture Engine
+* **ByteByteGo-Style Architecture Diagrams**:
+  * Full support for professional system architecture diagrams, data pipelines, and distributed systems infographics.
+* **Orthogonal Manhattan Elbow Routing**:
+  * Automatic horizontal-horizontal, vertical-vertical, and L-turn elbow calculations.
+  * Rounded corner arcs ($R=6\text{px}-8\text{px}$) rendered via HTML5 canvas `arcTo` at intermediate bends.
+  * Seamless integration with hop-over bridge arcs across intersecting flow paths.
+* **4-Way Perimeter Port Docking**:
+  * Pins provide perimeter docking coordinates via `pin.getPort("north" | "south" | "east" | "west" | "center")`.
+  * Automatic quadrant direction resolution via `pin.getAutoPort(target, role)` dynamically docking exit and entry ports to face connected components.
+* **Directional Arrowheads**:
+  * Precision arrowheads supporting `target` (forward), `source` (backward), `both` (bidirectional), and `none` modes.
+  * Automatic endpoint tangent angle alignment across orthogonal waypoints, curved beziers, and straight lines.
+* **Line Badges & Annotations**:
+  * **Step Sequence Badges** (`connection.step`): Circular high-contrast sequence numbers (e.g. ❶, ❷, 1, 2, 3) placed along the path.
+  * **Rate Multipliers** (`connection.multiplier`): Vibrant chip badges (e.g. `× 8`, `× 1.5`, `12 GB`) indicating amplification, batching, or memory/disk ratios.
+  * **Dashed Flow Lines**: Solid or dashed (`[6, 4]`) line styles for async event streams, background replays, or crash checkpoints.
+* **Specialized Architecture Stencils & Shapes**:
+  * **Service (`flow:service`)**: Process and microservice component cards with header bars and 4-way docking anchor indicators.
+  * **Database (`flow:database`)**: Cylinder storage shape with elliptical disc caps and horizontal partition bands.
+  * **Write-Ahead Log (`flow:queue`)**: Append-only log and message queue with partitioned slot cells `[ ][ ][ ][ ]`.
+  * **Scope Container / Swimlane (`flow:container`)**: Dashed boundary container with rounded corners and uppercase header pill (`"ON THE WRITE PATH"`, `"LATER, IN THE BACKGROUND"`).
+  * **Status Callout (`flow:callout`)**: Status verification chip with circular icon indicator (`✓ Client Acked`).
+
+---
+
 ## 4. Stencil Palette & Clue Presets ([`js/ui/stencilDock.js`](file:///Users/health/Sites/investigative-board/js/ui/stencilDock.js))
 * **OmniGraffle-Inspired Stencil Dock**: Bottom dock palette providing ready-to-stamp investigative archetypes.
 * **8 Built-in Presets**: Suspect, Evidence, Crime Scene, Document, Timeline Event, Syndicate, Hypothesis, and Search Zone.

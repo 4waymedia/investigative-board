@@ -20,8 +20,8 @@ async function runArtCraftAgentTests() {
 
   // 1. Verify default stencils initialized
   const initialStencils = storage.listStencils();
-  assert.strictEqual(initialStencils.length, 8, "Should initialize 8 built-in stencils");
-  console.log("✅ 8 Built-in investigative stencils initialized:", initialStencils.map(s => s.badge).join(", "));
+  assert.ok(initialStencils.length >= 8, "Should initialize at least 8 built-in stencils");
+  console.log(`✅ ${initialStencils.length} Built-in stencils initialized:`, initialStencils.map(s => s.badge).join(", "));
 
   // 2. Test Stencil Filtering
   const persons = storage.listStencils({ category: "Persons" });

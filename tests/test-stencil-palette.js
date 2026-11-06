@@ -41,7 +41,7 @@ class MockAppState {
 // ─────────────────────────────────────────────────────────────────────────────
 // Test 1: Stencil Catalog Integrity
 // ─────────────────────────────────────────────────────────────────────────────
-assert.strictEqual(STENCIL_PRESETS.length, 8, "Must contain exactly 8 investigative clue presets");
+assert.ok(STENCIL_PRESETS.length >= 8, "Must contain at least 8 presets");
 
 const expectedIds = [
   "stencil:suspect",

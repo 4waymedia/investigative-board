@@ -1374,7 +1374,7 @@ function drawPinShape(ctx, pin, metrics, index, appScale = 1) {
   const isImageInset = Boolean(
     pin.image && pin.image.dataUrl && (
       pin.image.layer === "inset" ||
-      (!pin.image.layer && ["thought", "bubble", "rectangle", "card", "doc", "folder"].includes(mergedMetrics.shape))
+      (!pin.image.layer && ["thought", "bubble", "rectangle", "card", "doc", "folder", "service", "wal-queue", "flow-container"].includes(mergedMetrics.shape))
     )
   );
 
@@ -2958,6 +2958,403 @@ window.registerCustomShape = registerCustomShape;
 registerCustomShape({ name: "star", baseShape: "circle", width: 24, height: 24 });
 registerCustomShape({ name: "shield", baseShape: "rect", width: 24, height: 28 });
 registerCustomShape({ name: "cross", baseShape: "rect", width: 20, height: 20 });
+
+// ── Data-Flow & System Architecture Shape Renderers ────────────────────────
+
+registerShape("service", {
+  baseShape: "rect",
+  getMetrics(pin, scale) {
+    return {
+      shape: "service",
+      width: (pin.width || 140) * scale,
+      height: (pin.height || 75) * scale,
+      baseRadius: 6
+    };
+  },
+  drawMain(ctx, pin, m, scr, s) {
+    const w = m.width * s;
+    const h = m.height * s;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const r = (m.baseRadius || 6) * s;
+    const headerH = Math.min(24 * s, h * 0.35);
+
+    ctx.save();
+    // Card background
+    ctx.fillStyle = pin.color || "#1e293b";
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.rect(x, y, w, h);
+    }
+    ctx.fill();
+
+    // Top header band
+    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, headerH, [r, r, 0, 0]);
+    } else {
+      ctx.fillRect(x, y, w, headerH);
+    }
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = pin.borderColor || "rgba(255, 255, 255, 0.2)";
+    ctx.lineWidth = (pin.borderWidth || 1.5) * s;
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.strokeRect(x, y, w, h);
+    }
+    ctx.stroke();
+
+    // Draw Inset Image if present
+    const isInset = pin.image && pin.image.dataUrl && (pin.image.layer === "inset" || !pin.image.layer);
+    if (isInset) {
+      const imgY = y + headerH + (h - headerH) / 2;
+      drawPinImage(ctx, pin, m, { x: scr.x, y: imgY }, s);
+    } else {
+      // Draw service label & subtitle inside card
+      ctx.fillStyle = pin.textColor || "#ffffff";
+      ctx.font = `bold ${Math.round(13 * s)}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const titleY = pin.subtitle ? scr.y - 4 * s : scr.y;
+      ctx.fillText(pin.label || pin.title || "Service", scr.x, titleY, w - 16 * s);
+
+      if (pin.subtitle || pin.description) {
+        ctx.fillStyle = pin.descriptionColor || "rgba(255, 255, 255, 0.7)";
+        ctx.font = `${Math.round(10 * s)}px system-ui, -apple-system, sans-serif`;
+        ctx.fillText(pin.subtitle || pin.description, scr.x, scr.y + 12 * s, w - 16 * s);
+      }
+    }
+
+    // Subtle 4-port anchors (docking dots) on card perimeter
+    const portRadius = 2.5 * s;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.45)";
+    ctx.beginPath(); ctx.arc(scr.x, y, portRadius, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(scr.x, y + h, portRadius, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + w, scr.y, portRadius, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, scr.y, portRadius, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+  },
+  drawLabel: () => {}
+});
+
+registerShape("database", {
+  baseShape: "rect",
+  getMetrics(pin, scale) {
+    return {
+      shape: "database",
+      width: (pin.width || 110) * scale,
+      height: (pin.height || 85) * scale,
+      baseRadius: 4
+    };
+  },
+  drawMain(ctx, pin, m, scr, s) {
+    const w = m.width * s;
+    const h = m.height * s;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const rx = w / 2;
+    const ry = Math.min(14 * s, h * 0.2);
+
+    ctx.save();
+    // Cylinder body
+    ctx.fillStyle = pin.color || "#065f46";
+    ctx.beginPath();
+    ctx.moveTo(x, y + ry);
+    ctx.lineTo(x, y + h - ry);
+    if (ctx.ellipse) {
+      ctx.ellipse(scr.x, y + h - ry, rx, ry, 0, 0, Math.PI, false);
+    } else {
+      ctx.lineTo(x + w, y + h - ry);
+    }
+    ctx.lineTo(x + w, y + ry);
+    if (ctx.ellipse) {
+      ctx.ellipse(scr.x, y + ry, rx, ry, 0, 0, Math.PI, true);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Subtle cylinder rings (partitions/layers)
+    const ringY1 = y + ry + (h - 2 * ry) * 0.33;
+    const ringY2 = y + ry + (h - 2 * ry) * 0.66;
+    ctx.strokeStyle = pin.borderColor || "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = 1.5 * s;
+
+    if (ctx.ellipse) {
+      // Intermediate ring 1
+      ctx.beginPath();
+      ctx.ellipse(scr.x, ringY1, rx, ry, 0, 0, Math.PI, false);
+      ctx.stroke();
+
+      // Intermediate ring 2
+      ctx.beginPath();
+      ctx.ellipse(scr.x, ringY2, rx, ry, 0, 0, Math.PI, false);
+      ctx.stroke();
+
+      // Bottom rim
+      ctx.beginPath();
+      ctx.ellipse(scr.x, y + h - ry, rx, ry, 0, 0, Math.PI, false);
+      ctx.stroke();
+    }
+
+    // Sides
+    ctx.beginPath();
+    ctx.moveTo(x, y + ry);
+    ctx.lineTo(x, y + h - ry);
+    ctx.moveTo(x + w, y + ry);
+    ctx.lineTo(x + w, y + h - ry);
+    ctx.stroke();
+
+    // Top cap (ellipse)
+    ctx.fillStyle = window.DrawingUtils?.lightenColor
+      ? window.DrawingUtils.lightenColor(pin.color || "#065f46", 15)
+      : "rgba(255, 255, 255, 0.15)";
+    if (ctx.ellipse) {
+      ctx.beginPath();
+      ctx.ellipse(scr.x, y + ry, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Inset image or centered label
+    const isInset = pin.image && pin.image.dataUrl && (pin.image.layer === "inset" || !pin.image.layer);
+    if (isInset) {
+      drawPinImage(ctx, pin, m, { x: scr.x, y: scr.y + 4 * s }, s);
+    } else {
+      ctx.fillStyle = pin.textColor || "#ffffff";
+      ctx.font = `bold ${Math.round(12 * s)}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const titleY = pin.subtitle ? scr.y : scr.y + 2 * s;
+      ctx.fillText(pin.label || pin.title || "Database", scr.x, titleY, w - 16 * s);
+
+      if (pin.subtitle || pin.description) {
+        ctx.fillStyle = pin.descriptionColor || "rgba(255, 255, 255, 0.75)";
+        ctx.font = `${Math.round(9.5 * s)}px system-ui, -apple-system, sans-serif`;
+        ctx.fillText(pin.subtitle || pin.description, scr.x, scr.y + 14 * s, w - 16 * s);
+      }
+    }
+
+    ctx.restore();
+  },
+  drawLabel: () => {}
+});
+
+registerShape("wal-queue", {
+  baseShape: "rect",
+  getMetrics(pin, scale) {
+    return {
+      shape: "wal-queue",
+      width: (pin.width || 180) * scale,
+      height: (pin.height || 65) * scale,
+      baseRadius: 6
+    };
+  },
+  drawMain(ctx, pin, m, scr, s) {
+    const w = m.width * s;
+    const h = m.height * s;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const r = (m.baseRadius || 6) * s;
+
+    ctx.save();
+    // Container fill
+    ctx.fillStyle = pin.color || "#1e1b4b";
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = pin.borderColor || "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 1.5 * s;
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.strokeRect(x, y, w, h);
+    }
+    ctx.stroke();
+
+    // Title label at top
+    ctx.fillStyle = pin.textColor || "#ffffff";
+    ctx.font = `bold ${Math.round(11 * s)}px system-ui, -apple-system, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(pin.label || pin.title || "Write-Ahead Log", x + 10 * s, y + 6 * s, w - 20 * s);
+
+    // Segmented slot cells [ | | | | ]
+    const slotCount = (pin.customFields && pin.customFields.slots) || 5;
+    const slotPad = 4 * s;
+    const slotAreaW = w - 20 * s;
+    const slotW = (slotAreaW - (slotCount - 1) * slotPad) / slotCount;
+    const slotH = Math.min(22 * s, h * 0.38);
+    const slotY = y + h - slotH - 8 * s;
+
+    for (let i = 0; i < slotCount; i++) {
+      const sx = x + 10 * s + i * (slotW + slotPad);
+      ctx.fillStyle = i === slotCount - 1 ? "rgba(245, 158, 11, 0.6)" : "rgba(255, 255, 255, 0.12)";
+      if (window.DrawingUtils?.roundRectPath) {
+        window.DrawingUtils.roundRectPath(ctx, sx, slotY, slotW, slotH, 3 * s);
+      } else {
+        ctx.fillRect(sx, slotY, slotW, slotH);
+      }
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+      ctx.lineWidth = 1 * s;
+      if (window.DrawingUtils?.roundRectPath) {
+        window.DrawingUtils.roundRectPath(ctx, sx, slotY, slotW, slotH, 3 * s);
+      } else {
+        ctx.strokeRect(sx, slotY, slotW, slotH);
+      }
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  },
+  drawLabel: () => {}
+});
+
+registerShape("flow-container", {
+  baseShape: "rect",
+  getMetrics(pin, scale) {
+    return {
+      shape: "flow-container",
+      width: (pin.width || 320) * scale,
+      height: (pin.height || 200) * scale,
+      baseRadius: 10
+    };
+  },
+  drawMain(ctx, pin, m, scr, s) {
+    const w = m.width * s;
+    const h = m.height * s;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const r = (m.baseRadius || 10) * s;
+
+    ctx.save();
+    // Translucent container fill
+    ctx.fillStyle = pin.fillColor || (pin.color ? pin.color + "14" : "rgba(139, 92, 246, 0.08)");
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.fill();
+
+    // Dashed scope boundary
+    ctx.strokeStyle = pin.borderColor || pin.color || "#8b5cf6";
+    ctx.lineWidth = 2 * s;
+    ctx.setLineDash([7 * s, 5 * s]);
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.strokeRect(x, y, w, h);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Scope Header Pill at top-left
+    const titleText = (pin.label || pin.title || "CONTAINER").toUpperCase();
+    ctx.font = `bold ${Math.round(11 * s)}px system-ui, -apple-system, sans-serif`;
+    const textWidth = ctx.measureText(titleText).width;
+    const pillW = textWidth + 24 * s;
+    const pillH = 22 * s;
+    const pillX = x + 12 * s;
+    const pillY = y - pillH / 2;
+
+    ctx.fillStyle = pin.color || "#8b5cf6";
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    } else {
+      ctx.fillRect(pillX, pillY, pillW, pillH);
+    }
+    ctx.fill();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(titleText, pillX + pillW / 2, pillY + pillH / 2);
+
+    if (pin.subtitle) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.font = `${Math.round(9 * s)}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = "right";
+      ctx.fillText(pin.subtitle, x + w - 12 * s, y + 16 * s);
+    }
+
+    ctx.restore();
+  },
+  drawLabel: () => {}
+});
+
+registerShape("flow-callout", {
+  baseShape: "rect",
+  getMetrics(pin, scale) {
+    return {
+      shape: "flow-callout",
+      width: (pin.width || 130) * scale,
+      height: (pin.height || 44) * scale,
+      baseRadius: 8
+    };
+  },
+  drawMain(ctx, pin, m, scr, s) {
+    const w = m.width * s;
+    const h = m.height * s;
+    const x = scr.x - w / 2;
+    const y = scr.y - h / 2;
+    const r = (m.baseRadius || 8) * s;
+
+    ctx.save();
+    // Pill background
+    ctx.fillStyle = pin.color || "#064e3b";
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = pin.borderColor || "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 1.5 * s;
+    if (window.DrawingUtils?.roundRectPath) {
+      window.DrawingUtils.roundRectPath(ctx, x, y, w, h, r);
+    } else {
+      ctx.strokeRect(x, y, w, h);
+    }
+    ctx.stroke();
+
+    // Status icon badge on left
+    const iconR = 8 * s;
+    const iconX = x + 16 * s;
+    const iconY = scr.y;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+    ctx.beginPath();
+    ctx.arc(iconX, iconY, iconR, 0, Math.PI * 2);
+    ctx.fill();
+
+    const isSuccess = !pin.customFields || pin.customFields.status !== "error";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${Math.round(10 * s)}px system-ui`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(isSuccess ? "✓" : "!", iconX, iconY + 0.5 * s);
+
+    // Label text
+    ctx.textAlign = "left";
+    ctx.font = `600 ${Math.round(11 * s)}px system-ui, -apple-system, sans-serif`;
+    ctx.fillText(pin.label || pin.title || "Acked", x + 30 * s, scr.y, w - 38 * s);
+
+    ctx.restore();
+  },
+  drawLabel: () => {}
+});
 
 // Shape registration verification
 if (!shapeRenderers.get("card")) {

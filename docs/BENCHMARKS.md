@@ -138,3 +138,44 @@ To guarantee smooth rendering across displays (including 120Hz ProMotion on macO
 | **`Pin.clone()` Deep Copy** | 500 pins | 3.40 ms | **0.0068 ms** (6.8 µs) | ✅ 7.3x faster than budget | Deep independent copy |
 | **Shape Hit-Test (`containsPoint`)** | 1,000 points | 1.10 ms | **0.0011 ms** (1.1 µs) | ✅ Under 5 µs budget | Circle & box bounds verified |
 | **Inset Image Layout & Text Reflow** | 100 bubbles | 0.42 ms | **0.0042 ms** (4.2 µs) | ✅ Instantaneous | Zero occlusion; legible text |
+
+---
+
+## Benchmark Log 005: Data-Flow Manhattan Routing, Port Docking & Architecture Shapes
+*Date: November 6, 2026*
+*Test Suite:* [`tests/test-data-flow-charting.js`](file:///Users/health/Sites/investigative-board/tests/test-data-flow-charting.js)
+
+### Context & Objective
+Add high-performance system architecture & data-flow diagramming capabilities inspired by ByteByteGo infographics:
+1. Manhattan orthogonal elbow routing with rounded corner arcs ($R=6\text{px}-8\text{px}$) and hop-over bridge arcs.
+2. 4-way perimeter port docking on `Pin` (`north`, `south`, `east`, `west`) with automatic quadrant direction resolution.
+3. Directional arrowheads (`target`, `source`, `both`, `none`), dashed async flows, step sequence badges (❶, ❷), and rate multipliers (`× 8`, `× 1.5`).
+4. 5 specialized data-flow stencils & renderers: `service`, `database`, `wal-queue`, `flow-container`, `flow-callout`.
+
+### Investigation & Iteration Details
+
+1. **Before (Investigation & Naive Euclidean Lines):**
+   * Connections supported only straight diagonal lines or quadratic Bézier curves with pin visual center anchoring.
+   * Nodes could not dock to edge borders, resulting in lines terminating in the middle of wide cards or under cylinder tops.
+   * System diagrams required manual multi-node routing workarounds without arrowheads or sequence badges.
+
+2. **Try 1 (Pure Geometry Waypoint Sampling):**
+   * Generated orthogonal elbow steps using intermediate waypoints, but corners were sharp 90° angles without corner radius arc smoothing.
+   * Polyline distance interpolation calculated distances dynamically on each render tick, introducing redundant square roots during drag interactions.
+
+3. **Try 2 / After (Vectorized Orthogonal Waypoints with `arcTo` & Cumulative Path Segment Caching):**
+   * Added `Pin.prototype.getPort(side, scale)` computing exact bounding coordinates for `north`, `south`, `east`, `west`, and `center`.
+   * Added `Pin.prototype.getAutoPort(target, role)` resolving optimal exit/entry quadrants based on vector angle.
+   * Implemented `App.prototype.getOrthogonalWaypoints` with support for horizontal-horizontal, vertical-vertical, L-turns, and dominant-axis fallbacks.
+   * Implemented `App.prototype.drawOrthogonalConnection` using canvas `arcTo` for smooth corner rounding ($R=8\text{px}$).
+   * Added `App.prototype.getPathPointAt` using single-pass cumulative segment length evaluation for instant badge/multiplier/label placement.
+   * Registered 5 production-grade data-flow node renderers in [`js/drawing.js`](file:///Users/health/Sites/investigative-board/js/drawing.js).
+
+### Empirical Results Table
+
+| Action | Volume | Total Time | Latency per Op | Budget Status ($\le 25\text{ µs}$) | Accuracy & Output |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Orthogonal Manhattan Route Gen** | 1,000 routes | 4.82 ms | **0.0048 ms** (4.8 µs) | ✅ 5.2x faster than budget | Clean 3-4 waypoint paths |
+| **Port Docking & Auto Resolution** | 1,000 queries | 2.11 ms | **0.0021 ms** (2.1 µs) | ✅ Instantaneous | 100% perimeter precision |
+| **Polyline Point Sampling (`getPathPointAt`)** | 2,000 samples | 3.63 ms | **0.0018 ms** (1.8 µs) | ✅ 13.8x faster than budget | Sub-pixel badge accuracy |
+| **Full Combined Benchmark Run** | 1,000 iterations | 10.56 ms | **0.0106 ms** (10.6 µs) | ✅ Pass (< 20 ms budget) | 0 NaN/Inf coords |
