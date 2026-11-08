@@ -617,9 +617,16 @@ class BoardStorage {
     from,
     to,
     label = "",
+    description = "",
     color = "#58a6ff",
     type = "curved",
-    relationship = "relates-to"
+    relationship = "relates-to",
+    fromPort = undefined,
+    toPort = undefined,
+    arrow = undefined,
+    step = undefined,
+    multiplier = undefined,
+    dashed = false
   } = {}) {
     const board = this.getBoard(boardId);
     if (!board) throw new Error(`Board not found: ${boardId}`);
@@ -639,10 +646,18 @@ class BoardStorage {
       from: fromIdx,
       to: toIdx,
       label: label || "",
+      description: description || "",
       color: color || "#58a6ff",
       type: type || "curved",
       relationship: relationship || "relates-to"
     };
+
+    if (fromPort !== undefined) newConnection.fromPort = fromPort;
+    if (toPort !== undefined) newConnection.toPort = toPort;
+    if (arrow !== undefined) newConnection.arrow = arrow;
+    if (step !== undefined) newConnection.step = step;
+    if (multiplier !== undefined) newConnection.multiplier = multiplier;
+    if (dashed) newConnection.dashed = Boolean(dashed);
 
     board.document.connections.push(newConnection);
     this.saveBoard(board);

@@ -41,16 +41,16 @@ BoardCraft adheres to the **ArtCraft Agent Philosophy**:
   * Inputs: `boardId` (string, required), `type` (`"grid"` | `"circle"` | `"timeline"`, required)
 
 #### Pin & Clue Node Operations
-* **`pin_add`**: Add a pin, card, or container to a board.
-  * Inputs: `boardId` (string, required), `x` (number, required), `y` (number, required), `label` (string, required), `description` (string, optional), `color` (hex string, optional), `shape` (string, optional), `date` (string, optional)
+* **`pin_add`**: Add a pin, card, container, or data-flow component to a board.
+  * Inputs: `boardId` (string, required), `x` (number, required), `y` (number, required), `label` (string, required), `description` (string, optional), `color` (hex string, optional), `shape` (`"circle"` | `"rect"` | `"pill"` | `"diamond"` | `"person"` | `"business-building"` | `"card"` | `"bubble"` | `"rectangle"` | `"thought"` | `"text-plain"` | `"text-title"` | `"area-rect"` | `"area-circle"` | `"service"` | `"database"` | `"wal-queue"` | `"flow-container"` | `"flow-callout"`, optional), `date` (string, optional)
 * **`pin_update`**: Update properties of an existing pin.
   * Inputs: `boardId` (string, required), `pinIndexOrId` (string/number, required), `updates` (object, required)
 * **`pin_delete`**: Delete a pin and automatically prune all connecting thread lines.
   * Inputs: `boardId` (string, required), `pinIndexOrId` (string/number, required)
 
 #### Connections & String Operations
-* **`connection_add`**: Connect two pins with a thread line.
-  * Inputs: `boardId` (string, required), `from` (number, required), `to` (number, required), `label` (string, optional), `color` (hex string, optional), `type` (`"straight"` | `"curved"`, optional), `relationship` (string, optional)
+* **`connection_add`**: Connect two pins with a thread line or orthogonal data-flow path.
+  * Inputs: `boardId` (string, required), `from` (number, required), `to` (number, required), `label` (string, optional), `color` (hex string, optional), `type` (`"straight"` | `"curved"` | `"orthogonal"`, optional), `relationship` (string, optional), `fromPort` (`"north"` | `"south"` | `"east"` | `"west"` | `"center"` | `"auto"`, optional), `toPort` (`"north"` | `"south"` | `"east"` | `"west"` | `"center"` | `"auto"`, optional), `arrow` (`"target"` | `"source"` | `"both"` | `"none"`, optional), `step` (string, optional), `multiplier` (string, optional), `dashed` (boolean, optional)
 * **`connection_delete`**: Delete a connection between pins.
   * Inputs: `boardId` (string, required), `connectionIndex` (number, required)
 
@@ -125,7 +125,7 @@ When [`cli/server.js`](file:///Users/health/Sites/investigative-board/cli/server
 
 When implementing code changes or optimizing existing modules:
 1. **Preserve Documentation Integrity**: Do not delete existing comments, docstrings, or test assertions unrelated to your task.
-2. **Run All Tests Before Declaring Done**: Execute `node tests/run-all.js`. All 37+ test suites must pass.
+2. **Run All Tests Before Declaring Done**: Execute `node tests/run-all.js`. All 38+ test suites must pass.
 3. **Record Empirical Benchmarks**: Whenever auditing or refactoring performance, maintain a Before / Try / Try / After log in [`docs/BENCHMARKS.md`](file:///Users/health/Sites/investigative-board/docs/BENCHMARKS.md).
 4. **Use Clickable Links**: Format file paths and symbols with clickable markdown links (`[pin.js](file:///path/to/pin.js)`).
 5. **Honor Sandbox Boundaries**: Run file reads, AST transformations, tests, and non-mutating shell commands inside the secure sandbox; only elevate commands (`BypassSandbox: true`) when performing `.git/` commits or network operations that require explicit approval.

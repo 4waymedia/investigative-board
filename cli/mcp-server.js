@@ -114,8 +114,14 @@ class MCPServer {
             },
             shape: {
               type: "string",
-              enum: ["circle", "rect", "pill", "diamond", "bubble", "rectangle", "thought", "text-plain", "text-title", "area-rect", "area-circle"],
-              description: "Shape of the pin or container (defaults to 'circle')"
+              enum: [
+                "circle", "rect", "pill", "diamond", "person", "business-building", "card",
+                "bubble", "rectangle", "thought", "text-plain", "text-title",
+                "area-rect", "area-circle",
+                "service", "database", "wal-queue", "flow-container", "flow-callout",
+                "star", "shield", "cross"
+              ],
+              description: "Shape of the pin, investigative entity, or data-flow component (defaults to 'circle')"
             },
             date: {
               type: "string",
@@ -193,12 +199,39 @@ class MCPServer {
             },
             type: {
               type: "string",
-              enum: ["curved", "straight"],
-              description: "Connection line style ('curved' or 'straight')"
+              enum: ["curved", "straight", "orthogonal"],
+              description: "Connection line style ('curved', 'straight', or 'orthogonal' for Manhattan data-flow)"
             },
             relationship: {
               type: "string",
               description: "Semantic relationship type (e.g. 'relates-to', 'caused', 'witness')"
+            },
+            fromPort: {
+              type: "string",
+              enum: ["north", "south", "east", "west", "center", "auto"],
+              description: "Source perimeter docking port (defaults to 'auto' for orthogonal)"
+            },
+            toPort: {
+              type: "string",
+              enum: ["north", "south", "east", "west", "center", "auto"],
+              description: "Target perimeter docking port (defaults to 'auto' for orthogonal)"
+            },
+            arrow: {
+              type: "string",
+              enum: ["target", "source", "both", "none"],
+              description: "Directional arrowhead mode (defaults to 'target' on orthogonal connections)"
+            },
+            step: {
+              type: "string",
+              description: "Optional step sequence badge number along connection (e.g. '1', '2', '❶')"
+            },
+            multiplier: {
+              type: "string",
+              description: "Optional rate multiplier chip badge along connection (e.g. '× 8', '× 1.5')"
+            },
+            dashed: {
+              type: "boolean",
+              description: "Render as dashed line (e.g. for async or background data flows)"
             }
           },
           required: ["boardId", "from", "to"]

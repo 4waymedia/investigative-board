@@ -9,9 +9,9 @@
 **Investigative Board (BoardCraft)** is a high-performance, local-first infinite canvas spatial workbench designed following the design principles of the [ArtCraft](https://getartcraft.com/apps) desktop suite.
 
 * **Repository Working Branch:** `file_functions`
-* **Test Suite Health:** **37 passed, 0 failed out of 37 suites** (`node tests/run-all.js`)
+* **Test Suite Health:** **38 passed, 0 failed out of 38 suites** (`node tests/run-all.js`)
 * **Zero Runtime Dependencies:** No external npm runtime dependencies. Pure local execution relying strictly on HTML5 Canvas / Web APIs and native Node.js built-in modules (`fs`, `path`, `http`, `crypto`, `readline`).
-* **Frame & Performance Budget:** $\le 16.6\text{ ms}$ total frame time (locked 60 FPS); connection jump detection $\le 2.0\text{ ms}$; pin instantiation $\le 50\text{ µs}$.
+* **Frame & Performance Budget:** $\le 16.6\text{ ms}$ total frame time (locked 60 FPS); connection jump detection $\le 2.0\text{ ms}$; pin instantiation $\le 50\text{ µs}$; orthogonal Manhattan route computation $\le 25\text{ µs}$.
 
 ---
 
@@ -21,12 +21,12 @@ Always reference and maintain these core documents when developing or evaluating
 
 | Document | Purpose & Scope |
 | :--- | :--- |
-| **[`status.md`](file:///Users/health/Sites/investigative-board/status.md)** | **Current Project Health & Verification Tracker**: Test suite pass matrix (37/37), active branch, recent commit logs, and bug resolution status (`BUG-001` through `BUG-017`). |
-| **[`feature.md`](file:///Users/health/Sites/investigative-board/feature.md)** | **Complete Feature Catalog**: Detailed specifications for Infinite Canvas, `Pin` class, Smart Line Jumps (Bridge Arcs), Stencil Palette, 45° Radial Branching, Themes, and Layout Dock. |
+| **[`status.md`](file:///Users/health/Sites/investigative-board/status.md)** | **Current Project Health & Verification Tracker**: Test suite pass matrix (38/38), active branch, recent commit logs, and bug resolution status (`BUG-001` through `BUG-017`). |
+| **[`feature.md`](file:///Users/health/Sites/investigative-board/feature.md)** | **Complete Feature Catalog**: Detailed specifications for Infinite Canvas, `Pin` class, Data-Flow Charting, Smart Line Jumps (Bridge Arcs), Stencil Palette, 45° Radial Branching, Themes, and Layout Dock. |
 | **[`agent_instruction.md`](file:///Users/health/Sites/investigative-board/agent_instruction.md)** | **Agent Automation Manual**: Full reference for all **22 Model Context Protocol (MCP)** tools, stdio JSON-RPC transport, CLI commands, and REST/SSE API endpoints. |
-| **[`docs/ROADMAP.md`](file:///Users/health/Sites/investigative-board/docs/ROADMAP.md)** | **Strategic Roadmap**: Phased milestones (Phase 1: Core Engine ✅, Phase 2: Desktop Shell & `.craftboard`, Phase 3: Rich Media & Data-Flow, Phase 4: Multi-Agent Co-Canvas). |
+| **[`docs/ROADMAP.md`](file:///Users/health/Sites/investigative-board/docs/ROADMAP.md)** | **Strategic Roadmap**: Phased milestones (Phase 1: Core Engine ✅, Phase 2: Desktop Shell & `.craftboard`, Phase 3: Rich Media & Data-Flow ✅, Phase 4: Multi-Agent Co-Canvas). |
 | **[`docs/ARCHITECTURE.md`](file:///Users/health/Sites/investigative-board/docs/ARCHITECTURE.md)** | **System Architecture**: Subsystem component breakdown, coordinate transformation math (screen-to-world / world-to-screen), and rendering pipelines. |
-| **[`docs/BENCHMARKS.md`](file:///Users/health/Sites/investigative-board/docs/BENCHMARKS.md)** | **Performance Audits & Before/Try/Try/After Logs**: Systematic performance logs (Log 001 Line Jumps, Log 002 Stencil Spawning, Log 003 MCP Tools, Log 004 Pin Class & Inset Media). |
+| **[`docs/BENCHMARKS.md`](file:///Users/health/Sites/investigative-board/docs/BENCHMARKS.md)** | **Performance Audits & Before/Try/Try/After Logs**: Systematic performance logs (Log 001 Line Jumps, Log 002 Stencil Spawning, Log 003 MCP Tools, Log 004 Pin Class & Inset Media, Log 005 Data-Flow Manhattan Routing & Ports). |
 | **[`docs/PROGRESS.md`](file:///Users/health/Sites/investigative-board/docs/PROGRESS.md)** | **Historical Bug Tracker & Resolution Log**: Detailed root cause analysis for all resolved bugs and architectural milestones. |
 
 ---
@@ -99,8 +99,9 @@ investigative-board/
 │   └── API_AND_AGENT_SPEC.md    # Developer API specification
 │
 └── tests/                       # Automated Regression Test Suite
-    ├── run-all.js               # Master test runner (executes all 37 test suites)
+    ├── run-all.js               # Master test runner (executes all 38 test suites)
     ├── test-pin-class.js        # Unit tests for Pin class, archetypes, bounds & inset media
+    ├── test-data-flow-charting  # Manhattan orthogonal routing, docking ports, arrowheads & shapes
     ├── test-artcraft-agent-api  # Agent MCP suite, AI stencils, themes, shapes & REST tests
     ├── test-mcp-server.js       # MCP JSON-RPC protocol compliance test
     ├── test-stencil-palette.js  # Stencil palette lifecycle and stamping tests
@@ -125,7 +126,7 @@ Before completing any task, run the master test suite:
 ```bash
 node tests/run-all.js
 ```
-**Every one of the 37+ test suites must pass.** If a change alters behavior, update or add test coverage to maintain 100% pass rates.
+**Every one of the 38+ test suites must pass.** If a change alters behavior, update or add test coverage to maintain 100% pass rates.
 
 ### Rule 4: Maintain Before / Try / Try / After Performance Logs
 Whenever auditing, optimizing, or refactoring rendering, hit-testing, or data structures:
@@ -144,7 +145,7 @@ Run file inspections, edits, and automated test runners inside the standard secu
 flowchart TD
     Step1["1. Review status.md & feature.md\n(Check active branch, test health, requirements)"] --> Step2["2. Benchmark / Audit Baseline\n(Record Before metrics if performance-sensitive)"]
     Step2 --> Step3["3. Implement Changes in Targeted Modules\n(js/core/pin.js, js/drawing.js, cli/, etc.)"]
-    Step3 --> Step4["4. Run Master Test Suite\n(node tests/run-all.js -> Verify 37/37 pass)"]
+    Step3 --> Step4["4. Run Master Test Suite\n(node tests/run-all.js -> Verify 38/38 pass)"]
     Step4 --> Step5["5. Update Documentation & Benchmark Logs\n(status.md, feature.md, docs/BENCHMARKS.md)"]
     Step5 --> Step6["6. Commit Cleanly\n(git commit with clear conventional commit message)"]
 ```
@@ -153,7 +154,8 @@ flowchart TD
 
 ## 6. Key Subsystem Reference Notes
 
-* **Pin Model ([`js/core/pin.js`](file:///Users/health/Sites/investigative-board/js/core/pin.js))**: Canonical domain object. Always use `pin.label` (with `pin.title` mirrored), `pin.customFields` (with `pin.metadata` mirrored), and `pin.image.layer = 'inset' | 'behind'`.
-* **Stencil Dock ([`js/ui/stencilDock.js`](file:///Users/health/Sites/investigative-board/js/ui/stencilDock.js))**: Accessible via <kbd>Shift</kbd>+<kbd>S</kbd>. Stencils spawn pins aligned to the 40px master grid.
+* **Pin Model ([`js/core/pin.js`](file:///Users/health/Sites/investigative-board/js/core/pin.js))**: Canonical domain object. Always use `pin.label` (with `pin.title` mirrored), `pin.customFields` (with `pin.metadata` mirrored), `pin.image.layer = 'inset' | 'behind'`, and `pin.getPort('north' | 'south' | 'east' | 'west' | 'center')`.
+* **Data-Flow Charting ([`js/core/app.js`](file:///Users/health/Sites/investigative-board/js/core/app.js) & [`js/drawing.js`](file:///Users/health/Sites/investigative-board/js/drawing.js))**: Supports `conn.type = 'orthogonal'` with Manhattan waypoints, rounded $R=8\text{px}$ corners, 4-way perimeter port docking, arrowheads (`target`, `source`, `both`), `conn.step` sequence badges, and `conn.multiplier` rate pills.
+* **Stencil Dock ([`js/ui/stencilDock.js`](file:///Users/health/Sites/investigative-board/js/ui/stencilDock.js))**: Accessible via <kbd>Shift</kbd>+<kbd>S</kbd>. Contains 13 built-in presets (8 investigative + 5 data-flow) aligned to the 40px master grid.
 * **Smart Line Jumps ([`js/core/app.js`](file:///Users/health/Sites/investigative-board/js/core/app.js))**: Crossing connection lines render $R=8\text{px}$ bridge arcs filtered with precomputed AABB scalar checks.
 * **Theme Roles ([`js/core/schema.js`](file:///Users/health/Sites/investigative-board/js/core/schema.js))**: Color slots `c1` through `c8` define roles (Suspect, Lead, Corroborated, Scene, Syndicate, Hazard, Forensic, Intel) that update harmoniously across themes.

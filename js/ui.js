@@ -1471,6 +1471,10 @@ function openConnectionModal(connectionIndex) {
   const descriptionInput = document.getElementById("conn-description");
   const colorInput = document.getElementById("conn-color");
   const typeSelect = document.getElementById("conn-type");
+  const arrowSelect = document.getElementById("conn-arrow");
+  const stepInput = document.getElementById("conn-step");
+  const multiplierInput = document.getElementById("conn-multiplier");
+  const dashedCheckbox = document.getElementById("conn-dashed");
   const gradientCheckbox = document.getElementById("conn-gradient");
   const gradientHint = document.getElementById("conn-gradient-hint");
   const relationshipSelect = document.getElementById("conn-relationship");
@@ -1479,10 +1483,15 @@ function openConnectionModal(connectionIndex) {
   const validationSlider = document.getElementById("conn-validation");
   const validationValue = document.getElementById("conn-validation-value");
 
+  const resolvedType = connection.type || window.app.appState.connectionType || "straight";
   if (labelInput) labelInput.value = connection.label || "";
   if (descriptionInput) descriptionInput.value = connection.description || "";
   if (colorInput) colorInput.value = connection.color || "#666666";
-  if (typeSelect) typeSelect.value = connection.type || window.app.appState.connectionType || "straight";
+  if (typeSelect) typeSelect.value = resolvedType;
+  if (arrowSelect) arrowSelect.value = connection.arrow || (resolvedType === "orthogonal" ? "target" : "none");
+  if (stepInput) stepInput.value = connection.step !== undefined && connection.step !== null ? String(connection.step) : "";
+  if (multiplierInput) multiplierInput.value = connection.multiplier || "";
+  if (dashedCheckbox) dashedCheckbox.checked = Boolean(connection.dashed || connection.lineStyle === "dashed");
   if (gradientCheckbox) gradientCheckbox.checked = connection.useGradient || false;
 
   // Populate relationship type dropdown
@@ -1561,6 +1570,10 @@ function saveConnectionModal() {
   const descriptionInput = document.getElementById("conn-description");
   const colorInput = document.getElementById("conn-color");
   const typeSelect = document.getElementById("conn-type");
+  const arrowSelect = document.getElementById("conn-arrow");
+  const stepInput = document.getElementById("conn-step");
+  const multiplierInput = document.getElementById("conn-multiplier");
+  const dashedCheckbox = document.getElementById("conn-dashed");
   const gradientCheckbox = document.getElementById("conn-gradient");
   const relationshipSelect = document.getElementById("conn-relationship");
   const confidenceSlider = document.getElementById("conn-confidence");
@@ -1571,6 +1584,10 @@ function saveConnectionModal() {
   if (descriptionInput) connection.description = descriptionInput.value;
   if (colorInput) connection.color = colorInput.value;
   if (typeSelect) connection.type = typeSelect.value;
+  if (arrowSelect) connection.arrow = arrowSelect.value;
+  if (stepInput) connection.step = stepInput.value.trim();
+  if (multiplierInput) connection.multiplier = multiplierInput.value.trim();
+  if (dashedCheckbox) connection.dashed = dashedCheckbox.checked;
   if (gradientCheckbox) connection.useGradient = gradientCheckbox.checked;
   if (relationshipSelect) connection.relationshipType = relationshipSelect.value;
   if (confidenceSlider) connection.confidenceScore = parseInt(confidenceSlider.value, 10);

@@ -173,7 +173,70 @@ requiredShapes.forEach(shapeName => {
 console.log("  ✅ Data-Flow shape renderers (service, database, wal-queue, flow-container, flow-callout) verified");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. Performance Benchmark
+// 6. Storage, MCP & UI Modal Integration for Data-Flow Connections
+// ─────────────────────────────────────────────────────────────────────────────
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const BoardStorage = require("../cli/storage.js");
+const MCPServer = require("../cli/mcp-server.js");
+
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "boardcraft-dataflow-"));
+try {
+  const storage = new BoardStorage(tmpDir);
+  const mcp = new MCPServer(storage);
+
+  const board = storage.createBoard({ title: "ByteByteGo Write Path" });
+  storage.addPin(board.id, { x: 100, y: 200, label: "App Service", shape: "service" });
+  storage.addPin(board.id, { x: 400, y: 200, label: "Write-Ahead Log", shape: "wal-queue" });
+
+  const connRes = storage.addConnection(board.id, {
+    from: 0,
+    to: 1,
+    type: "orthogonal",
+    fromPort: "east",
+    toPort: "west",
+    arrow: "target",
+    step: "1",
+    multiplier: "× 8",
+    dashed: true,
+    label: "append only"
+  });
+
+  assert.strictEqual(connRes.connection.type, "orthogonal");
+  assert.strictEqual(connRes.connection.fromPort, "east");
+  assert.strictEqual(connRes.connection.toPort, "west");
+  assert.strictEqual(connRes.connection.arrow, "target");
+  assert.strictEqual(connRes.connection.step, "1");
+  assert.strictEqual(connRes.connection.multiplier, "× 8");
+  assert.strictEqual(connRes.connection.dashed, true);
+
+  // Verify MCP schema includes 'orthogonal' and data-flow shapes
+  const tools = mcp.getTools();
+  const connTool = tools.find(t => t.name === "connection_add");
+  assert.ok(connTool.inputSchema.properties.type.enum.includes("orthogonal"), "MCP connection_add must support 'orthogonal'");
+  assert.ok(connTool.inputSchema.properties.step, "MCP connection_add must expose 'step'");
+  assert.ok(connTool.inputSchema.properties.multiplier, "MCP connection_add must expose 'multiplier'");
+
+  const pinTool = tools.find(t => t.name === "pin_add");
+  assert.ok(pinTool.inputSchema.properties.shape.enum.includes("database"), "MCP pin_add must support 'database'");
+  assert.ok(pinTool.inputSchema.properties.shape.enum.includes("wal-queue"), "MCP pin_add must support 'wal-queue'");
+} finally {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+}
+
+// Verify index.html Connection Modal has data-flow inputs
+const indexHtml = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+assert.ok(indexHtml.includes('value="orthogonal"'), "index.html must include orthogonal option in #conn-type");
+assert.ok(indexHtml.includes('id="conn-arrow"'), "index.html must include #conn-arrow select");
+assert.ok(indexHtml.includes('id="conn-step"'), "index.html must include #conn-step input");
+assert.ok(indexHtml.includes('id="conn-multiplier"'), "index.html must include #conn-multiplier input");
+assert.ok(indexHtml.includes('id="conn-dashed"'), "index.html must include #conn-dashed checkbox");
+
+console.log("  ✅ Storage, MCP schema, and UI Connection Modal data-flow fields verified");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Performance Benchmark
 // ─────────────────────────────────────────────────────────────────────────────
 const ITERATIONS = 1000;
 const t0 = process.hrtime.bigint();
